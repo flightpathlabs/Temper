@@ -155,6 +155,23 @@ function Recorder.DeleteFights(doomed)
     ns.Publish("FIGHTS_CHANGED")
 end
 
+--- Forgets everything recorded for this character: fights, recordings,
+--- experiments and what's been learned about their abilities. There's no
+--- getting it back, so whoever calls this asks first.
+function Recorder.ForgetEverything()
+    local character = ns.character
+    open = nil
+
+    for _, list in ipairs({ "fights", "recordings", "experiments", "gearSets", "schools" }) do
+        character[list] = {}
+    end
+    character.nextNumber = 1
+    character.nextExperiment = 1
+
+    ns.Publish("EXPERIMENTS_CHANGED")
+    ns.Publish("FIGHTS_CHANGED")
+end
+
 -- A recording can't outlive the session it was started in: the fights in
 -- between would be missing. Whatever was open at the last logout or reload
 -- is closed as it stood, and any that ended up empty are dropped.

@@ -28,6 +28,19 @@ local BUSY_SECONDS = 1.5
 -- Outcomes of a cast, as the timeline records them, that count as landing.
 local LANDED = { HIT = true, CRIT = true, GLANCE = true }
 
+--- How long one use of a spell takes: the length of its cast bar if it
+--- has one, and the usual pause between abilities if not. Remembered, so
+--- the game is only asked once per spell.
+local busyFor = {}
+local function BusySeconds(id)
+    if not busyFor[id] then
+        local ok, info = pcall(C_Spell.GetSpellInfo, id)
+        local cast = ok and info and tonumber(info.castTime) or 0
+        busyFor[id] = math.max(cast / 1000, BUSY_SECONDS)
+    end
+    return busyFor[id]
+end
+
 --- Whether a spell in a timeline is an auto attack, remembered so the game
 --- is only asked once per spell.
 local autoAttacks = {}
@@ -52,9 +65,13 @@ local function ReadTimeline(fight, outcomes)
         if not auto then
             presses = presses + 1
 
-            -- Two skills in quick succession overlap; count the time once.
-            local from = math.max(item.t, busyUntil, 0)
-            local to = math.min(math.max(item.t, 0) + BUSY_SECONDS, fight.length)
+            -- A cast is logged when it goes off, so a spell with a cast bar
+            -- was keeping the player busy for that long beforehand. Two
+            -- skills in quick succession overlap; count the time once.
+            local takes = BusySeconds(item.id)
+            local began = item.t - (takes - BUSY_SECONDS)
+            local from = math.max(began, busyUntil, 0)
+            local to = math.min(math.max(began, 0) + takes, fight.length)
             if to > from then
                 busy = busy + (to - from)
                 busyUntil = to
@@ -124,6 +141,13 @@ end
 ---   rested      { fights, rest, seconds, damage, perMinute }: for fights
 ---               whose rest beforehand is known, the damage a minute once
 ---               that rest is counted
+---   starved     times a skill was pressed without the mana or energy
+---   sizes       how hard blows landed, where that could be worked out;
+---               all of it an estimate. nil if none could be:
+---                 hits, total, crits, critTotal   blows sized, and sums
+---                 averageHit, averageCrit         the usual size of each
+---                 biggest, biggestSpell           the hardest, and what
+---                 biggestCrit, biggestCritSpell   it probably was
 ---   kinds       damage by kind of source: skill, auto, pet, other
 ---   best        { name, damage } for the hardest single use of a skill
 ---   single      fights against one enemy: { fights, damage, seconds, dps }
@@ -142,6 +166,7 @@ function Summary.Of(fights)
         watched = 0,
         idle = 0,
         presses = 0,
+        starved = 0,
         abilities = {},
         kinds = { skill = 0, auto = 0, pet = 0, other = 0 },
         single = NewSplit(),
@@ -157,6 +182,7 @@ function Summary.Of(fights)
     local newest
 
     local outcomes = {}
+    local sizes = { hits = 0, total = 0, crits = 0, critTotal = 0 }
     local power = { finish = 0, fights = 0 }
     local rested = { fights = 0, rest = 0, seconds = 0, damage = 0 }
 
@@ -187,6 +213,24 @@ function Summary.Of(fights)
             power.kind = fight.power.kind
             power.finish = power.finish + fight.power.finish
             power.fights = power.fights + 1
+        end
+
+        summary.starved = summary.starved + (fight.starved or 0)
+
+        local sized = fight.sizes
+        if sized then
+            sizes.hits = sizes.hits + sized.hits
+            sizes.total = sizes.total + sized.total
+            sizes.crits = sizes.crits + sized.crits
+            sizes.critTotal = sizes.critTotal + sized.critTotal
+
+            if sized.biggest and (not sizes.biggest or sized.biggest > sizes.biggest) then
+                sizes.biggest, sizes.biggestSpell = sized.biggest, sized.biggestSpell
+            end
+            if sized.biggestCrit and sized.biggestCrit > (sizes.biggestCrit or 0) then
+                sizes.biggestCrit, sizes.biggestCritSpell =
+                    sized.biggestCrit, sized.biggestCritSpell
+            end
         end
 
         if fight.rest then
@@ -239,6 +283,12 @@ function Summary.Of(fights)
                 summary.best = { name = spell.name, damage = spell.damage }
             end
         end
+    end
+
+    if sizes.biggest then
+        sizes.averageHit = sizes.hits > 0 and sizes.total / sizes.hits or nil
+        sizes.averageCrit = sizes.crits > 0 and sizes.critTotal / sizes.crits or nil
+        summary.sizes = sizes
     end
 
     if power.fights > 0 then

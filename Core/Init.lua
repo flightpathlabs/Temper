@@ -12,6 +12,9 @@ ns.name = addonName
 -- What the addon is called wherever a player reads it.
 ns.TITLE = "Temper"
 
+-- The longest note a player can leave on a fight or a recording.
+ns.NOTE_LENGTH = 120
+
 --- Formats a whole number the way the game does, with thousands separated.
 ---@param number number
 ---@return string
@@ -67,4 +70,14 @@ function ns.Print(text, ...)
         text = text:format(...)
     end
     print("|cffffd100" .. ns.TITLE .. "|r: " .. text)
+end
+
+--- Tidies a note the player typed before it's kept: one line, no codes
+--- the game would try to draw, and not too long.
+---@param text string|nil
+---@return string|nil  nil for an empty note
+function ns.CleanNote(text)
+    text = (text or ""):gsub("|", ""):gsub("%s+", " ")
+    text = strtrim(text):sub(1, ns.NOTE_LENGTH)
+    return text ~= "" and text or nil
 end

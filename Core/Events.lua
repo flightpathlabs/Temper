@@ -69,3 +69,5 @@ end
 --   PLAYER_CAST       spellID    the player or their pet cast something
 --   FIGHTS_CHANGED               a fight was saved or deleted, or a
 --                                recording started or stopped
+--   EXPERIMENTS_CHANGED          an experiment began, moved on a step or
+--                                was deleted

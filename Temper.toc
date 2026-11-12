@@ -19,6 +19,7 @@ Combat\Gear.lua
 Combat\Weapons.lua
 Combat\Guess.lua
 Combat\Hits.lua
+Combat\Sizes.lua
 Combat\Fights.lua
 
 Record\Recorder.lua
@@ -32,8 +33,13 @@ Text\Motion.lua
 Text\Lane.lua
 Text\Feed.lua
 
+UI\Kit.lua
 UI\RecordButton.lua
 UI\Widget.lua
+UI\Timeline.lua
 UI\Card.lua
+UI\FightsTab.lua
+UI\ExperimentsTab.lua
+UI\ProgressTab.lua
 UI\MainWindow.lua
 UI\Settings.lua

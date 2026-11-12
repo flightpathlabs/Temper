@@ -166,7 +166,13 @@ ns.OnEvent("UNIT_COMBAT", function(unit, action, flag, amount, school)
     if hit.avoided then
         Remember({ avoided = hit.avoided })
     else
-        Remember({ hit = true, crit = hit.crit, glancing = hit.glancing })
+        Remember({
+            hit = true,
+            crit = hit.crit,
+            glancing = hit.glancing,
+            spell = spell,
+            onTarget = unit == "target" or Plain(UnitIsUnit(unit, "target"), false),
+        })
     end
 
     -- A swing of the weapon has no cast to hang its outcome on, so it
@@ -194,6 +200,23 @@ ns.OnEvent("UNIT_SPELLCAST_SUCCEEDED", function(unit, _, spellID)
     end
 end)
 
+-- The game says so when a skill is pressed without the mana, rage or
+-- energy for it. How full those are is hidden, so this is the only sign
+-- of running dry there is.
+local STARVED = {}
+for _, name in ipairs({ "MANA", "RAGE", "ENERGY", "FOCUS" }) do
+    local code = _G["LE_GAME_ERR_OUT_OF_" .. name]
+    if code then
+        STARVED[code] = true
+    end
+end
+
+ns.OnEvent("UI_ERROR_MESSAGE", function(errorType)
+    if fighting and not IsSecret(errorType) and STARVED[errorType] then
+        Remember({ starved = true })
+    end
+end)
+
 -- Counting up -----------------------------------------------------------------
 
 --- How far back a fight's count reaches: a little before it was announced,
@@ -203,18 +226,22 @@ local function Earliest(startTime)
 end
 
 --- Counts everything in the log from `earliest` on.
----@return table tally  { hits, crits, glancing, avoided, avoidedBy }, where
----                     avoidedBy counts each way of missing by the game's
----                     word for it: MISS, DODGE, PARRY and so on
+---@return table tally  { hits, crits, glancing, avoided, avoidedBy,
+---                     starved }, where avoidedBy counts each way of
+---                     missing by the game's word for it (MISS, DODGE,
+---                     PARRY and so on) and starved is how often a skill
+---                     was pressed without the mana or energy for it
 ---@return table casts  times each spell was cast, by spell ID
 local function Count(earliest)
-    local tally = { hits = 0, crits = 0, glancing = 0, avoided = 0, avoidedBy = {} }
+    local tally = { hits = 0, crits = 0, glancing = 0, avoided = 0, avoidedBy = {}, starved = 0 }
     local casts = {}
 
     for _, entry in ipairs(log) do
         if entry.time >= earliest then
             if entry.cast then
                 casts[entry.cast] = (casts[entry.cast] or 0) + 1
+            elseif entry.starved then
+                tally.starved = tally.starved + 1
             elseif entry.avoided then
                 tally.avoided = tally.avoided + 1
                 tally.avoidedBy[entry.avoided] = (tally.avoidedBy[entry.avoided] or 0) + 1
@@ -254,6 +281,19 @@ local function Timeline(earliest, startTime)
     return timeline
 end
 
+--- The blows that landed on the player's target, oldest first, for
+--- working out how hard each one hit (see Sizes.lua).
+---@return table  list of { time, crit, spell }
+local function Blows(earliest)
+    local blows = {}
+    for _, entry in ipairs(log) do
+        if entry.hit and entry.onTarget and entry.time >= earliest then
+            table.insert(blows, { time = entry.time, crit = entry.crit, spell = entry.spell })
+        end
+    end
+    return blows
+end
+
 --- Marks the start of a fight, so the log stops forgetting.
 function Hits.Begin()
     fighting = true
@@ -269,13 +309,15 @@ end
 ---@param startTime number  when the fight began, on GetTime's clock
 ---@return table tally, table casts  as from Count
 ---@return table timeline  as from Timeline
+---@return table blows  as from Blows
 function Hits.Finish(startTime)
     local earliest = Earliest(startTime)
     local tally, casts = Count(earliest)
     local timeline = Timeline(earliest, startTime)
+    local blows = Blows(earliest)
 
     log = {}
     fighting = false
     lastFinish = GetTime()
-    return tally, casts, timeline
+    return tally, casts, timeline, blows
 end

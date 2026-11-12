@@ -27,6 +27,7 @@ ignore = {
 globals = {
     "SlashCmdList",
     "UISpecialFrames",
+    "StaticPopupDialogs",
 
     -- Ours
     "TemperDB",
@@ -49,12 +50,17 @@ read_globals = {
     "BreakUpLargeNumbers",
     "ButtonFrameTemplate_HidePortrait",
     "CombatFeedbackText",
+    "CreateColor",
     "CreateDataProvider",
     "CreateScrollBoxListLinearView",
     "GameTooltip_Hide",
     "MenuUtil",
+    "PanelTemplates_SetNumTabs",
+    "PanelTemplates_SetTab",
+    "PanelTemplates_TabResize",
     "ScrollBoxConstants",
     "ScrollUtil",
+    "StaticPopup_Show",
 
     -- Frames and widgets
     "CreateFrame",
@@ -69,6 +75,7 @@ read_globals = {
     "C_NamePlate",
     "C_Spell",
     "C_SpellBook",
+    "C_StringUtil",
     "C_Timer",
 
     -- Loose API functions
@@ -84,6 +91,7 @@ read_globals = {
     "IsInGroup",
     "IsShiftKeyDown",
     "UnitCanAttack",
+    "UnitDetailedThreatSituation",
     "UnitClass",
     "UnitGUID",
     "UnitIsUnit",

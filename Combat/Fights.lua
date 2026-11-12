@@ -24,7 +24,12 @@ local _, ns = ...
 --   timeline  what the player did, in order (see Hits.lua). Only kept
 --             for the latest fights, since it's the bulk of a record
 --   power     { kind, start, finish }: how full the player's mana, energy
---             or rage was at each end, as a share of the most it can be
+--             or rage was at each end, as a share of the most it can be.
+--             Usually absent: the game hides these more often than not
+--   starved   how many times a skill was pressed without the mana, rage
+--             or energy for it
+--   sizes     how hard the blows landed, as far as could be worked out
+--             (see Sizes.lua)
 --   rest      seconds between the fight before ending and this one
 --             beginning, when that was a pause and not a trip to town
 --   spells    list of { id, name, kind, damage, casts, icon, rank, cost,
@@ -250,6 +255,7 @@ end
 
 ns.OnEvent("PLAYER_REGEN_DISABLED", function()
     ns.Hits.Begin()
+    ns.Sizes.Begin()
 
     local target = UnitName("target")
     if IsSecret(target) then
@@ -309,7 +315,7 @@ ns.OnEvent("PLAYER_REGEN_ENABLED", function()
     current = nil
     lastEnd = GetTime()
 
-    local tally, casts, timeline = ns.Hits.Finish(began.start)
+    local tally, casts, timeline, blows = ns.Hits.Finish(began.start)
 
     -- With anyone else around, the hits on the target aren't all ours.
     if began.grouped or IsInGroup() or not ns.character then
@@ -328,7 +334,7 @@ ns.OnEvent("PLAYER_REGEN_ENABLED", function()
         return a.damage > b.damage
     end)
 
-    Save({
+    local fight = {
         at = began.at,
         length = math.max(GetTime() - began.start, SHORTEST_FIGHT),
         damage = damage,
@@ -337,6 +343,7 @@ ns.OnEvent("PLAYER_REGEN_ENABLED", function()
         glancing = tally.glancing,
         avoided = tally.avoided,
         avoidedBy = tally.avoidedBy,
+        starved = tally.starved > 0 and tally.starved or nil,
         target = began.target,
         enemyLevel = began.enemyLevel,
         level = UnitLevel("player"),
@@ -346,5 +353,12 @@ ns.OnEvent("PLAYER_REGEN_ENABLED", function()
         power = PowerSpent(began),
         spells = spells,
         enemies = enemies,
-    }, began.recording)
+    }
+
+    -- Sizing the blows is a nicety built on a figure the game might stop
+    -- sharing. Whatever goes wrong with it mustn't cost the fight.
+    local sized, sizes = pcall(ns.Sizes.Finish, blows, fight)
+    fight.sizes = sized and sizes or nil
+
+    Save(fight, began.recording)
 end)

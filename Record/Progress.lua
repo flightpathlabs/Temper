@@ -84,6 +84,7 @@ end
 ---               empty until there's a fight that counts
 function Progress.Bests()
     local fastest, biggest, hardest, hardestFight, sharpest
+    local hardestHit, hardestCrit
 
     for _, fight in ipairs(ns.character.fights) do
         if not Progress.WhyNotCounted(fight) then
@@ -99,6 +100,17 @@ function Progress.Bests()
                 local rate = fight.crits / fight.hits
                 if not sharpest or rate > sharpest.crits / sharpest.hits then
                     sharpest = fight
+                end
+            end
+
+            local sizes = fight.sizes
+            if sizes and sizes.biggest then
+                if not hardestHit or sizes.biggest > hardestHit.sizes.biggest then
+                    hardestHit = fight
+                end
+                local crit = sizes.biggestCrit
+                if crit and (not hardestCrit or crit > hardestCrit.sizes.biggestCrit) then
+                    hardestCrit = fight
                 end
             end
 
@@ -123,6 +135,23 @@ function Progress.Bests()
     if fastest then
         Add("Most damage a second", ns.Rate(fastest.damage / fastest.length), fastest)
     end
+    -- Sizes of single blows are worked out, not read, so they say "about".
+    local function Blow(size, spell)
+        local name = spell and ns.Sources.Name(spell)
+        if name then
+            return ("About %s with %s"):format(ns.Number(size), name)
+        end
+        return "About " .. ns.Number(size)
+    end
+    if hardestCrit then
+        local sizes = hardestCrit.sizes
+        Add("Biggest critical hit", Blow(sizes.biggestCrit, sizes.biggestCritSpell), hardestCrit)
+    end
+    if hardestHit and hardestHit ~= hardestCrit then
+        local sizes = hardestHit.sizes
+        Add("Biggest hit", Blow(sizes.biggest, sizes.biggestSpell), hardestHit)
+    end
+
     if hardest then
         Add(
             "Hardest single use",

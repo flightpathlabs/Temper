@@ -54,13 +54,36 @@ local function CountsText(hits, crits, avoided, live)
     return text
 end
 
---- A red note of the recording in progress, or nothing.
+--- A note of the recording or experiment in progress, or nothing.
 local function RecordingText()
+    local experiment = ns.Experiments.Running()
+    if experiment and experiment.state == "change" then
+        -- The first set is in. It's the player's turn, and this is the
+        -- one place they're sure to see that.
+        return "|cffffd100Your change, then click|r"
+    end
+
     local recording = ns.Recorder.Open()
     if not recording then
         return ""
     end
-    return ("|cffff4040REC|r %d"):format(#ns.Recorder.FightsOf(recording))
+
+    local fights = #ns.Recorder.FightsOf(recording)
+    if experiment then
+        return ("|cffff4040REC|r %d of %d"):format(fights, experiment.size)
+    end
+    return ("|cffff4040REC|r %d"):format(fights)
+end
+
+--- What a click on the panel opens: the experiment when it's waiting on
+--- the player, otherwise the latest fight.
+local function OpenWindow()
+    local experiment = ns.Experiments.Running()
+    if experiment and experiment.state == "change" then
+        ns.ShowExperiments()
+    else
+        ns.ShowLatest()
+    end
 end
 
 -- The game's running figures for this fight are passed to the text
@@ -85,7 +108,8 @@ local function PutLiveRate()
     )
     for _, source in ipairs(everyone.combatSources) do
         if source.isLocalPlayer then
-            widget.dps:SetText(AbbreviateNumbers(source.amountPerSecond))
+            -- Rounded by the game, since we can't do sums on it ourselves.
+            widget.dps:SetText(C_StringUtil.RoundToNearestString(source.amountPerSecond))
             return
         end
     end
@@ -154,9 +178,7 @@ local function ShowMenu(self)
         root:CreateButton(ns.Recorder.Open() and "Stop recording" or "Record", function()
             ns.ToggleRecording()
         end)
-        root:CreateButton("Open the window", function()
-            ns.ShowLatest()
-        end)
+        root:CreateButton("Open the window", OpenWindow)
         root:CreateButton("Options", function()
             ns.OpenOptions()
         end)
@@ -218,7 +240,7 @@ local function Create()
         if mouseButton == "RightButton" then
             ShowMenu(self)
         else
-            ns.ShowLatest()
+            OpenWindow()
         end
     end)
     widget:SetScript("OnEnter", ShowTooltip)
@@ -273,6 +295,7 @@ ns.Subscribe("DATABASE_READY", function()
 end)
 
 ns.Subscribe("FIGHTS_CHANGED", Refresh)
+ns.Subscribe("EXPERIMENTS_CHANGED", Refresh)
 ns.Subscribe("SETTINGS_CHANGED", Refresh)
 
 -- A fight: keep the panel ticking over while it lasts. These are
