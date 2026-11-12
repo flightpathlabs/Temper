@@ -1,13 +1,20 @@
 local _, ns = ...
 
--- The Record button: one small button that starts and stops a recording.
+-- The session button: one small button that starts and ends a session,
+-- which is the player's word for what the code calls a recording.
 --
--- Left-click records, right-click opens the window, and it can be dragged
--- anywhere. While recording it says how many fights it has so far, which
--- is all the feedback there is. Nothing goes to chat.
+-- Left-click starts or ends one, right-click opens the window, and it can
+-- be dragged anywhere. While a session is in progress the button turns red
+-- and says how many fights it has so far, which is all the feedback there
+-- is. Nothing goes to chat. It's off unless asked for in the options.
 
-local WIDTH = 124
+local WIDTH = 130
 local HEIGHT = 24
+
+local IDLE_HELP = "Click to start a session. Your fights are kept together until you click "
+    .. "again to end it."
+local IN_PROGRESS_HELP = "A session is in progress. The number is how many fights it has so far. "
+    .. "Click to end it and see the analysis."
 
 local button
 
@@ -20,12 +27,9 @@ local function Refresh()
 
     local recording = ns.Recorder.Open()
     if recording then
-        local fights = #ns.Recorder.FightsOf(recording)
-        button:SetText(
-            ("|cffff4040Stop|r  %d %s"):format(fights, fights == 1 and "fight" or "fights")
-        )
+        button:SetText(("|cffff4040End session (%d)|r"):format(#ns.Recorder.FightsOf(recording)))
     else
-        button:SetText("Record")
+        button:SetText("Start session")
     end
 end
 
@@ -33,12 +37,9 @@ local function ShowTooltip(self)
     GameTooltip:SetOwner(self, "ANCHOR_TOP")
     GameTooltip:SetText(ns.TITLE)
 
-    if ns.Recorder.Open() then
-        GameTooltip:AddLine("Recording. Click to stop and see the analysis.", 1, 1, 1, true)
-    else
-        GameTooltip:AddLine("Click to record your fights, then click again to stop.", 1, 1, 1, true)
-    end
-    GameTooltip:AddLine("Right-click to open the window. Drag to move.", 0.6, 0.6, 0.6, true)
+    local help = ns.Recorder.Open() and IN_PROGRESS_HELP or IDLE_HELP
+    GameTooltip:AddLine(help, 1, 1, 1, true)
+    GameTooltip:AddLine("Right-click to open Temper. Drag to move.", 0.6, 0.6, 0.6, true)
     GameTooltip:Show()
 end
 

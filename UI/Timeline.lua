@@ -1,18 +1,22 @@
 local _, ns = ...
 
--- What the player pressed in one fight, laid out along a line of time.
+-- What the player used in one fight, laid out along a line of time.
 --
 -- Time runs left to right, and when a fight is longer than one line holds
--- it carries on underneath, the way text does. Skills sit on the upper
+-- it carries on underneath, the way text does. Abilities sit on the upper
 -- lane as icons; auto attacks sit on a lane of their own below, smaller,
--- so the skills stand out. Because an icon's place is the moment it was
--- used, a stretch of bare upper lane is time in which no skill was used,
--- and that can be seen without reading a number.
+-- so the abilities stand out. Because an icon's place is the moment it
+-- was used, a stretch of bare upper lane is time in which no ability was
+-- used, and that can be seen without reading a number.
 --
 -- Each icon also says how that use went, with cues the game already
 -- uses: a gold edge for a critical hit, a red cross over a greyed icon for
--- one that didn't land. An ordinary hit, and a cast no blow could be
+-- one that didn't land. An ordinary hit, and a use no blow could be
 -- traced to, are left plain. The tooltip says all of it in words.
+--
+-- The game reports a blow and the use of an ability separately, and the
+-- two are paired up here by how close together they came. That's right
+-- nearly every time and not every time, and a line under the key says so.
 
 local Timeline = {}
 ns.Timeline = Timeline
@@ -60,7 +64,14 @@ local LEGEND_GAP = 8
 local LEGEND_HEIGHT = 12
 local LEGEND_SPACE = 14
 
-local CUT_SHORT = ("Only the first %d moves of a long fight are kept."):format(MOST_ITEMS)
+-- Space above each line of small print under the key.
+local SMALL_PRINT_GAP = 4
+
+local MATCHED_BY_TIMING = "Critical hits and misses are matched to abilities by timing, "
+    .. "so the odd one may be wrong."
+local CUT_SHORT = ("Only the first %d attacks and abilities of a long fight are kept."):format(
+    MOST_ITEMS
+)
 
 -- How a use went, in words. Anything not listed as landing counts as
 -- having failed.
@@ -114,7 +125,7 @@ end
 --- How a use went, for a tooltip, and the colour to say it in.
 local function OutcomeText(result)
     if not result then
-        return "No blow traced to it", Kit.MUTED
+        return "Result unknown", Kit.MUTED
     elseif result == "CRIT" then
         return OUTCOMES.CRIT, Kit.GOLD
     elseif LANDED[result] then
@@ -315,7 +326,7 @@ local function CreateLegend(timeline)
     failed:SetPoint("LEFT", cross, "RIGHT", 4, 0)
 
     -- The rest gives way first if the line is ever too long for its width.
-    local rest = Words("Small icons are auto attacks. Time runs left to right.")
+    local rest = Words("Small icons are auto attacks.")
     rest:SetPoint("LEFT", failed, "RIGHT", LEGEND_SPACE, 0)
     rest:SetPoint("RIGHT")
 
@@ -407,11 +418,15 @@ local function Set(self, fight)
     self.legend:SetWidth(width)
     height = height + LEGEND_HEIGHT
 
+    self.matched:SetPoint("TOPLEFT", INSET, -(height + SMALL_PRINT_GAP))
+    self.matched:SetWidth(width - 2 * INSET)
+    height = height + SMALL_PRINT_GAP + LEGEND_HEIGHT
+
     local cut = #items >= MOST_ITEMS
     self.cut:SetShown(cut)
     if cut then
-        self.cut:SetPoint("TOPLEFT", INSET, -(height + 4))
-        height = height + 4 + LEGEND_HEIGHT
+        self.cut:SetPoint("TOPLEFT", INSET, -(height + SMALL_PRINT_GAP))
+        height = height + SMALL_PRINT_GAP + LEGEND_HEIGHT
     end
 
     self:SetHeight(height)
@@ -433,9 +448,14 @@ function Timeline.Create(parent)
 
     timeline.legend = CreateLegend(timeline)
 
-    timeline.cut = Kit.Text(timeline, "GameFontHighlightSmall")
-    timeline.cut:SetTextColor(unpack(Kit.MUTED))
-    timeline.cut:SetText(CUT_SHORT)
+    local function SmallPrint(text)
+        local words = Kit.Text(timeline, "GameFontHighlightSmall")
+        words:SetTextColor(unpack(Kit.MUTED))
+        words:SetText(text)
+        return words
+    end
+    timeline.matched = SmallPrint(MATCHED_BY_TIMING)
+    timeline.cut = SmallPrint(CUT_SHORT)
 
     timeline.Set = Set
     return timeline

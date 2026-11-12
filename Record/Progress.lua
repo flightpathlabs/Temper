@@ -13,6 +13,10 @@ ns.Progress = Progress
 -- A fight shorter than this is over before it means anything.
 local SHORTEST_COUNTED = 6
 
+-- The bests page has room for this many. They're listed most telling
+-- first, so cutting the list short loses the least.
+local MOST_BESTS = 4
+
 -- A fight where this much of the damage came from items and other effects
 -- wasn't won by the character's own abilities. Set high, because some
 -- abilities do their damage through an effect the game files separately.
@@ -134,7 +138,7 @@ function Progress.Bests()
     end
 
     if fastest then
-        Add("Most damage a second", ns.Rate(fastest.damage / fastest.length), fastest)
+        Add("Highest DPS", ns.Rate(fastest.damage / fastest.length), fastest)
     end
     -- Sizes of single blows are worked out, not read, so they say "about".
     local function Blow(size, spell)
@@ -153,7 +157,10 @@ function Progress.Bests()
         Add("Biggest hit", Blow(sizes.biggest, sizes.biggestSpell), hardestHit)
     end
 
-    if hardest then
+    -- The hardest single use of an ability stands in for the biggest hit
+    -- when no blow could be sized. With a biggest hit to show, it would
+    -- only say much the same thing twice.
+    if hardest and not hardestHit then
         Add(
             "Hardest single use",
             ("%s with %s"):format(ns.Number(hardest.damage), hardest.name),
@@ -165,6 +172,10 @@ function Progress.Bests()
     end
     if sharpest and sharpest.crits > 0 then
         Add("Most critical hits", ns.Percent(sharpest.crits / sharpest.hits), sharpest)
+    end
+
+    while #bests > MOST_BESTS do
+        table.remove(bests)
     end
     return bests
 end

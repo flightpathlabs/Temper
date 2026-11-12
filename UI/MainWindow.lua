@@ -4,7 +4,7 @@ local _, ns = ...
 -- bottom, the way the auction house and the character sheet have them.
 --
 --   Fights       every fight, and the analysis of whichever are selected
---   Experiments  a question, a few fights each way, and a verdict
+--   Experiments  a question, two sets of fights, and a verdict
 --   Progress     bests and the trend, against nobody but yourself
 --
 -- Each tab is built by its own file and knows how to redraw itself. This
@@ -196,7 +196,7 @@ SLASH_TEMPER1 = "/temper"
 SlashCmdList.TEMPER = function(message)
     message = strtrim(message or ""):lower()
 
-    if message == "record" or message == "stop" then
+    if message == "session" or message == "record" or message == "stop" then
         ns.ToggleRecording()
     elseif message == "options" then
         ns.OpenOptions()
@@ -207,7 +207,7 @@ SlashCmdList.TEMPER = function(message)
     end
 end
 
-BINDING_NAME_TEMPER_RECORD = "Start or stop recording"
+BINDING_NAME_TEMPER_RECORD = "Start or end a session"
 
 function Temper_ToggleRecording()
     ns.ToggleRecording()

@@ -23,23 +23,23 @@ screen. By default they're a steady stream: small, staying put, stepping
 up a line as new ones arrive. Critical hits are larger, a different
 colour, and land with a pop.
 
-**A panel for the fight you're in.** A small panel shows your damage a
-second, damage, hits, crits and misses as the fight goes, and the last
-fight's exact figures in between. Click it for the full window.
+**A panel for the fight you're in.** A small panel shows your DPS, damage,
+hits, crits and misses as the fight goes, and the last fight's exact
+figures in between. Click it for the full window.
 
 **A record of every fight.** Each solo fight is kept and listed with its
-damage, damage a second, length and crit rate. Open one and you get:
+damage, DPS, length and crit rate. Open one and you get:
 
 - how much each ability did, with its icon, its share, and what each use
   and each point of mana or energy bought;
 - every way an attack failed, counted separately: missed, dodged, parried;
-- a strip of what you pressed, in order, with crits and misses marked;
-- the biggest hit and biggest critical hit;
-- a few plain sentences about what stands out and what's holding you
-  back: a weapon skill that's behind the enemies you're fighting, a skill
-  that keeps getting parried, time spent with nothing in use.
+- a few plain sentences about what to work on: a weapon skill that's
+  behind the enemies you're fighting, an ability that keeps getting
+  parried, time spent with nothing in use;
+- a strip of what you used, in order, with crits and misses marked;
+- the biggest hit and biggest critical hit.
 
-**Comparing.** Select some fights, keep them as "Before", select some
+**Comparing.** Select some fights, press Compare with..., pick some
 others, and every figure shows how far it moved, with the gear that
 changed listed underneath.
 
@@ -62,20 +62,21 @@ There is nothing to set up.
   Temper's entry in the addon list by the minimap.
 - **Fights tab.** Click a fight to read it. Shift-click selects a run of
   fights and Ctrl-click adds one; the page covers whatever is selected.
-  Right-click for more. Type a note on a fight or a recording to remember
-  what you changed.
-- **Record** (bottom left, or `/temper record`, or a key under Options >
-  Keybindings > Temper) marks a run of fights as a recording, which then
-  selects with one click. Fights are kept whether or not you record.
-- **To compare by hand,** select the earlier fights, press **Keep as
-  Before**, then select the later ones. The strip above the page says
-  which step you're at.
+  Right-click for more. Type a note on a session to remember what you
+  changed.
+- **Start session** (bottom left, or `/temper session`, or a key under
+  Options > Keybindings > Temper) marks a run of fights as a session,
+  which then selects with one click. Fights are kept either way.
+- **To compare,** select some fights, press **Compare with...**, click the
+  fights to set them against, and press **Done**. The strip above the page
+  says which step you're at. Whichever set is older is treated as the
+  "before", so green always means you improved.
 - **Experiments tab.** Press New experiment, say what you're trying, and
   follow the three steps. The panel tells you when it's your move.
 - **Progress tab.** Click a best to open the fight it came from.
 - Options are in the game's own Options window, under AddOns > Temper.
-  The panel, the numbers and a small on-screen Record button can each be
-  switched on or off there.
+  The panel, the numbers and a small on-screen Start session button can
+  each be switched on or off there.
 
 ## What it can and can't know
 
@@ -85,16 +86,16 @@ game still offers. That shapes what it shows.
 | It knows exactly | Because |
 |---|---|
 | Damage by ability, per fight | The game tallies it and lets addons read the tally when a fight ends |
-| Damage a second, time in battle | From the same tally and the length of the fight |
+| DPS and fight length | From the same tally and the length of the fight |
 | Hits, critical hits, misses, dodges, parries | The game reports each blow on an enemy as it lands |
-| How many times you used each skill, and when | The game reports your own casts |
-| What each skill costs, and so its damage per point of mana or energy | The game says what a skill costs; the rest is division |
+| How many times you used each ability, and when | The game reports your own casts |
+| What each ability costs, and so its damage per point of mana or energy | The game says what an ability costs; the rest is division |
 | Your skill with the weapon in hand, and what a shortfall costs | The game shows it on the character sheet, and its own skills window gives the sums |
 
 | It works out, and says "about" | How |
 |---|---|
 | How hard each blow landed, and so your biggest hit and biggest crit | An enemy's threat towards you rises by the damage of each blow, and the game lets addons read that. Blows that land close together can't be told apart, so not every blow is sized |
-| Which ability a blow was, and whether each cast landed | From what you had just cast and the kind of damage |
+| Which ability a blow was, and whether each use landed | From what you had just used and the kind of damage |
 
 | It can't know | Because |
 |---|---|

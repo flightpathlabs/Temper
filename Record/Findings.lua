@@ -5,7 +5,11 @@ local _, ns = ...
 -- Each finding is one plain sentence about something a player could act
 -- on. There are only ever a few: a page of observations is as hard to use
 -- as a page of numbers. Nothing is said unless the figures clearly
--- support it.
+-- support it, and what's only an estimate is worded as one.
+--
+-- The sentences use the same few words as the rest of the addon: DPS,
+-- ability, use, fight, session. "Skill" is kept for weapon skill, which is
+-- what the game itself means by it.
 --
 -- A finding also says what kind of news it is, so the page can put the
 -- right picture beside it: "good" for something going well, "warning" for
@@ -16,8 +20,8 @@ ns.Findings = Findings
 
 -- How many sentences at most: this many about a comparison, and this many
 -- in all.
-local MOST_ABOUT_CHANGE = 3
-local MOST = 4
+local MOST_ABOUT_CHANGE = 2
+local MOST = 3
 
 -- An ability has to account for this much of the damage before a change
 -- in it is worth a sentence.
@@ -41,15 +45,15 @@ local MANY_MISSES = 0.1
 local MANY_DODGES_AND_PARRIES = 0.12
 local MANY_GLANCING = 0.15
 
--- A skill has to have been traced this many times before its failures
+-- An ability has to have been traced this many times before its failures
 -- mean anything, and to fail this often before they're worth a sentence.
 local ENOUGH_TRACED = 5
 local OFTEN_FAILS = 0.3
 
--- Time with no skill in use is only worth a sentence once there's this
+-- Time with no ability in use is only worth a sentence once there's this
 -- much fighting to judge by, and once it's this big a share of it.
 local ENOUGH_WATCHED = 20
-local MUCH_TIME_WITHOUT_A_SKILL = 0.3
+local MUCH_TIME_WITHOUT_AN_ABILITY = 0.3
 
 -- How full mana, energy or rage was when a fight ended, as a share of
 -- the most it can be.
@@ -61,7 +65,7 @@ local EMPTY = 0.1
 -- much of the time spent fighting.
 local MUCH_REST = 0.5
 
--- Shares the way people say them. How each use of a skill went is an
+-- Shares the way people say them. How each use of an ability went is an
 -- estimate, and "2 in 5" claims no more precision than that.
 local ROUGHLY = {
     { 1 / 3, "1 in 3" },
@@ -90,8 +94,8 @@ local function RoundPercent(share)
     return ("%d%%"):format(math.floor(share * 20 + 0.5) * 5)
 end
 
--- Pressing a skill without the mana or energy for it this many times is
--- a habit worth knowing about; once or twice is just a fight.
+-- Reaching for an ability without the mana or energy for it this many
+-- times is a habit worth knowing about; once or twice is just a fight.
 local STARVED_OFTEN = 3
 
 --- The ability that gives most and least damage for what it costs, among
@@ -126,7 +130,8 @@ local function BestValue(summary)
     end
 end
 
---- The ability whose contribution moved most each way since "before".
+--- The ability whose contribution moved most each way since the earlier
+--- fights.
 local function BiggestMoves(comparison)
     local gain, loss
     for _, ability in ipairs(comparison.is.abilities) do
@@ -196,7 +201,7 @@ local function WeakestWeapon(summary)
     return weakest
 end
 
---- The skill that most often fails to land, if it fails often enough to
+--- The ability that most often fails to land, if it fails often enough to
 --- be worth a sentence. Auto attacks are left to the sentences about
 --- misses and dodges, which count every attack exactly.
 ---@return table|nil ability
@@ -216,16 +221,16 @@ local function LeastReliable(summary)
     return worst, worstShare
 end
 
---- The share of the fighting that had no skill in use, when there's
+--- The share of the fighting that had no ability in use, when there's
 --- enough of both to be worth a sentence.
 ---@return number|nil
-local function TimeWithoutASkill(summary)
+local function TimeWithoutAnAbility(summary)
     if summary.watched < ENOUGH_WATCHED or summary.presses == 0 then
         return nil
     end
 
     local share = summary.idle / summary.watched
-    return share >= MUCH_TIME_WITHOUT_A_SKILL and share or nil
+    return share >= MUCH_TIME_WITHOUT_AN_ABILITY and share or nil
 end
 
 --- A few sentences about a set of fights.
@@ -245,18 +250,21 @@ function Findings.For(summary, comparison)
     local one = summary.fights == 1
     local these = one and "this fight" or "these fights"
 
-    -- First, when comparing: the verdict, and what drove it.
+    -- First, when comparing: the verdict, and one sentence more. From
+    -- very few fights that's the caution, which matters more than any
+    -- detail. Otherwise it's the ability that moved most, starting with
+    -- the one that moved the way the DPS did, since that's what drove it.
     if comparison and comparison.dps.change then
         most = MOST_ABOUT_CHANGE
 
         local change = comparison.dps.change
         local percent = math.floor(math.abs(change) * 100 + 0.5)
         if percent == 0 then
-            Say("tip", "Overall, your damage a second is the same as before.")
+            Say("tip", "Overall, your DPS is the same as in the earlier fights.")
         elseif change > 0 then
-            Say("good", "Overall, you did %d%% more damage a second than before.", percent)
+            Say("good", "Overall, your DPS is %d%% higher than in the earlier fights.", percent)
         else
-            Say("warning", "Overall, you did %d%% less damage a second than before.", percent)
+            Say("warning", "Overall, your DPS is %d%% lower than in the earlier fights.", percent)
         end
 
         if summary.fights < FAIR_SAMPLE or comparison.was.fights < FAIR_SAMPLE then
@@ -264,11 +272,11 @@ function Findings.For(summary, comparison)
         end
 
         local gain, loss = BiggestMoves(comparison)
-        if gain then
-            Say("good", "%s gained the most, up %s.", gain.name, ns.Percent(gain.change))
-        end
-        if loss then
-            Say("warning", "%s lost the most, down %s.", loss.name, ns.Percent(-loss.change))
+        local mover = change < 0 and (loss or gain) or (gain or loss)
+        if mover and mover.change > 0 then
+            Say("good", "%s gained the most, up %s.", mover.name, ns.Percent(mover.change))
+        elseif mover then
+            Say("warning", "%s lost the most, down %s.", mover.name, ns.Percent(-mover.change))
         end
 
         most = MOST
@@ -299,12 +307,7 @@ function Findings.For(summary, comparison)
             Say("warning", "%s of your attacks missed outright.", ns.Percent(missed))
         end
         if turned >= MANY_DODGES_AND_PARRIES then
-            Say(
-                "warning",
-                "%s of your attacks were dodged or parried. Enemies can't parry what "
-                    .. "comes from behind them.",
-                ns.Percent(turned)
-            )
+            Say("warning", "%s of your attacks were dodged or parried.", ns.Percent(turned))
         end
     end
 
@@ -318,19 +321,19 @@ function Findings.For(summary, comparison)
         )
     end
 
-    -- Time with no skill in use isn't a fault in itself: plenty of
+    -- Time with no ability in use isn't a fault in itself: plenty of
     -- characters fight mostly with their weapon. So this says what was
     -- seen and, where the resource bar gives a hint, what it suggests.
     local power = summary.power
     local word = power and ns.Summary.PowerWord(power.kind)
-    local unused = TimeWithoutASkill(summary)
+    local unused = TimeWithoutAnAbility(summary)
     local ranDry = false
 
     if unused and power and power.finish >= PLENTY_LEFT then
         Say(
             "tip",
-            "About %s of your time in %s had no skill in use, and you finished with "
-                .. "plenty of %s left. There was room to press more.",
+            "About %s of your time in %s had no ability in use, and you finished with "
+                .. "plenty of %s left. There may have been room to use more.",
             RoundPercent(unused),
             these,
             word
@@ -339,14 +342,19 @@ function Findings.For(summary, comparison)
         ranDry = true
         Say(
             "tip",
-            "About %s of your time in %s had no skill in use. You finished nearly out "
+            "About %s of your time in %s had no ability in use. You finished nearly out "
                 .. "of %s, so running dry is the likely reason.",
             RoundPercent(unused),
             these,
             word
         )
     elseif unused then
-        Say("tip", "About %s of your time in %s had no skill in use.", RoundPercent(unused), these)
+        Say(
+            "tip",
+            "About %s of your time in %s had no ability in use.",
+            RoundPercent(unused),
+            these
+        )
     end
 
     if summary.hits > 0 and summary.glancing / summary.hits >= MANY_GLANCING then
@@ -375,51 +383,36 @@ function Findings.For(summary, comparison)
     if empty and power.kind == "MANA" then
         Say(
             "warning",
-            "You finished %s with almost no mana left. A longer fight would have run dry.",
+            "You finished %s with almost no mana left. A longer fight might have run dry.",
             these
         )
     end
 
+    -- Said as rest for each minute of fighting: both are lengths of time
+    -- the player already has a feel for, and it reads the same for one
+    -- fight as for twenty.
     local rested = summary.rested
-    if rested and rested.rest >= rested.seconds * MUCH_REST then
+    if rested and rested.seconds > 0 and rested.rest >= rested.seconds * MUCH_REST then
+        local perMinute = rested.rest / rested.seconds * 60
         Say(
             "tip",
-            "%s %s. Counting that, you did %s damage a minute: time spent recovering is "
-                .. "part of how fast things die.",
-            one and "The pause before this fight was" or "The pauses between these fights came to",
-            ns.Duration(rested.rest),
-            ns.Number(rested.perMinute)
+            "You rested about %s for every minute of fighting.",
+            ns.Duration(math.floor(perMinute / 5 + 0.5) * 5)
         )
     end
 
     -- The game hides how much mana or energy is left, but it does say so
-    -- each time a skill is pressed without enough.
+    -- each time an ability is tried without enough.
     if summary.starved >= STARVED_OFTEN then
-        Say(
-            "warning",
-            "%d times you pressed a skill without the mana or energy for it.",
-            summary.starved
-        )
+        Say("warning", "You ran short of mana or energy %d times in %s.", summary.starved, these)
     end
 
     -- Then what's working well.
-    local sizes = summary.sizes
-    local enoughBlows = sizes and sizes.crits >= 3 and sizes.hits >= 5
-    if enoughBlows and sizes.averageHit > 0 then
-        Say(
-            "tip",
-            "A critical hit does about %.1f times a normal one for you: about %s against %s.",
-            sizes.averageCrit / sizes.averageHit,
-            ns.Number(sizes.averageCrit),
-            ns.Number(sizes.averageHit)
-        )
-    end
-
     local best, worst = BestValue(summary)
     if best then
         Say(
             "good",
-            "Best value for %s: %s, %.1f damage a point. %s gives %.1f.",
+            "Best value for %s: %s, %.1f damage per point. %s gives %.1f.",
             ns.Summary.PowerWord(best.power),
             best.name,
             best.perCost,
@@ -428,7 +421,10 @@ function Findings.For(summary, comparison)
         )
     end
 
-    if summary.best then
+    -- The page shows the biggest hit itself when one could be sized. This
+    -- is the next best thing for fights where none could.
+    local sized = summary.sizes and summary.sizes.biggest
+    if summary.best and not sized then
         Say(
             "good",
             "Hardest single use: %s for %s.",
@@ -444,10 +440,6 @@ function Findings.For(summary, comparison)
             these,
             word
         )
-    end
-
-    if summary.damage > 0 and summary.kinds.auto / summary.damage >= 0.5 then
-        Say("tip", "More than half your damage came from auto attacks.")
     end
 
     return found

@@ -22,38 +22,39 @@ First version.
 
 **The panel**
 
-- A small panel on screen shows the fight you're in as it happens (damage
-  a second, damage, a timer, hits, crits and misses) and the last fight's
+- A small panel on screen shows the fight you're in as it happens (DPS,
+  damage, a timer, hits, crits and misses) and the last fight's
   exact figures in between. Click it for the window, right-click for a
   menu, drag it anywhere, or turn it off.
 
 **Fights**
 
 - Every solo fight is kept, up to 200 for each character, and listed with
-  its damage, damage a second, length and crit rate.
+  its damage, DPS, length and crit rate.
 - Click a fight to read it. Shift-click and Ctrl-click select several, and
-  the page covers them all. Record marks a run of fights so it selects
-  with one click.
-- The page shows damage a second, damage a fight, time in battle and how
-  often you crit, then a bar for each ability with its icon, rank, share,
-  damage per use, and damage per point of mana or energy.
+  the page covers them all. Start session marks a run of fights so it
+  selects with one click.
+- The page shows DPS, damage per fight and how often you crit, then what
+  to work on, then a bar for each ability with its icon, rank and share.
+  Hover a bar for its damage per use and per point of mana or energy.
 - Misses, dodges, parries, blocks and resists are counted separately.
-- A strip shows what you pressed, in order and to scale, with critical
-  hits and failures marked.
+- A strip shows what you used, in order and to scale, with critical hits
+  and failures marked.
 - The biggest hit and biggest critical hit, worked out from how the
   enemy's threat rose with each blow. These are close estimates.
-- "What stands out" says in a few sentences what the figures show and
-  what's holding your damage back: a weapon skill behind the level of the
-  enemies you're fighting, a skill that keeps failing, time with no skill
-  in use, pressing skills without the mana for them.
-- A note can be left on any fight or recording.
+- "What to work on" says in a few sentences what's holding your damage
+  back: a weapon skill behind the level of the enemies you're fighting,
+  an ability that keeps failing, time with no ability in use, running
+  short of mana.
+- A note can be left on any session.
 
 **Comparing**
 
-- Keep any selection as "Before" and read any other against it. Each
-  figure shows how far it moved, the abilities that gained and lost most
-  are named, and the gear that differs is listed.
-- Stopping a recording compares it with the one before automatically.
+- Select some fights, press Compare with..., and pick any others. Each
+  figure shows how far it moved, the ability that changed most is named,
+  and the gear that differs is listed. The older set is always the
+  "before".
+- Ending a session compares it with the one before automatically.
 
 **Experiments**
 
@@ -64,8 +65,8 @@ First version.
 
 **Progress**
 
-- Your bests: most damage a second, biggest critical hit, hardest single
-  use and more. Click one to open its fight.
+- Your bests: highest DPS, biggest critical hit, biggest hit and more.
+  Click one to open its fight.
 - A fluke can be left out with a click. Very short fights, and fights
   where much of the damage came from an item or some other effect, are
   left out automatically.

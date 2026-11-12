@@ -53,6 +53,7 @@ read_globals = {
     "CreateColor",
     "CreateDataProvider",
     "CreateScrollBoxListLinearView",
+    "CreateSettingsListSectionHeaderInitializer",
     "GameTooltip_Hide",
     "MenuUtil",
     "PanelTemplates_SetNumTabs",

@@ -2,11 +2,16 @@ local _, ns = ...
 
 -- The analysis card: everything about a set of fights on one page.
 --
--- Read top to bottom it answers, in order: how hard did I hit, where did
--- it come from, what did I press, what stands out, and (when there's a
--- "before" to compare with) what changed. The comparison isn't a separate
--- screen. It shows up as an arrow and a green or red figure beside each
--- number it applies to.
+-- The advice is what the page is for, so it comes straight after the
+-- headline. Read top to bottom the page answers, in order: how hard did I
+-- hit, what should I work on, where did the damage come from, what did I
+-- use, and (when there are earlier fights to compare with) what else
+-- changed. The comparison isn't a separate screen. It shows up as an
+-- arrow and a green or red figure beside each number it applies to.
+--
+-- Figures are kept few. DPS is the one the page is about, so it's set
+-- larger than the rest, and anything that only matters for one ability
+-- waits in that ability's tooltip.
 --
 -- Some selections make a longer page than the window has room for, so
 -- everything under the title scrolls. A scrolling page can't size itself
@@ -22,6 +27,7 @@ local Kit = ns.Kit
 
 local LOGO = "Interface\\AddOns\\Temper\\Media\\logo"
 local NOTE_PROMPT = "Add a note: what did you change?"
+local NOTHING_STANDS_OUT = "Nothing stands out in %s."
 
 -- Space between the card's edge and what's on it, and the room kept clear
 -- down the right-hand side for the scroll bar.
@@ -44,7 +50,13 @@ local SECTION_GAP = 16
 local HEADING_GAP = 8
 local LINE_GAP = 6
 
+-- The headline tiles share the width in these proportions: DPS first and
+-- half as wide again as the other two. Its figure is in the largest of
+-- the game's heading fonts, the one the auction house searches in.
+local TILE_SHARES = { 3, 2, 2 }
 local TILE_GAP = 8
+local HERO_FONT = "GameFontNormalHuge4"
+
 local MAX_BARS = 6
 local BAR_GAP = 3
 local FINDING_ICON = 16
@@ -52,6 +64,14 @@ local FINDING_GAP = 8
 
 -- More changed slots than this and the list is cut short, with a count.
 local MAX_GEAR_LINES = 5
+
+-- What each kind of damage source is called on the page.
+local KIND_LABELS = {
+    skill = "Abilities",
+    auto = "Auto attacks",
+    pet = "Pet",
+    other = "Items and other effects",
+}
 
 -- The game's words for the ways an attack can fail, as we'd say them.
 local AVOIDED_WORDS = {
@@ -68,6 +88,13 @@ local AVOIDED_WORDS = {
 }
 
 -- What the page says ------------------------------------------------------------
+
+--- How long the fighting lasted, to go after the subtitle: "51s" for one
+--- fight, "2m 10s of fighting" for several.
+local function LengthText(summary)
+    local time = ns.Duration(summary.seconds)
+    return summary.fights == 1 and time or time .. " of fighting"
+end
 
 --- "Biggest critical hit about 62 (Aimed Shot).   Biggest hit about 41."
 -- The size of a single blow is worked out, not read (see Sizes.lua), so
@@ -96,41 +123,53 @@ local function BlowsText(summary)
     return #parts > 0 and table.concat(parts, "   ") or nil
 end
 
---- "18 hits, 2 critical, 1 glancing.   3 missed, 1 dodged, 2 parried."
+--- "18 hits, 2 critical.   3 missed, 1 dodged." Anything there was none
+--- of is left out, so the line is only as long as the fight was eventful.
+--- Nil when there's nothing to count at all.
 local function CountsText(summary)
-    local text = ("%d hits, %d critical, %d glancing."):format(
-        summary.hits,
-        summary.crits,
-        summary.glancing
-    )
-    if summary.avoided == 0 then
-        return text .. "   Nothing missed."
+    local landed = {}
+    if summary.hits > 0 then
+        table.insert(landed, summary.hits == 1 and "1 hit" or summary.hits .. " hits")
+    end
+    if summary.crits > 0 then
+        table.insert(landed, summary.crits .. " critical")
+    end
+    if summary.glancing > 0 then
+        table.insert(landed, summary.glancing .. " glancing")
     end
 
-    local ways, counted = {}, 0
+    local failed, counted = {}, 0
     for _, word in ipairs(AVOIDED_WORDS) do
         local times = summary.avoidedBy[word[1]]
-        if times then
-            table.insert(ways, ("%d %s"):format(times, word[2]))
+        if times and times > 0 then
+            table.insert(failed, ("%d %s"):format(times, word[2]))
             counted = counted + times
         end
     end
 
     -- Fights saved before the ways were told apart only have the total.
     if counted < summary.avoided then
-        table.insert(ways, ("%d missed or avoided"):format(summary.avoided - counted))
+        table.insert(failed, ("%d missed or avoided"):format(summary.avoided - counted))
     end
-    return text .. "   " .. table.concat(ways, ", ") .. "."
+
+    local sentences = {}
+    if #landed > 0 then
+        table.insert(sentences, table.concat(landed, ", ") .. ".")
+    end
+    if #failed > 0 then
+        table.insert(sentences, table.concat(failed, ", ") .. ".")
+    end
+    return #sentences > 0 and table.concat(sentences, "   ") or nil
 end
 
---- "Skills 62%    Auto attacks 38%", each kind in the colour of its bars,
---- so the line is also the key to them.
+--- "Abilities 62%    Auto attacks 38%", each kind in the colour of its
+--- bars, so the line is also the key to them.
 local function KindsText(summary)
     local kinds = {}
     for _, kind in ipairs(ns.Sources.ORDER) do
         local damage = summary.kinds[kind] or 0
         if damage > 0 then
-            local label = Kit.Colored(ns.Sources.LABELS[kind], Kit.KIND_COLORS[kind])
+            local label = Kit.Colored(KIND_LABELS[kind], Kit.KIND_COLORS[kind])
             table.insert(kinds, ("%s %s"):format(label, ns.Percent(damage / summary.damage)))
         end
     end
@@ -147,34 +186,34 @@ local function SplitText(summary)
         return "Every fight here was against several enemies at once."
     end
 
-    return ("One enemy: %s a second over %d fights.   Several at once: %s over %d."):format(
+    return ("One enemy: %s DPS over %s.   Several at once: %s DPS over %s."):format(
         ns.Rate(summary.single.dps),
-        summary.single.fights,
+        summary.single.fights == 1 and "1 fight" or summary.single.fights .. " fights",
         ns.Rate(summary.several.dps),
-        summary.several.fights
+        summary.several.fights == 1 and "1 fight" or summary.several.fights .. " fights"
     )
 end
 
---- For a set of fights, how busy the player's hands were: skills used,
---- how often, and how much of the time went by without one.
-local function PressedText(summary)
+--- For a set of fights, how busy the player's hands were: how often an
+--- ability was used, and how much of the time went by without one.
+local function UsedText(summary)
     local time = ns.Duration(summary.watched)
     if summary.presses == 0 then
-        return ("No skills were used in %s of fighting."):format(time)
+        return ("No abilities were used in %s of fighting."):format(time)
     end
 
-    local used = ("%d %s used in %s of fighting, about one every %.1fs."):format(
+    local used = ("You used an ability %d %s in %s of fighting, about once every %.1fs."):format(
         summary.presses,
-        summary.presses == 1 and "skill" or "skills",
+        summary.presses == 1 and "time" or "times",
         time,
         summary.watched / summary.presses
     )
-    local unused = ("No skill was in use for about %s of that time."):format(
+    local unused = ("For about %s of that time no ability was in use."):format(
         ns.Percent(summary.idle / summary.watched)
     )
     local text = used .. " " .. unused
 
-    -- Older fights have had their move-by-move record dropped to save room.
+    -- Older fights have had their use-by-use record dropped to save room.
     if summary.watched < summary.seconds - 1 then
         local caveat = "Only the latest fights are followed this closely."
         text = text .. "  " .. Kit.Colored(caveat, Kit.MUTED)
@@ -191,7 +230,7 @@ local function DifferenceLines(comparison)
     if comparison.levels then
         table.insert(
             lines,
-            ("Level %d before, level %d now."):format(
+            ("Level %d in the earlier fights, level %d in these."):format(
                 comparison.levels.before,
                 comparison.levels.after
             )
@@ -288,7 +327,7 @@ end
 
 -- The note --------------------------------------------------------------------
 
---- Saves what's in the note box to the fight or recording it's about.
+--- Saves what's in the note box to the session it's about.
 local function KeepNote(box)
     local about = box.about
     if not about then
@@ -302,15 +341,15 @@ local function KeepNote(box)
     end
 end
 
---- Points the note box at a fight or a recording, or hides it.
----@param about table|nil  the fight or recording the note belongs to
+--- Points the note box at a session, or hides it.
+---@param about table|nil  the session the note belongs to
 local function ShowNote(box, about)
     -- A redraw while the player is halfway through typing leaves it be.
     if box.about == about and box:HasFocus() then
         return
     end
 
-    -- Clicking another fight doesn't take the cursor out of the box, so
+    -- Clicking other fights doesn't take the cursor out of the box, so
     -- what was typed is kept here before the box moves on.
     if box:HasFocus() then
         KeepNote(box)
@@ -360,6 +399,36 @@ local function CreateNoteBox(card)
     return box
 end
 
+-- The headline --------------------------------------------------------------------
+
+--- The height of the type a tile's figure is set in.
+local function FigureSize(tile)
+    local _, size = tile.value:GetFont()
+    return size or 0
+end
+
+--- Three tiles, with the first made the hero: its figure in larger type,
+--- and the other two figures dropped to stand on the same line as it, so
+--- the row still reads straight across.
+local function CreateTiles(card, page)
+    local tiles = {}
+    for index = 1, #TILE_SHARES do
+        tiles[index] = Piece(card, Kit.Tile(page))
+    end
+
+    local hero = tiles[1]
+    local usual = FigureSize(hero)
+    hero.value:SetFontObject(HERO_FONT)
+    local drop = FigureSize(hero) - usual
+
+    for index = 2, #tiles do
+        local tile = tiles[index]
+        tile.value:ClearAllPoints()
+        tile.value:SetPoint("TOPLEFT", tile.name, "BOTTOMLEFT", 0, -3 - drop)
+    end
+    return tiles
+end
+
 -- The bars ----------------------------------------------------------------------
 
 local function AddFigure(label, figure)
@@ -367,6 +436,8 @@ local function AddFigure(label, figure)
 end
 
 --- The game's own tooltip for the ability, with our figures underneath.
+--- The bar itself only has room for damage and share; what each use did
+--- and what it cost are here for whoever wants them.
 local function ShowAbilityTooltip(bar)
     local ability = bar.ability
     if not ability then
@@ -385,22 +456,23 @@ local function ShowAbilityTooltip(bar)
     if ability.perCast then
         AddFigure(
             ("Used %d %s"):format(ability.casts, ability.casts == 1 and "time" or "times"),
-            ns.Rate(ability.perCast) .. " damage a use"
+            ns.Rate(ability.perCast) .. " damage per use"
         )
     end
     if ability.perCost then
+        local power = ns.Summary.PowerWord(ability.power)
         AddFigure(
-            ("Costs %d %s"):format(ability.cost, ns.Summary.PowerWord(ability.power)),
-            ("%.1f damage a point"):format(ability.perCost)
+            ("Costs %d %s"):format(ability.cost, power),
+            ("%.1f damage per point"):format(ability.perCost)
         )
     end
 
     -- Which blow belongs to which use is worked out, not reported, so
-    -- this is worded as the estimate it is.
+    -- this is marked as the estimate it is.
     if ability.landed then
         AddFigure(
-            "Landed, as far as could be traced",
-            ("about %d of %d"):format(ability.landed, ability.landed + ability.failed)
+            "Landed",
+            ("%d of %d uses (estimated)"):format(ability.landed, ability.landed + ability.failed)
         )
     end
     GameTooltip:Show()
@@ -426,7 +498,7 @@ end
 
 ---@param biggest number  the damage of the biggest ability, which gets a
 ---                       full bar; the others are drawn against it
----@param change number|nil  how its damage a second moved since "before"
+---@param change number|nil  how its DPS moved since the earlier fights
 local function FillBar(bar, ability, biggest, change)
     bar.ability = ability
 
@@ -435,20 +507,7 @@ local function FillBar(bar, ability, biggest, change)
         name = name .. "  " .. Kit.Colored(ability.rank, Kit.MUTED)
     end
 
-    -- Damage and share for everything. For skills, what each use did and
-    -- what each point of mana or energy bought.
     local figures = ("%s  %s"):format(ns.Number(ability.damage), ns.Percent(ability.share))
-    if ability.perCast then
-        local perUse = ns.Rate(ability.perCast) .. " a use"
-        figures = figures .. "  " .. Kit.Colored(perUse, Kit.MUTED)
-    end
-    if ability.perCost then
-        local perPoint = ("%.1f per %s"):format(
-            ability.perCost,
-            ns.Summary.PowerWord(ability.power)
-        )
-        figures = figures .. "  " .. Kit.Colored(perPoint, Kit.MUTED)
-    end
     if change then
         figures = figures .. "  " .. Kit.ChangeText(change)
     end
@@ -500,12 +559,12 @@ function Card.Create(parent)
     card.scroll:SetScrollChild(page)
     card.page = page
 
-    card.tiles = {}
-    for index = 1, 4 do
-        card.tiles[index] = Piece(card, Kit.Tile(page))
-    end
+    card.tiles = CreateTiles(card, page)
 
-    card.counts = Piece(card, Paragraph(page, "GameFontHighlightSmall"))
+    -- Findings and differences come a few at a time, so their rows are
+    -- made as they're first needed.
+    card.findingsHeading = Piece(card, Kit.Header(page, "What to work on"))
+    card.findings = {}
 
     card.sourcesHeading = Piece(card, Kit.Header(page, "Where the damage came from"))
     card.bars = {}
@@ -515,17 +574,13 @@ function Card.Create(parent)
     card.kinds = Piece(card, Kit.Text(page, "GameFontHighlightSmall"))
     card.split = Piece(card, Paragraph(page, "GameFontHighlightSmall"))
     card.split:SetTextColor(unpack(Kit.MUTED))
+    card.counts = Piece(card, Paragraph(page, "GameFontHighlightSmall"))
 
-    card.pressedHeading = Piece(card, Kit.Header(page, "What you pressed"))
+    card.usedHeading = Piece(card, Kit.Header(page, "What you used"))
     card.timeline = Piece(card, ns.Timeline.Create(page))
-    card.pressed = Piece(card, Paragraph(page, "GameFontHighlight"))
+    card.used = Piece(card, Paragraph(page, "GameFontHighlight"))
 
-    -- Findings and differences come a few at a time, so their rows are
-    -- made as they're first needed.
-    card.findingsHeading = Piece(card, Kit.Header(page, "What stands out"))
-    card.findings = {}
-
-    card.differencesHeading = Piece(card, Kit.Header(page, "What was different"))
+    card.differencesHeading = Piece(card, Kit.Header(page, "What changed"))
     card.differences = {}
 
     return card
@@ -533,50 +588,89 @@ end
 
 -- Filling ------------------------------------------------------------------------
 
---- The headline figures side by side, and the count of blows under them.
+--- The headline figures side by side, DPS first and widest.
 local function PlaceHeadlines(card, layout, summary, comparison)
-    local width = (layout.width - (#card.tiles - 1) * TILE_GAP) / #card.tiles
+    local shares = 0
+    for _, share in ipairs(TILE_SHARES) do
+        shares = shares + share
+    end
+    local unit = (layout.width - (#card.tiles - 1) * TILE_GAP) / shares
+
+    local left = 0
     for index, tile in ipairs(card.tiles) do
-        local left = (index - 1) * (width + TILE_GAP)
+        local width = unit * TILE_SHARES[index]
         tile:ClearAllPoints()
         tile:SetPoint("TOPLEFT", layout.page, "TOPLEFT", left, -layout.y)
         tile:SetWidth(width)
         tile:Show()
+        left = left + width + TILE_GAP
     end
     layout.y = layout.y + card.tiles[1]:GetHeight()
 
     card.tiles[1]:Set(
-        "Damage a second",
+        "DPS",
         ns.Rate(summary.dps),
         comparison and Kit.ChangeText(comparison.dps.change),
         comparison and comparison.dps.change
     )
     card.tiles[2]:Set(
-        summary.fights == 1 and "Damage" or "Damage a fight",
+        summary.fights == 1 and "Damage" or "Damage per fight",
         ns.Number(summary.damage / summary.fights),
         comparison and Kit.ChangeText(comparison.perFight.change),
         comparison and comparison.perFight.change
     )
-    card.tiles[3]:Set("Time in battle", ns.Duration(summary.seconds))
 
     -- A rate that's already a percentage moves in points, not per cent.
-    card.tiles[4]:Set(
+    card.tiles[3]:Set(
         "Critical hits",
         summary.critRate and ns.Percent(summary.critRate) or "-",
         comparison and Kit.PointsText(comparison.critRate.points),
         comparison and comparison.critRate.points
     )
-
-    local counts = CountsText(summary)
-    local blows = BlowsText(summary)
-    if blows then
-        counts = counts .. "\n" .. blows
-    end
-    PlaceText(layout, card.counts, LINE_GAP, counts)
 end
 
---- A bar for each of the biggest abilities, and under them the split by
---- kind of source.
+local function CreateFindingRow(card)
+    local row = Piece(card, CreateFrame("Frame", nil, card.page))
+
+    row.icon = Kit.Icon(row, FINDING_ICON)
+    row.icon:SetPoint("TOPLEFT")
+
+    row.text = Paragraph(row, "GameFontHighlight")
+    row.text:SetPoint("TOPLEFT", FINDING_ICON + 8, -1)
+
+    return row
+end
+
+--- One row per finding: a picture for the kind of news it is, then the
+--- sentence. With no findings the section says so in a line of its own,
+--- so the page keeps its shape from one selection to the next.
+local function PlaceFindings(card, layout, findings, summary)
+    Place(layout, card.findingsHeading, SECTION_GAP)
+
+    if #findings == 0 then
+        local these = summary.fights == 1 and "this fight" or "these fights"
+        findings = { { kind = "tip", text = NOTHING_STANDS_OUT:format(these) } }
+    end
+
+    for index, finding in ipairs(findings) do
+        local row = card.findings[index]
+        if not row then
+            row = CreateFindingRow(card)
+            card.findings[index] = row
+        end
+
+        Kit.SetIcon(row.icon, finding.kind)
+        row.text:SetWidth(layout.width - FINDING_ICON - 8)
+        row.text:SetText(finding.text)
+
+        local height = math.max(FINDING_ICON, row.text:GetStringHeight() + 1)
+        row:SetHeight(height)
+        Place(layout, row, FINDING_GAP)
+    end
+end
+
+--- A bar for each of the biggest abilities. Under them the split by kind
+--- of source, then the count of blows and the biggest of them.
 local function PlaceSources(card, layout, summary, comparison)
     Place(layout, card.sourcesHeading, SECTION_GAP)
 
@@ -612,58 +706,30 @@ local function PlaceSources(card, layout, summary, comparison)
     if split then
         PlaceText(layout, card.split, LINE_GAP, split)
     end
+
+    local counts, blows = CountsText(summary), BlowsText(summary)
+    if counts and blows then
+        counts = counts .. "\n" .. blows
+    end
+    if counts or blows then
+        PlaceText(layout, card.counts, HEADING_GAP, counts or blows)
+    end
 end
 
---- What was pressed: move by move for one fight, summed up for several.
-local function PlacePressed(card, layout, summary, fights)
+--- What was used: one use after another for a single fight, summed up
+--- for several.
+local function PlaceUsed(card, layout, summary, fights)
     if summary.fights == 1 then
-        -- The timeline hides itself if this fight's moves weren't kept.
+        -- The timeline hides itself if this fight's uses weren't kept.
         card.timeline:SetWidth(layout.width)
         card.timeline:Set(fights[1])
         if card.timeline:IsShown() then
-            Place(layout, card.pressedHeading, SECTION_GAP)
+            Place(layout, card.usedHeading, SECTION_GAP)
             Place(layout, card.timeline, HEADING_GAP)
         end
     elseif summary.watched > 0 then
-        Place(layout, card.pressedHeading, SECTION_GAP)
-        PlaceText(layout, card.pressed, HEADING_GAP, PressedText(summary))
-    end
-end
-
-local function CreateFindingRow(card)
-    local row = Piece(card, CreateFrame("Frame", nil, card.page))
-
-    row.icon = Kit.Icon(row, FINDING_ICON)
-    row.icon:SetPoint("TOPLEFT")
-
-    row.text = Paragraph(row, "GameFontHighlight")
-    row.text:SetPoint("TOPLEFT", FINDING_ICON + 8, -1)
-
-    return row
-end
-
---- One row per finding: a picture for the kind of news it is, then the
---- sentence.
-local function PlaceFindings(card, layout, findings)
-    if #findings == 0 then
-        return
-    end
-    Place(layout, card.findingsHeading, SECTION_GAP)
-
-    for index, finding in ipairs(findings) do
-        local row = card.findings[index]
-        if not row then
-            row = CreateFindingRow(card)
-            card.findings[index] = row
-        end
-
-        Kit.SetIcon(row.icon, finding.kind)
-        row.text:SetWidth(layout.width - FINDING_ICON - 8)
-        row.text:SetText(finding.text)
-
-        local height = math.max(FINDING_ICON, row.text:GetStringHeight() + 1)
-        row:SetHeight(height)
-        Place(layout, row, FINDING_GAP)
+        Place(layout, card.usedHeading, SECTION_GAP)
+        PlaceText(layout, card.used, HEADING_GAP, UsedText(summary))
     end
 end
 
@@ -699,10 +765,10 @@ end
 --- Fills the card in.
 ---@param card table  from Card.Create
 ---@param fights table  the fights to analyse; may be empty
----@param before table|nil  the fights to compare them with, if any
+---@param before table|nil  the earlier fights to compare them with, if any
 ---@param heading table  { title, subtitle, empty, recording }: what to call
 ---                      this set, what to say when there's nothing in it,
----                      and the recording when it's exactly one whole one
+---                      and the session when it's exactly one whole one
 function Card.Fill(card, fights, before, heading)
     local summary = ns.Summary.Of(fights)
     if summary.fights == 0 then
@@ -713,11 +779,14 @@ function Card.Fill(card, fights, before, heading)
     card.empty:Hide()
     card.logo:Hide()
     card.title:SetText(heading.title)
-    card.subtitle:SetText(heading.subtitle)
 
-    -- A note belongs to one fight or to one recording. Any other
-    -- selection is just a selection, with nowhere to keep one.
-    local noted = summary.fights == 1 and fights[1] or heading.recording
+    local length = LengthText(summary)
+    card.subtitle:SetText(heading.subtitle and (heading.subtitle .. "   " .. length) or length)
+
+    -- A note belongs to a session: it's where "what did you change?" has
+    -- an answer. Any other selection is just a selection, with nowhere to
+    -- keep one.
+    local noted = heading.recording
     ShowNote(card.note, noted)
 
     card.scroll:SetPoint("TOPLEFT", MARGIN, -(noted and PAGE_TOP_WITH_NOTE or PAGE_TOP))
@@ -731,9 +800,9 @@ function Card.Fill(card, fights, before, heading)
     local layout = { page = card.page, width = PageWidth(card), y = 0 }
 
     PlaceHeadlines(card, layout, summary, comparison)
+    PlaceFindings(card, layout, ns.Findings.For(summary, comparison), summary)
     PlaceSources(card, layout, summary, comparison)
-    PlacePressed(card, layout, summary, fights)
-    PlaceFindings(card, layout, ns.Findings.For(summary, comparison))
+    PlaceUsed(card, layout, summary, fights)
     if comparison then
         PlaceDifferences(card, layout, comparison)
     end

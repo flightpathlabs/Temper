@@ -3,7 +3,8 @@ local _, ns = ...
 -- Temper's page in the game's own Options window.
 --
 -- Everything works without a visit here. These are for people who want to
--- change how the numbers look or where they sit.
+-- change how the numbers look or where they sit, under one heading, and
+-- what else Temper puts on the screen, under another.
 
 local PREFIX = "Temper_"
 
@@ -60,6 +61,12 @@ local function AddDropdown(category, key, label, tooltip, choices)
     end)
 end
 
+-- Adds a heading over the options that follow it, as the game's own pages
+-- have.
+local function AddHeader(layout, title)
+    layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(title))
+end
+
 -- Our page, once it exists. Kept so it can be opened directly.
 local category
 
@@ -80,7 +87,12 @@ end
 -- Registered at login rather than when the addon loads, so the Options
 -- window has finished setting itself up.
 ns.OnEvent("PLAYER_LOGIN", function()
-    category = Settings.RegisterVerticalLayoutCategory(ns.TITLE)
+    -- The layout is the page's list of rows. The tick boxes and dropdowns
+    -- add themselves to it; a heading has to be added by hand.
+    local layout
+    category, layout = Settings.RegisterVerticalLayoutCategory(ns.TITLE)
+
+    AddHeader(layout, "Damage numbers")
 
     AddCheckbox(
         category,
@@ -118,7 +130,7 @@ ns.OnEvent("PLAYER_LOGIN", function()
         "stay",
         "How long a number stays",
         "Longer shows more of your recent hits at once.",
-        { "Briefly", "A few seconds", "A good while" }
+        { "Short", "Medium", "Long" }
     )
 
     AddDropdown(
@@ -134,7 +146,7 @@ ns.OnEvent("PLAYER_LOGIN", function()
         "laneDistance",
         "How far from the nameplate",
         "Move the column out if it covers something you want to see.",
-        { "Close", "A little way off", "Well clear" }
+        { "Near", "Medium", "Far" }
     )
 
     AddDropdown(
@@ -166,7 +178,7 @@ ns.OnEvent("PLAYER_LOGIN", function()
         "icons",
         "Show a best-guess ability icon beside each number",
         "The game doesn't tell addons which ability a hit was, so Temper works it out from "
-            .. "what you just cast and the kind of damage. It's usually right, gets better "
+            .. "what you just used and the kind of damage. It's usually right, gets better "
             .. "the more it sees, and is sometimes wrong when two things land at once.",
         true
     )
@@ -186,22 +198,24 @@ ns.OnEvent("PLAYER_LOGIN", function()
             .. "Temper steps aside, and when you log out."
     )
 
+    AddHeader(layout, "On screen")
+
     AddCheckbox(
         category,
         "widget",
         "Show the fight panel",
-        "A small panel with your damage a second, damage, hits and crits for the fight "
-            .. "you're in, or the last one. Click it for the full window, right-click for "
-            .. "a menu, drag it anywhere."
+        "A small panel with your DPS, damage, hits and crits for the fight you're in, or "
+            .. "the last one. Click it to open Temper, right-click for a menu, drag it "
+            .. "anywhere."
     )
 
     AddCheckbox(
         category,
         "recordButton",
-        "Show a Record button on the screen",
-        "A small button you can drag anywhere: left-click to record, right-click for the "
-            .. "window. Without it, record from the Temper window, with a key "
-            .. "(Options > Keybindings > Temper), or with /temper record."
+        "Show a Start session button on the screen",
+        "A small button you can drag anywhere: left-click to start or end a session, "
+            .. "right-click to open Temper. Without it, start a session from the Temper "
+            .. "window, with a key (Options > Keybindings > Temper), or with /temper session."
     )
 
     Settings.RegisterAddOnCategory(category)

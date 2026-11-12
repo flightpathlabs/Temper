@@ -3,10 +3,10 @@ local _, ns = ...
 -- The Progress tab: how the character is coming along, measured only
 -- against themselves.
 --
--- Read top to bottom it's three things. The bests, to have something to
--- beat. A column for each day's damage a second, to see which way it's
--- going. And, out of the way on the window's bottom edge, the button that
--- forgets the lot.
+-- Read top to bottom it's three things. The bests, four at most, to have
+-- something to beat. A column for each day's DPS, to see which way it's
+-- going. And, out of the way in the bottom right-hand corner of the
+-- window, the button that forgets the lot.
 --
 -- A best is only worth having if it was earned, so each one can be left
 -- out with a click when it was a fluke, and the next best takes its place
@@ -17,21 +17,42 @@ ns.ProgressTab = ProgressTab
 
 local Kit = ns.Kit
 
+-- The page is the window's inset, about 885 wide and 594 high. Down the
+-- page, with all four bests showing, it's spent like this:
+--
+--   margin 10, the bests' header 24, gap 8        42
+--   two rows of cards at 62, with 6 between      130
+--   gap 10, the line on what counts 18            28
+--   gap 18, the chart's header 24, gap 8          50
+--   the chart                                    280
+--   gap 10, the trend sentence 14                 24
+--
+-- That's 554, which leaves 40 clear above the bottom edge.
 local PADDING = 14
+local TOP_MARGIN = 10
+local GAP = 8
+local LINE_GAP = 10
 local SECTION_GAP = 18
 
--- Bests sit two to a row.
+-- Bests sit two to a row, and there's room for two rows of them.
+local MOST_BESTS = 4
 local CARD_HEIGHT = 62
 local CARD_GAP = 6
 
--- The two lines under the bests that say what's left out.
-local NOTE_HEIGHT = 30
+-- The line under the bests that says how many fights are left out.
+local NOTE_HEIGHT = 18
 
--- Progress keeps fourteen days at most, and fourteen slots this wide fit
--- across the window.
-local SLOT_WIDTH = 60
-local COLUMN_WIDTH = 38
-local CHART_HEIGHT = 250
+local CHART_HEIGHT = 280
+
+-- The days share the chart's width between them, up to a point: one or
+-- two days with the whole width to themselves would be absurdly fat. A
+-- column fills this much of its day's slot.
+local WIDEST_SLOT = 120
+local COLUMN_SHARE = 0.62
+
+-- The chart's width when it's asked for before the window has been laid
+-- out: the page less its padding.
+local USUAL_CHART_WIDTH = 857
 
 -- Room under the columns for the day and the level, and over the tallest
 -- column for its figure.
@@ -39,19 +60,22 @@ local LABEL_ROOM = 32
 local FIGURE_ROOM = 20
 local TALLEST_COLUMN = CHART_HEIGHT - LABEL_ROOM - FIGURE_ROOM
 
-local LEAVE_OUT = "Not a fair one: leave it out"
 local LEAVE_OUT_HELP = {
-    "Leaves this fight out of your bests and your day by day figures. "
+    "Stops this fight counting towards your bests and your day by day DPS. "
         .. "Your next best takes its place.",
     "To put it back, right-click the fight on the Fights tab.",
 }
 
-local LEFT_OUT = "Left out automatically: very short fights, and fights where much of the damage "
-    .. "came from an item or some other effect."
+local WHAT_COUNTS = {
+    "Very short fights are left out, and so are fights where much of the damage came from "
+        .. "an item or some other effect.",
+    "You can leave a fight out yourself, and put it back by right-clicking it on the "
+        .. "Fights tab.",
+}
 
 local NO_FIGHTS = "No fights on record yet.\n\n"
     .. "Fight something on your own and your bests will appear here, "
-    .. "with a column for each day's damage a second."
+    .. "with a column for each day's DPS."
 
 local NONE_COUNTED = "None of your fights count towards your bests yet.\n\n"
     .. "Very short fights are left out, and so are fights where much of the damage came "
@@ -61,10 +85,10 @@ local NONE_COUNTED = "None of your fights count towards your bests yet.\n\n"
 local ONE_DAY = "A good start: one day on record. "
     .. "Fight on another day and the two will be compared here."
 
-local FORGET_HELP = "Deletes every fight, recording and experiment kept for this character. "
+local FORGET_HELP = "Deletes every fight, session and experiment kept for this character. "
     .. "It cannot be undone."
 
-local FORGET_QUESTION = "Forget every fight, recording and experiment kept for %s?\n\n"
+local FORGET_QUESTION = "Forget every fight, session and experiment kept for %s?\n\n"
     .. "This cannot be undone."
 
 -- Columns darken towards the foot, so they stand on the baseline instead
@@ -124,8 +148,8 @@ end
 local function DayLines(day)
     local lines = {
         FightsText(day.fights),
-        ns.Duration(day.seconds) .. " in battle",
-        ns.Rate(day.dps) .. " damage a second",
+        ns.Duration(day.seconds) .. " of fighting",
+        ns.Rate(day.dps) .. " DPS",
     }
     if day.level then
         table.insert(lines, "Level " .. day.level)
@@ -146,7 +170,7 @@ local function Trend(days)
     -- A day on which nothing landed leaves nothing to measure from.
     local change = ns.Change(earlier.dps, latest.dps)
     if not change then
-        return ("%s damage a second on %s."):format(ns.Rate(latest.dps), latest.day)
+        return ("%s DPS on %s."):format(ns.Rate(latest.dps), latest.day)
     end
 
     local percent = math.floor(math.abs(change) * 100 + 0.5)
@@ -161,7 +185,7 @@ local function Trend(days)
 
     -- The day before is the last day there was a fight, which needn't be
     -- yesterday, so both days are named.
-    local text = ("%s the day before: %s a second on %s, %s on %s."):format(
+    local text = ("%s the day before: %s DPS on %s, %s on %s."):format(
         verdict,
         ns.Rate(latest.dps),
         latest.day,
@@ -182,12 +206,27 @@ end
 
 -- The bests ---------------------------------------------------------------------
 
-local function OpenBest(card)
-    ns.ShowFights({ card.best.fight })
+local function LeaveOut(fight)
+    ns.Progress.SetIgnored(fight, true)
 end
 
-local function LeaveOut(link)
-    ns.Progress.SetIgnored(link:GetParent().best.fight, true)
+--- Left-click reads the fight behind a best. Right-click offers to leave
+--- it out, for anyone who looks for that in a menu before they notice the
+--- words in the corner.
+local function OnCardClick(card, mouseButton)
+    local best = card.best
+
+    if mouseButton == "RightButton" then
+        MenuUtil.CreateContextMenu(card, function(_, root)
+            root:CreateTitle(best.title)
+            root:CreateButton("Don't count this fight", function()
+                LeaveOut(best.fight)
+            end)
+        end)
+        return
+    end
+
+    ns.ShowFights({ best.fight })
 end
 
 --- The small print in a card's corner that leaves its fight out. It's
@@ -198,13 +237,15 @@ local function CreateLeaveOutLink(card)
 
     local label = Kit.Text(link, "GameFontDisableSmall")
     label:SetPoint("CENTER")
-    label:SetText(LEAVE_OUT)
+    label:SetText("Leave out")
 
     link:SetFontString(label)
     link:SetNormalFontObject("GameFontDisableSmall")
     link:SetHighlightFontObject("GameFontHighlightSmall")
     link:SetSize(label:GetStringWidth() + 8, 18)
-    link:SetScript("OnClick", LeaveOut)
+    link:SetScript("OnClick", function()
+        LeaveOut(card.best.fight)
+    end)
 
     Kit.Tooltip(link, "Leave this fight out", function()
         return LEAVE_OUT_HELP
@@ -217,7 +258,8 @@ end
 local function CreateCard(index)
     local card = CreateFrame("Button", nil, tab.bests)
     card:SetHeight(CARD_HEIGHT)
-    card:SetScript("OnClick", OpenBest)
+    card:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    card:SetScript("OnClick", OnCardClick)
 
     -- Odd ones take the left half of the row, even ones the right.
     local row = math.floor((index - 1) / 2)
@@ -261,8 +303,12 @@ local function CreateCard(index)
     return card
 end
 
+---@param bests table  from Progress.Bests; the first few are shown
 local function FillBests(bests)
-    for index, best in ipairs(bests) do
+    local showing = math.min(#bests, MOST_BESTS)
+
+    for index = 1, showing do
+        local best = bests[index]
         local card = tab.cards[index] or CreateCard(index)
         card.best = best
         card.title:SetText(best.title)
@@ -273,25 +319,25 @@ local function FillBests(bests)
 
     -- Cards are kept and reused, so any beyond today's bests are put away,
     -- along with their hold on a fight that may since have been deleted.
-    for index = #bests + 1, #tab.cards do
+    for index = showing + 1, #tab.cards do
         tab.cards[index].best = nil
         tab.cards[index]:Hide()
     end
 
     -- Everything below is hung from the bottom of this, so it moves up
     -- when there's only one row of bests.
-    local rows = math.max(math.ceil(#bests / 2), 1)
+    local rows = math.max(math.ceil(showing / 2), 1)
     tab.bests:SetHeight(rows * CARD_HEIGHT + (rows - 1) * CARD_GAP)
 end
 
 -- Day by day -------------------------------------------------------------------
 
 --- One day of the chart: a slot the full height of the chart, so there's
---- plenty to hover over, with the column standing in it.
+--- plenty to hover over, with the column standing in it. How wide it is
+--- and where it stands depend on how many days there are, so that's left
+--- to FillChart.
 local function CreateColumn(index)
     local column = CreateFrame("Button", nil, tab.chart)
-    column:SetSize(SLOT_WIDTH, CHART_HEIGHT)
-    column:SetPoint("BOTTOMLEFT", (index - 1) * SLOT_WIDTH, 0)
 
     local hover = column:CreateTexture(nil, "HIGHLIGHT")
     hover:SetPoint("TOPLEFT")
@@ -301,7 +347,6 @@ local function CreateColumn(index)
     -- White, so that the gradient set on it later is the only colour.
     column.bar = column:CreateTexture(nil, "ARTWORK")
     column.bar:SetPoint("BOTTOM", 0, LABEL_ROOM)
-    column.bar:SetWidth(COLUMN_WIDTH)
     column.bar:SetColorTexture(1, 1, 1, 1)
 
     column.figure = Kit.Text(column, "GameFontHighlightSmall", "CENTER")
@@ -324,11 +369,20 @@ local function CreateColumn(index)
     return column
 end
 
+---@param days table  from Progress.ByDay; at least one day
 local function FillChart(days)
     local peak = 0
     for _, day in ipairs(days) do
         peak = math.max(peak, day.dps)
     end
+
+    -- The days share the width between them. When the slots are as wide
+    -- as they're allowed to be and there's width left over, the group
+    -- stands in the middle of it.
+    local width = tab.chart:GetWidth()
+    width = width > 0 and width or USUAL_CHART_WIDTH
+    local slot = math.floor(math.min(width / #days, WIDEST_SLOT))
+    local left = math.floor((width - slot * #days) / 2)
 
     -- The level as of the day before, to tell when it changes.
     local level
@@ -336,6 +390,11 @@ local function FillChart(days)
     for index, day in ipairs(days) do
         local column = tab.columns[index] or CreateColumn(index)
         local latest = index == #days
+
+        column:ClearAllPoints()
+        column:SetPoint("BOTTOMLEFT", left + (index - 1) * slot, 0)
+        column:SetSize(slot, CHART_HEIGHT)
+        column.bar:SetWidth(math.floor(slot * COLUMN_SHARE))
 
         -- Every day gets at least a sliver, so a poor day isn't mistaken
         -- for a day not played, and a chart of nothing but days without
@@ -468,43 +527,37 @@ function ProgressTab.Create(parent, window)
 
     -- Top: the bests. The cards are made as they're first needed.
     local bestsHeader = CreateSection(content, "Your bests", "Click one to read the fight.")
-    bestsHeader:SetPoint("TOPLEFT", PADDING, -10)
+    bestsHeader:SetPoint("TOPLEFT", PADDING, -TOP_MARGIN)
     bestsHeader:SetPoint("RIGHT", -PADDING, 0)
 
     tab.bests = CreateFrame("Frame", nil, content)
-    tab.bests:SetPoint("TOPLEFT", bestsHeader, "BOTTOMLEFT", 0, -8)
+    tab.bests:SetPoint("TOPLEFT", bestsHeader, "BOTTOMLEFT", 0, -GAP)
     tab.bests:SetPoint("RIGHT", -PADDING, 0)
     tab.bests:SetHeight(CARD_HEIGHT)
 
-    -- Under them: what's left out without being asked, and how much of it
-    -- there is.
+    -- Under them: how many fights are left out, with the rules that leave
+    -- them out a mouse-over away.
     local note = CreateFrame("Frame", nil, content)
-    note:SetPoint("TOPLEFT", tab.bests, "BOTTOMLEFT", 0, -10)
+    note:SetPoint("TOPLEFT", tab.bests, "BOTTOMLEFT", 0, -LINE_GAP)
     note:SetPoint("RIGHT", -PADDING, 0)
     note:SetHeight(NOTE_HEIGHT)
 
-    local tip = Kit.Icon(note, 14, "tip")
-    tip:SetPoint("TOPLEFT")
-
-    local leftOut = Kit.Text(note, "GameFontHighlightSmall")
-    leftOut:SetPoint("TOPLEFT", tip, "TOPRIGHT", 6, -1)
-    leftOut:SetPoint("RIGHT")
-    leftOut:SetTextColor(unpack(Kit.MUTED))
-    leftOut:SetText(LEFT_OUT)
+    local whatCounts = Kit.HelpButton(note, "Which fights count", WHAT_COUNTS)
+    whatCounts:SetPoint("LEFT")
 
     tab.counted = Kit.Text(note, "GameFontHighlightSmall")
-    tab.counted:SetPoint("TOPLEFT", leftOut, "BOTTOMLEFT", 0, -5)
+    tab.counted:SetPoint("LEFT", whatCounts, "RIGHT", 6, 0)
     tab.counted:SetPoint("RIGHT")
     tab.counted:SetTextColor(unpack(Kit.MUTED))
 
     -- Middle: a column a day.
     local daysHeader =
-        CreateSection(content, "Day by day", "Your damage a second on each day you fought.")
+        CreateSection(content, "DPS, day by day", "One column for each day you fought.")
     daysHeader:SetPoint("TOPLEFT", note, "BOTTOMLEFT", 0, -SECTION_GAP)
     daysHeader:SetPoint("RIGHT", -PADDING, 0)
 
     tab.chart = CreateFrame("Frame", nil, content)
-    tab.chart:SetPoint("TOPLEFT", daysHeader, "BOTTOMLEFT", 0, -8)
+    tab.chart:SetPoint("TOPLEFT", daysHeader, "BOTTOMLEFT", 0, -GAP)
     tab.chart:SetPoint("RIGHT", -PADDING, 0)
     tab.chart:SetHeight(CHART_HEIGHT)
 
@@ -521,19 +574,21 @@ function ProgressTab.Create(parent, window)
 
     -- And the upshot of the chart in a sentence.
     tab.trendIcon = Kit.Icon(content, 14)
-    tab.trendIcon:SetPoint("TOPLEFT", tab.chart, "BOTTOMLEFT", 0, -10)
+    tab.trendIcon:SetPoint("TOPLEFT", tab.chart, "BOTTOMLEFT", 0, -LINE_GAP)
 
     tab.trend = Kit.Text(content, "GameFontHighlight")
     tab.trend:SetPoint("LEFT", tab.trendIcon, "RIGHT", 6, 0)
     tab.trend:SetPoint("RIGHT", -PADDING, 0)
 
-    -- Bottom: forgetting everything, on the window's own edge and well
-    -- away from anything that might be clicked in passing.
+    -- Bottom: forgetting everything, on the window's own edge. It has the
+    -- right-hand corner to itself, because the left is where the other
+    -- tabs keep the button that starts something, and this is no button
+    -- to click by habit. Its warning runs up to it from the left.
     local forget = Kit.Button(tab, "Forget everything", 140, AskToForget)
-    forget:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", 8, 4)
+    forget:SetPoint("BOTTOMRIGHT", window, "BOTTOMRIGHT", -8, 4)
 
-    local forgetHelp = Kit.Text(tab, "GameFontHighlightSmall")
-    forgetHelp:SetPoint("LEFT", forget, "RIGHT", 10, 0)
+    local forgetHelp = Kit.Text(tab, "GameFontHighlightSmall", "RIGHT")
+    forgetHelp:SetPoint("RIGHT", forget, "LEFT", -10, 0)
     forgetHelp:SetTextColor(unpack(Kit.MUTED))
     forgetHelp:SetText(FORGET_HELP)
 

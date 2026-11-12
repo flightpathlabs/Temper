@@ -5,10 +5,11 @@ local _, ns = ...
 --
 -- An experiment is a short task with someone to guide you through it, so
 -- its page is a checklist of three steps rather than a table of figures:
--- fight a few as you are, make your change, fight the same number again.
--- The step the player is on is marked, and the one button they have to
--- press sits on the step that needs it. The verdict appears underneath as
--- soon as there's anything to say.
+-- win a few fights as you are, make your change, win the same number
+-- again. The step the player is on is marked, and the one button they
+-- have to click sits on the step that needs it. The verdict appears
+-- underneath as soon as there's anything to say, and is only given a
+-- colour and an arrow when it's sure enough of itself to deserve them.
 --
 -- All the reckoning is in Record\Experiments.lua. This file only draws it.
 
@@ -18,28 +19,49 @@ ns.ExperimentsTab = ExperimentsTab
 local Kit = ns.Kit
 local Experiments = ns.Experiments
 
+-- The list sits in a sunken panel with its scroll bar, laid out as on the
+-- Fights tab so the two don't jump when switching between them. The panel
+-- shares the window's own edge on three sides, so only its right-hand
+-- edge is new: a line between the list and the page.
 local LIST_WIDTH = 270
+local LIST_EDGE = 4
+local PANEL_WIDTH = 292
 local ROW_HEIGHT = 40
-local HELP_HEIGHT = 76
+
 local STEP_HEIGHT = 42
 local CONTINUE_HEIGHT = 28
 local QUESTION_WIDTH = 320
+local TILE_WIDTH = 170
 
--- How many fights each way the form offers.
+-- The verdict's heading sits this far under the steps, and further when
+-- the line about fights being counted is showing between them.
+local VERDICT_GAP = 12
+local COUNTED_ROOM = 20
+
+-- How many fights in each set the form offers.
 local SIZES = { 3, 5, 8 }
 
 local WHITE = { 1, 1, 1 }
 
-local HELP = "Click an experiment to read it. Right-click to delete it.\n"
-    .. "These are yours alone. Nothing here is shared or posted."
+local HELP = {
+    "Click an experiment to read it.",
+    "Right-click one to delete it.",
+}
 
-local IDEA = "One fight can't tell you whether a new weapon or a different build is better, "
-    .. "because no two fights go the same way. An experiment can. It records a few fights "
-    .. "as you are, waits while you make your change, then records the same number again "
-    .. "and tells you what the difference was and how far to trust it."
+local NONE = "No experiments yet.\n\nExperiments are kept on this computer and never shared."
 
-local IDEA_IN_SHORT = "An experiment records a few fights before a change and the same "
-    .. "number after it, then tells you what difference the change made."
+local IDEA = "No two fights go the same way, so one fight can't tell you whether a change "
+    .. "helped. An experiment compares a few fights before the change with a few after it."
+
+local FAIRER = "The same kind of enemy each time makes it fairer."
+
+-- Said under the steps while a set is being recorded. With the panel
+-- switched off nothing on screen says when the set is finished, so the
+-- player is told to look here for it.
+local COUNTED_WITH_PANEL = "You can close this window: fights are counted as you win them, "
+    .. "and the panel keeps count."
+local COUNTED_WITHOUT_PANEL = "Fights are counted as you win them. Keep this window open, "
+    .. "or check back, to see when the set is finished."
 
 -- How far along a step is, for each state an experiment can be in.
 local STEP_STATES = {
@@ -77,7 +99,8 @@ local tab
 local selected
 local composing = false
 
--- The form's choice of how many fights each way, kept between experiments.
+-- The form's choice of how many fights in each set, kept between
+-- experiments.
 local fightsEachWay = Experiments.DEFAULT_SIZE
 
 local Refresh
@@ -103,10 +126,20 @@ local function StillKept(experiment)
 end
 
 --- Whether a verdict points one way firmly enough to be given a colour and
---- an arrow. One that's too close to call gets neither, so that a green
---- arrow always means something.
+--- an arrow. One that's too close to call gets neither, anywhere on the
+--- tab, so that green, red and an arrow always mean something.
 local function PointsOneWay(verdict)
     return verdict.direction ~= "same" and verdict.sureness ~= "unsure"
+end
+
+--- "+12%" or "-8%" with no colour of its own, for a change that hasn't
+--- earned green or red.
+local function PlainChangeText(change)
+    local percent = math.floor(math.abs(change) * 100 + 0.5)
+    if percent == 0 then
+        return "no change"
+    end
+    return ("%s%d%%"):format(change > 0 and "+" or "-", percent)
 end
 
 --- Where an experiment stands, in a few words, for its row in the list.
@@ -117,7 +150,7 @@ local function Standing(experiment)
     if state == "change" then
         return Kit.Colored("Waiting for your change", Kit.GOLD)
     elseif state == "before" or state == "after" then
-        -- While a set is being recorded, the state is the name of its side.
+        -- While a set is being recorded, the state is the name of that set.
         return ("Recording the %s set: %d of %d"):format(
             state == "before" and "first" or "second",
             #Experiments.FightsOf(experiment, state),
@@ -128,10 +161,10 @@ local function Standing(experiment)
     local verdict = Experiments.Verdict(experiment)
     if not verdict then
         return Kit.Colored("Nothing to compare", Kit.MUTED)
-    elseif verdict.direction == "same" then
-        return Kit.Colored("No real difference", Kit.MUTED)
     elseif not PointsOneWay(verdict) then
-        return "Too close to call  " .. Kit.ChangeText(verdict.change)
+        -- No different, or no telling: the verdict's own headline, in grey.
+        local headline = Experiments.InWords(verdict)
+        return Kit.Colored(headline, Kit.MUTED)
     end
 
     local words = VERDICT_WORDS[verdict.sureness][verdict.direction]
@@ -150,35 +183,47 @@ local function WhyNotStart()
     end
 
     if ns.Recorder.Open() then
-        return "A recording is in progress. Stop it first with the Stop recording button "
+        return "A session is in progress. End it first with the End session button "
             .. "on the Fights tab."
     end
 end
 
---- The line under a step: how far along it is, or what to do about it.
+--- What a step asks for and, for a set of fights that has been begun, how
+--- far along it is: "1.  Win 5 fights as you are now.   3 of 5".
 ---@param index number  1, 2 or 3
 ---@param state string  a value from STEP_STATES
-local function StepNote(experiment, index, state)
+local function StepTitle(experiment, index, state)
+    if index == 2 then
+        return "2.  Make your change."
+    end
+
+    local title = index == 1 and "1.  Win %d fights as you are now." or "3.  Win %d more fights."
+    title = title:format(experiment.size)
     if state == "later" then
+        return title
+    end
+
+    -- The count stands out from the gold of the step in hand, and falls
+    -- back once the step is finished.
+    local fought = #Experiments.FightsOf(experiment, index == 1 and "before" or "after")
+    local progress = ("%d of %d"):format(fought, experiment.size)
+    return title .. "   " .. Kit.Colored(progress, state == "recording" and WHITE or Kit.MUTED)
+end
+
+--- The line under a step: a word of advice, or what to do about it.
+local function StepNote(index, state)
+    if index == 1 then
+        return Kit.Colored(FAIRER, Kit.MUTED)
+    elseif index == 3 or state == "later" then
         return ""
     end
 
-    if index == 2 then
-        if state == "done" then
-            return Kit.Colored("Done.", Kit.MUTED)
-        elseif ns.Recorder.Open() then
-            return "A recording is in progress. Stop it on the Fights tab, then come back."
-        end
-        return "Swap the gear, change the build, whatever you're testing. Then press the button."
+    if state == "done" then
+        return Kit.Colored("Done.", Kit.MUTED)
+    elseif ns.Recorder.Open() then
+        return "A session is in progress. End it on the Fights tab, then come back."
     end
-
-    local fought = #Experiments.FightsOf(experiment, index == 1 and "before" or "after")
-    if state == "recording" then
-        return ("%s  Fights are counted automatically, so you can close this window."):format(
-            Kit.Colored(("%d of %d fought."):format(fought, experiment.size), Kit.GOLD)
-        )
-    end
-    return Kit.Colored(FightsText(fought) .. " recorded.", Kit.MUTED)
+    return "Swap the gear, change the build, whatever you're testing. Then click the button."
 end
 
 -- Starting and deleting -------------------------------------------------------
@@ -239,20 +284,9 @@ local function CreateRowWidgets(row)
     row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     row:SetScript("OnClick", OnRowClick)
 
-    row.fill = row:CreateTexture(nil, "BACKGROUND")
-    row.fill:SetAllPoints()
-
-    -- A gold stripe down the left edge of the selected one, as on the
-    -- Fights tab.
-    row.stripe = row:CreateTexture(nil, "BORDER")
-    row.stripe:SetPoint("TOPLEFT")
-    row.stripe:SetPoint("BOTTOMLEFT")
-    row.stripe:SetWidth(3)
-    row.stripe:SetColorTexture(Kit.GOLD[1], Kit.GOLD[2], Kit.GOLD[3], 1)
-
-    row.hover = row:CreateTexture(nil, "HIGHLIGHT")
-    row.hover:SetAllPoints()
-    row.hover:SetColorTexture(1, 1, 1, 0.06)
+    -- The glow under the mouse and the band across the selected one, as
+    -- on the Fights tab.
+    Kit.DressRow(row)
 
     row.when = Kit.Text(row, "GameFontHighlightSmall", "RIGHT")
     row.when:SetPoint("TOPRIGHT", -6, -7)
@@ -284,13 +318,7 @@ local function FillRow(row, data)
     row.detail:SetPoint("BOTTOMLEFT", row.arrow:IsShown() and 25 or 10, 6)
     row.detail:SetPoint("BOTTOMRIGHT", -6, 6)
 
-    local isSelected = experiment == selected
-    row.stripe:SetShown(isSelected)
-    if isSelected then
-        row.fill:SetColorTexture(Kit.GOLD[1], Kit.GOLD[2], Kit.GOLD[3], 0.14)
-    else
-        row.fill:SetColorTexture(0, 0, 0, 0)
-    end
+    row.chosen:SetShown(experiment == selected)
 end
 
 --- The rows of the list: experiments, newest first.
@@ -306,16 +334,16 @@ end
 -- Pieces of the right-hand side ----------------------------------------------
 
 --- Text that runs on to as many lines as it needs. Anchor its left and
---- right edges so it knows where to wrap.
-local function Paragraph(parent, font)
-    local text = Kit.Text(parent, font)
+--- right edges, or give it a width, so it knows where to wrap.
+local function Paragraph(parent, font, justify)
+    local text = Kit.Text(parent, font, justify)
     text:SetWordWrap(true)
     text:SetJustifyV("TOP")
     text:SetSpacing(3)
     return text
 end
 
---- Puts a region under another, the same width.
+--- Puts a region under another, the same width. Doing it again moves it.
 local function PlaceBelow(region, above, gap)
     region:SetPoint("TOPLEFT", above, "BOTTOMLEFT", 0, -gap)
     region:SetPoint("TOPRIGHT", above, "BOTTOMRIGHT", 0, -gap)
@@ -354,6 +382,19 @@ local function FillStep(step, state, title, note)
     step.note:SetText(note)
 end
 
+--- One set's DPS in large type, with the number of fights it's the
+--- average of underneath, where the kit's tile would put a change.
+local function CreateSetTile(parent)
+    local tile = Kit.Tile(parent)
+    tile:SetWidth(TILE_WIDTH)
+
+    tile.count = Kit.Text(tile, "GameFontHighlightSmall")
+    tile.count:SetPoint("TOPLEFT", tile.value, "BOTTOMLEFT", 0, -3)
+    tile.count:SetTextColor(unpack(Kit.MUTED))
+
+    return tile
+end
+
 -- The page for one experiment -------------------------------------------------
 
 local function CreatePage(parent)
@@ -381,22 +422,25 @@ local function CreatePage(parent)
         page.steps[index] = step
     end
 
-    -- The one thing the player has to press, on the step that asks for it.
-    page.continue = Kit.Button(
-        page.steps[2],
-        "I've made my change: start the second set",
-        340,
-        function()
-            if selected then
-                Experiments.Continue(selected)
-            end
+    -- The one thing the player has to click, on the step that asks for it.
+    page.continue = Kit.Button(page.steps[2], "Change made: continue", 200, function()
+        if selected then
+            Experiments.Continue(selected)
         end
-    )
+    end)
     page.continue:SetHeight(CONTINUE_HEIGHT)
     page.continue:SetPoint("BOTTOMLEFT", 26, 6)
 
+    -- Under the steps while a set is being recorded: whether the window
+    -- has to stay open for it. In line with the words of the steps.
+    page.counted = Kit.Text(page, "GameFontHighlightSmall")
+    page.counted:SetPoint("TOPLEFT", page.steps[3], "BOTTOMLEFT", 26, -2)
+    page.counted:SetPoint("RIGHT", page.steps[3], "RIGHT")
+    page.counted:SetTextColor(unpack(Kit.MUTED))
+
+    -- FillPage moves this down out of that line's way when it's showing.
     page.verdictHeader = Kit.Header(page, "The verdict")
-    PlaceBelow(page.verdictHeader, page.steps[3], 12)
+    PlaceBelow(page.verdictHeader, page.steps[3], VERDICT_GAP)
 
     -- Said in place of a verdict while there isn't one.
     page.pending = Paragraph(page, "GameFontHighlight")
@@ -418,18 +462,23 @@ local function CreatePage(parent)
     verdict.detail:SetPoint("TOPLEFT", 0, -38)
     verdict.detail:SetPoint("TOPRIGHT", 0, -38)
 
-    local figuresHeader = Kit.Header(verdict, "Damage a second")
+    local figuresHeader = Kit.Header(verdict, "DPS")
     PlaceBelow(figuresHeader, verdict.detail, 14)
 
-    verdict.before = Kit.Tile(verdict)
+    verdict.before = CreateSetTile(verdict)
     verdict.before:SetPoint("TOPLEFT", figuresHeader, "BOTTOMLEFT", 0, -8)
-    verdict.before:SetWidth(170)
 
-    verdict.after = Kit.Tile(verdict)
+    verdict.after = CreateSetTile(verdict)
     verdict.after:SetPoint("TOPLEFT", verdict.before, "TOPRIGHT", 20, 0)
-    verdict.after:SetWidth(170)
 
-    verdict.compare = Kit.Button(verdict, "See the fights side by side", 220, function()
+    -- The change stands beside the figure it brought about. FillVerdict
+    -- places the words, which move up when there's no arrow.
+    verdict.changeArrow = Kit.Icon(verdict, 12)
+    verdict.changeArrow:SetPoint("LEFT", verdict.after.value, "RIGHT", 10, 0)
+
+    verdict.change = Kit.Text(verdict, "GameFontHighlight")
+
+    verdict.compare = Kit.Button(verdict, "Compare the two sets", 180, function()
         if selected then
             ns.ShowFights(
                 Experiments.FightsOf(selected, "after"),
@@ -455,8 +504,8 @@ local function FillVerdict(page, experiment)
 
     if not verdict then
         page.pending:SetText(
-            finished and "There aren't fights on both sides, so there's nothing to compare."
-                or "It will appear here once you've fought on both sides of your change."
+            finished and "There aren't fights in both sets, so there's nothing to compare."
+                or "It will appear here once there are fights in both sets."
         )
         return
     end
@@ -467,10 +516,15 @@ local function FillVerdict(page, experiment)
         detail = detail .. " The second set is still being recorded, so this may change."
     end
 
+    -- Green or red and an arrow for a verdict that points one way. White
+    -- for one that's sure there's no difference, and grey for one that
+    -- can't tell.
     local firm = PointsOneWay(verdict)
     local color = WHITE
     if firm then
         color = verdict.direction == "better" and Kit.GOOD or Kit.BAD
+    elseif verdict.sureness == "unsure" then
+        color = Kit.MUTED
     end
 
     Kit.SetArrow(widgets.arrow, firm and verdict.change or nil)
@@ -484,44 +538,57 @@ local function FillVerdict(page, experiment)
     widgets.headline:SetTextColor(unpack(color))
     widgets.detail:SetText(detail)
 
-    widgets.before:Set(
-        ("Before (%s)"):format(FightsText(verdict.fightsBefore)),
-        ns.Rate(verdict.before)
-    )
-    widgets.after:Set(
-        ("After (%s)"):format(FightsText(verdict.fightsAfter)),
-        ns.Rate(verdict.after),
-        Kit.ChangeText(verdict.change),
-        verdict.change
+    widgets.before:Set("Before", ns.Rate(verdict.before))
+    widgets.before.count:SetText(FightsText(verdict.fightsBefore))
+    widgets.after:Set("After", ns.Rate(verdict.after))
+    widgets.after.count:SetText(FightsText(verdict.fightsAfter))
+
+    -- The change is held to the same rule as the headline: the percentage
+    -- is always there to read, but only a firm one is coloured.
+    Kit.SetArrow(widgets.changeArrow, firm and verdict.change or nil)
+    widgets.change:ClearAllPoints()
+    if widgets.changeArrow:IsShown() then
+        widgets.change:SetPoint("LEFT", widgets.changeArrow, "RIGHT", 3, 0)
+    else
+        widgets.change:SetPoint("LEFT", widgets.after.value, "RIGHT", 10, 0)
+    end
+    widgets.change:SetText(
+        firm and Kit.ChangeText(verdict.change)
+            or Kit.Colored(PlainChangeText(verdict.change), Kit.MUTED)
     )
 end
 
 local function FillPage(page, experiment)
     page.title:SetText(Question(experiment))
     page.subtitle:SetText(
-        ("Started %s   %s each way"):format(
+        ("Started %s   %s in each set"):format(
             date("%d %b %H:%M", experiment.startedAt),
             FightsText(experiment.size)
         )
     )
 
-    local titles = {
-        ("1.  Fight %d enemies as you are now."):format(experiment.size),
-        "2.  Make your change.",
-        ("3.  Fight %d more."):format(experiment.size),
-    }
     local states = STEP_STATES[experiment.state] or STEP_STATES.done
     for index, step in ipairs(page.steps) do
-        FillStep(step, states[index], titles[index], StepNote(experiment, index, states[index]))
+        local state = states[index]
+        FillStep(step, state, StepTitle(experiment, index, state), StepNote(index, state))
     end
 
     -- The middle step grows to make room for its button while it's wanted.
-    -- With a recording open the second set can't begin, and the note under
-    -- the step says so.
+    -- With a session in progress the second set can't begin, and the note
+    -- under the step says so.
     local waiting = experiment.state == "change"
     page.steps[2]:SetHeight(waiting and STEP_HEIGHT + CONTINUE_HEIGHT + 8 or STEP_HEIGHT)
     page.continue:SetShown(waiting)
     page.continue:SetEnabled(not ns.Recorder.Open())
+
+    local recording = experiment.state == "before" or experiment.state == "after"
+    page.counted:SetShown(recording)
+    page.counted:SetText(ns.settings.widget and COUNTED_WITH_PANEL or COUNTED_WITHOUT_PANEL)
+    PlaceBelow(
+        page.verdictHeader,
+        page.steps[3],
+        recording and VERDICT_GAP + COUNTED_ROOM or VERDICT_GAP
+    )
 
     FillVerdict(page, experiment)
 end
@@ -536,12 +603,13 @@ local function CreateForm(parent)
     form.title:SetPoint("TOPRIGHT", -14, -8)
     form.title:SetText("New experiment")
 
-    form.idea = Paragraph(form, "GameFontHighlight")
-    PlaceBelow(form.idea, form.title, 10)
+    local idea = Paragraph(form, "GameFontHighlight")
+    PlaceBelow(idea, form.title, 10)
+    idea:SetText(IDEA)
 
     local questionLabel = Kit.Text(form, "GameFontNormal")
     questionLabel:SetText("What are you trying?")
-    PlaceBelow(questionLabel, form.idea, 24)
+    PlaceBelow(questionLabel, idea, 24)
 
     -- The box's border is drawn a little outside it, hence the nudge right.
     form.question = CreateFrame("EditBox", nil, form, "InputBoxInstructionsTemplate")
@@ -556,11 +624,11 @@ local function CreateForm(parent)
     form.question.Instructions:SetText("For example: New bow")
 
     local sizeLabel = Kit.Text(form, "GameFontNormal")
-    sizeLabel:SetText("How many fights each way?")
+    sizeLabel:SetText("How many fights in each set?")
     sizeLabel:SetPoint("TOPLEFT", form.question, "BOTTOMLEFT", -6, -20)
 
     form.size = CreateFrame("DropdownButton", nil, form, "WowStyle1DropdownTemplate")
-    form.size:SetWidth(120)
+    form.size:SetWidth(140)
     form.size:SetPoint("TOPLEFT", sizeLabel, "BOTTOMLEFT", 0, -6)
     form.size:SetupMenu(function(_, root)
         local function IsChosen(size)
@@ -570,7 +638,7 @@ local function CreateForm(parent)
             fightsEachWay = size
         end
         for _, size in ipairs(SIZES) do
-            root:CreateRadio(FightsText(size), IsChosen, Choose, size)
+            root:CreateRadio(("%d fights each"):format(size), IsChosen, Choose, size)
         end
     end)
 
@@ -599,17 +667,12 @@ local function CreateForm(parent)
     return form
 end
 
----@param first boolean  true when there are no experiments yet
-local function FillForm(form, first)
-    form.idea:SetText(first and IDEA or IDEA_IN_SHORT)
-
+local function FillForm(form)
     local reason = WhyNotStart()
     form.start:SetEnabled(reason == nil)
 
     Kit.SetIcon(form.adviceIcon, reason and "warning" or "tip")
-    form.advice:SetText(
-        reason or "Recording starts straight away. Your next fights are the first set."
-    )
+    form.advice:SetText(reason or "It starts straight away. Your next fights are the first set.")
 end
 
 -- The tab ---------------------------------------------------------------------
@@ -627,15 +690,20 @@ function ExperimentsTab.Create(parent, window)
         composing = false
     end)
 
-    -- Left: the list, with a line of help under it.
+    -- Left: the list, framed the way the game frames its own.
+    local panel = Kit.Inset(tab)
+    panel:SetPoint("TOPLEFT")
+    panel:SetPoint("BOTTOMLEFT")
+    panel:SetWidth(PANEL_WIDTH)
+
     local scrollBox = CreateFrame("Frame", nil, tab, "WowScrollBoxList")
-    scrollBox:SetPoint("TOPLEFT", 6, -6)
-    scrollBox:SetPoint("BOTTOMLEFT", 6, HELP_HEIGHT)
+    scrollBox:SetPoint("TOPLEFT", panel, "TOPLEFT", LIST_EDGE, -LIST_EDGE)
+    scrollBox:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", LIST_EDGE, LIST_EDGE)
     scrollBox:SetWidth(LIST_WIDTH)
 
     local scrollBar = CreateFrame("EventFrame", nil, tab, "MinimalScrollBar")
-    scrollBar:SetPoint("TOPLEFT", scrollBox, "TOPRIGHT", 4, 0)
-    scrollBar:SetPoint("BOTTOMLEFT", scrollBox, "BOTTOMRIGHT", 4, 0)
+    scrollBar:SetPoint("TOPLEFT", scrollBox, "TOPRIGHT", 4, -2)
+    scrollBar:SetPoint("BOTTOMLEFT", scrollBox, "BOTTOMRIGHT", 4, 2)
 
     local view = CreateScrollBoxListLinearView()
     -- Rows are plain buttons rather than an XML template, so the list has
@@ -650,29 +718,24 @@ function ExperimentsTab.Create(parent, window)
     ScrollUtil.InitScrollBoxListWithScrollBar(scrollBox, scrollBar, view)
     tab.scrollBox = scrollBox
 
-    tab.none = Kit.Text(tab, "GameFontHighlight", "CENTER")
+    tab.none = Paragraph(tab, "GameFontHighlight", "CENTER")
     tab.none:SetPoint("TOP", scrollBox, "TOP", 0, -24)
     tab.none:SetWidth(LIST_WIDTH - 20)
     tab.none:SetTextColor(unpack(Kit.MUTED))
-    tab.none:SetText("No experiments yet.")
-
-    local help = Paragraph(tab, "GameFontHighlightSmall")
-    help:SetPoint("TOPLEFT", scrollBox, "BOTTOMLEFT", 4, -8)
-    help:SetWidth(LIST_WIDTH)
-    help:SetTextColor(unpack(Kit.MUTED))
-    help:SetText(HELP)
+    tab.none:SetText(NONE)
 
     -- Right: the page and the form share the space, one showing at a time.
     tab.page = CreatePage(tab)
     tab.form = CreateForm(tab)
     for _, side in ipairs({ tab.page, tab.form }) do
-        side:SetPoint("TOPLEFT", scrollBox, "TOPRIGHT", 24, 0)
+        side:SetPoint("TOPLEFT", panel, "TOPRIGHT", 8, -6)
         side:SetPoint("BOTTOMRIGHT", -4, 4)
     end
 
     -- Along the bottom of the window, where the Fights tab keeps its
-    -- buttons too: the one that begins something on the left, the one that
-    -- acts on what's selected on the right.
+    -- buttons too: the one that begins something on the left, with how
+    -- the list works a mouse-over away beside it, and the one that acts
+    -- on what's selected on the right.
     tab.new = Kit.Button(tab, "New experiment", 140, function()
         selected = nil
         composing = true
@@ -684,6 +747,9 @@ function ExperimentsTab.Create(parent, window)
         end
     end)
     tab.new:SetPoint("BOTTOMLEFT", window, "BOTTOMLEFT", 8, 4)
+
+    local help = Kit.HelpButton(tab, "Experiments", HELP)
+    help:SetPoint("LEFT", tab.new, "RIGHT", 8, 0)
 
     tab.delete = Kit.Button(tab, "Delete this experiment", 180, function()
         if selected then
@@ -727,7 +793,7 @@ function Refresh()
     tab.delete:SetShown(not showForm)
 
     if showForm then
-        FillForm(tab.form, #experiments == 0)
+        FillForm(tab.form)
     else
         FillPage(tab.page, selected)
     end

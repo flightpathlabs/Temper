@@ -13,7 +13,7 @@ ns.Sources = Sources
 Sources.ORDER = { "skill", "auto", "pet", "other" }
 
 Sources.LABELS = {
-    skill = "Skills",
+    skill = "Abilities",
     auto = "Auto attacks",
     pet = "Pet",
     other = "Items and other effects",

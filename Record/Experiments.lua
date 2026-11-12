@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- Experiments: a question, a few fights each way, and a verdict.
+-- Experiments: a question, two sets of fights, and a verdict.
 --
 -- "Is the new bow better?" is hard to answer from one fight, because
 -- fights vary: a lucky crit here, a dodge there. An experiment takes the
@@ -13,12 +13,12 @@ local _, ns = ...
 --
 --   number    counts up per character
 --   question  what the player said they were testing
---   size      how many fights each side is meant to have
+--   size      how many fights each set is meant to have
 --   before    the number of the first recording
 --   after     the number of the second, once it's begun
---   state     "before"  recording the first side
---             "change"  first side done; waiting for the player
---             "after"   recording the second side
+--   state     "before"  recording the first set
+--             "change"  first set done; waiting for the player
+--             "after"   recording the second set
 --             "done"
 
 local Experiments = {}
@@ -47,7 +47,7 @@ function Experiments.Running()
     end
 end
 
---- The fights on one side of an experiment.
+--- The fights in one of an experiment's two sets.
 ---@param side string  "before" or "after"
 function Experiments.FightsOf(experiment, side)
     local recording = experiment[side] and ns.Recorder.Numbered(experiment[side])
@@ -58,9 +58,9 @@ local function Changed()
     ns.Publish("EXPERIMENTS_CHANGED")
 end
 
---- Begins an experiment and starts recording its first side.
+--- Begins an experiment and starts recording its first set.
 ---@param question string  what's being tested, in the player's words
----@param size number|nil  fights each side
+---@param size number|nil  fights in each set
 ---@return table|nil experiment  nil if one is already running
 function Experiments.Start(question, size)
     if Experiments.Running() or ns.Recorder.Open() then
@@ -85,13 +85,13 @@ function Experiments.Start(question, size)
     return experiment
 end
 
---- Starts recording the second side, once the player has made the change.
+--- Starts recording the second set, once the player has made the change.
 function Experiments.Continue(experiment)
     if experiment.state ~= "change" or ns.Recorder.Open() then
         return
     end
 
-    -- With the first side's fights deleted there's nothing to compare
+    -- With the first set's fights deleted there's nothing to compare
     -- the second with.
     if #Experiments.FightsOf(experiment, "before") == 0 then
         Experiments.Delete(experiment)
@@ -104,7 +104,7 @@ function Experiments.Continue(experiment)
     Changed()
 end
 
---- Moves an experiment on when the side being recorded has ended, whether
+--- Moves an experiment on when the set being recorded has ended, whether
 --- because it has all its fights or because recording was stopped by hand.
 local function Advance(experiment)
     if experiment.state == "before" then
@@ -115,7 +115,7 @@ local function Advance(experiment)
         end
         experiment.state = "change"
     elseif experiment.state == "after" then
-        -- A second side that ended with no fights hasn't happened yet.
+        -- A second set that ended with no fights hasn't happened yet.
         if #Experiments.FightsOf(experiment, "after") == 0 then
             experiment.after = nil
             experiment.state = "change"
@@ -144,7 +144,7 @@ function Experiments.Delete(experiment)
     Changed()
 end
 
--- Keeps an eye on the recording behind the side in progress.
+-- Keeps an eye on the recording behind the set in progress.
 ns.Subscribe("FIGHTS_CHANGED", function()
     local experiment = ns.character and Experiments.Running()
     if not experiment or experiment.state == "change" then
@@ -277,7 +277,7 @@ function Experiments.InWords(verdict)
         return "Too close to call.",
             (
                 "The two sets differ by %d%%, which is no more than one fight differs from "
-                .. "the next. About %d more fights each would tell."
+                .. "the next. About %d more fights in each set would tell."
             ):format(percent, verdict.more or Experiments.DEFAULT_SIZE)
     end
 
@@ -285,23 +285,16 @@ function Experiments.InWords(verdict)
     if verdict.direction == "same" then
         headline = "No real difference."
     elseif verdict.direction == "better" then
-        headline = ("Better: %d%% more damage a second."):format(percent)
+        headline = ("Better: %d%% more DPS."):format(percent)
     else
-        headline = ("Worse: %d%% less damage a second."):format(percent)
+        headline = ("Worse: %d%% less DPS."):format(percent)
     end
 
-    local detail
     if verdict.sureness == "clear" then
-        detail = "The fights agree with each other, so this can be trusted."
-    elseif verdict.sureness == "likely" then
-        detail = ("Probably real, but fights vary. About %d more each way would settle it."):format(
-            verdict.more or Experiments.DEFAULT_SIZE
-        )
-    else
-        detail = (
-            "Too close to call: the difference is no bigger than one fight differs from "
-            .. "the next. About %d more each way would tell."
-        ):format(verdict.more or Experiments.DEFAULT_SIZE)
+        return headline, "The fights agree with each other, so this can be trusted."
     end
-    return headline, detail
+
+    local detail =
+        "Probably real, but fights vary. About %d more fights in each set would settle it."
+    return headline, detail:format(verdict.more or Experiments.DEFAULT_SIZE)
 end
