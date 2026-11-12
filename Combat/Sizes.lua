@@ -6,21 +6,22 @@ local _, ns = ...
 -- an enemy hates the player, and alone, that figure goes up by the damage
 -- of each blow. So the steps in it give the sizes of the blows.
 --
--- It's an estimate, for three reasons, and everything built on it says
--- "about":
+-- It's an estimate, and it's built to say nothing sooner than say
+-- something wrong:
 --
 --   The figure is only sent about once a second. Two blows landing close
 --   together arrive as one step, and there's no telling how it divides.
---   Those blows are left unsized.
+--   Those blows are left unsized, and so is the blow after any step that
+--   couldn't be explained.
 --
 --   The blow that kills gets no step at all: a dead enemy hates nobody.
---   When it's the only blow unaccounted for, it's the fight's total less
---   everything else.
+--   It's left unsized too. Guessing it from what's left over would pin
+--   every bit of damage we failed to follow on one blow.
 --
 --   Some classes and stances earn more or less threat than the damage
---   they do. Each fight is checked against something known for certain (a
---   skill used once, whose damage the game's tally gives exactly), and
---   the sizes are scaled to agree, or thrown away if they can't be made to.
+--   they do. A blow that can be checked (an ability used once, landing
+--   once, whose damage the game's tally gives exactly) shows the ratio,
+--   which is remembered for the character and used to scale the rest.
 --
 -- Only the player's target is followed. If the game ever starts hiding
 -- threat, every reading here comes back empty and nothing is sized.
@@ -30,29 +31,37 @@ ns.Sizes = Sizes
 
 -- A step in threat can be announced a moment before the blow that caused
 -- it, or up to a second or so after.
-local EARLY_SECONDS = 0.25
+local EARLY_SECONDS = 0.05
 
--- How far a fight's threat may disagree with its damage before the two
--- are taken to be measuring different things.
-local LOOSEST_SCALE, TIGHTEST_SCALE = 0.5, 2
+-- A fight's first blow, and the step it causes, come before the game says
+-- the fight has begun.
+local LEAD_SECONDS = 2
+
+-- A ratio of damage to threat outside this range isn't a class's threat
+-- modifier. It's a sign the two figures weren't measuring the same blow.
+local LOWEST_RATIO, HIGHEST_RATIO = 0.6, 1.6
+
+-- How much of a new reading of that ratio to believe, against what's been
+-- seen before.
+local LEARNING_RATE = 0.3
 
 local IsSecret = issecretvalue or function()
     return false
 end
 
--- Steps in the player's threat on their target during this fight, oldest
--- first: { time, gain }.
+-- Recent steps in the player's threat on their target, oldest first:
+-- { time, gain }.
 local steps = {}
-local lastThreat
+local lastThreat = 0
 
---- The player's threat on their target, or nil if there's none or the
---- game won't say.
+--- The player's threat on their target: nil if the game won't say, 0 if
+--- they have none.
 local function Threat()
     local ok, _, _, _, _, raw = pcall(UnitDetailedThreatSituation, "player", "target")
-    if not ok or IsSecret(raw) or type(raw) ~= "number" then
+    if not ok or IsSecret(raw) then
         return nil
     end
-    return raw
+    return type(raw) == "number" and raw or 0
 end
 
 ns.OnEvent("UNIT_THREAT_LIST_UPDATE", function(unit)
@@ -61,76 +70,108 @@ ns.OnEvent("UNIT_THREAT_LIST_UPDATE", function(unit)
     end
 
     local threat = Threat()
-    if threat and lastThreat and threat > lastThreat then
-        table.insert(steps, { time = GetTime(), gain = threat - lastThreat })
+    if not threat then
+        return
+    end
+
+    local now = GetTime()
+    if threat > lastThreat then
+        table.insert(steps, { time = now, gain = threat - lastThreat })
     end
     lastThreat = threat
+
+    -- Nothing older than a fight's lead-in can matter to the next fight.
+    -- (During a fight Begin has already set the cut-off, below.)
+    while steps[1] and steps[1].time < Sizes.keepFrom and steps[1].time < now - LEAD_SECONDS do
+        table.remove(steps, 1)
+    end
 end)
 
 -- A new target starts from wherever its threat already stands, so the
 -- first reading on it isn't mistaken for one enormous blow.
 ns.OnEvent("PLAYER_TARGET_CHANGED", function()
-    lastThreat = Threat()
+    lastThreat = Threat() or 0
 end)
 
---- Forgets the steps, ready for the next fight.
+-- Steps from before this moment are of no use to the fight in progress.
+Sizes.keepFrom = 0
+
+--- Marks the start of a fight. Steps from the moments just before it are
+--- kept: the opening blow comes before the fight is announced.
 function Sizes.Begin()
-    steps = {}
-    lastThreat = Threat() or 0
+    Sizes.keepFrom = GetTime() - LEAD_SECONDS
+    while steps[1] and steps[1].time < Sizes.keepFrom do
+        table.remove(steps, 1)
+    end
 end
 
---- Gives each blow the step it caused, where that's clear.
+--- Gives each blow the step it caused, where that's beyond doubt.
 ---@param blows table  the fight's blows on the target, oldest first:
----                    { time, crit, spell }; each gains a `size` if it
----                    could be told
----@return number sized  how much threat was matched to single blows
----@return number gained  how much threat was gained in all
+---                    { time, crit, spell }; each gains a `size`, in
+---                    threat, if it could be told
 local function Match(blows)
-    local sized, gained = 0, 0
     local nextBlow = 1
+    local doubtful = false
 
     for _, step in ipairs(steps) do
-        gained = gained + step.gain
-
         -- Every blow up to this step that hasn't been explained yet.
         local first = nextBlow
         while blows[nextBlow] and blows[nextBlow].time <= step.time + EARLY_SECONDS do
             nextBlow = nextBlow + 1
         end
+        local explained = nextBlow - first
 
-        if nextBlow - first == 1 then
+        if explained == 1 and not doubtful then
             blows[first].size = step.gain
-            sized = sized + step.gain
         end
-    end
 
-    return sized, gained, nextBlow
+        -- A step with no blow to explain it means we missed something, so
+        -- the next step may be carrying more than it seems to.
+        doubtful = explained == 0
+    end
 end
 
---- How threat compares with damage in this fight, from a skill used once:
---- the game's tally says exactly what it did, and if its blow was sized
---- we have the same thing in threat.
----@return number|nil scale  damage for each point of threat
-local function ScaleFrom(blows, spells)
-    local once = {}
+--- How many of the fight's blows were traced to each ability.
+local function BlowsBySpell(blows)
+    local counts = {}
+    for _, blow in ipairs(blows) do
+        if blow.spell then
+            counts[blow.spell] = (counts[blow.spell] or 0) + 1
+        end
+    end
+    return counts
+end
+
+--- How this fight's damage compares with its threat, from a blow that can
+--- be checked: an ability used once that landed once, so the game's tally
+--- for it is the damage of that one blow.
+---@return number|nil ratio  damage for each point of threat
+local function CheckedRatio(blows, spells)
+    local counts = BlowsBySpell(blows)
+
+    local best, bestDamage
     for _, spell in ipairs(spells) do
-        if spell.kind == "skill" and spell.casts == 1 then
-            once[spell.id] = spell.damage
+        local once = spell.kind == "skill" and spell.casts == 1 and counts[spell.id] == 1
+
+        -- The bigger the blow, the less a point of rounding matters.
+        if once and (not bestDamage or spell.damage > bestDamage) then
+            for _, blow in ipairs(blows) do
+                if blow.spell == spell.id and blow.size and blow.size > 0 then
+                    best, bestDamage = spell.damage / blow.size, spell.damage
+                end
+            end
         end
     end
 
-    for _, blow in ipairs(blows) do
-        local damage = blow.size and once[blow.spell]
-        if damage and blow.size > 0 then
-            return damage / blow.size
-        end
+    if best and best >= LOWEST_RATIO and best <= HIGHEST_RATIO then
+        return best
     end
     return nil
 end
 
 --- Sizes a finished fight's blows and sums up what was learned.
 ---@param blows table  from Hits.Finish: blows on the target, oldest first
----@param fight table  the fight being saved; needs damage, spells, enemies
+---@param fight table  the fight being saved; needs damage and spells
 ---@return table|nil sizes:
 ---   hits, total            ordinary hits that could be sized, and their sum
 ---   crits, critTotal       the same for critical hits
@@ -139,39 +180,25 @@ end
 ---   biggestCrit, biggestCritSpell
 --- nil if nothing could be sized, or the figures didn't hold together.
 function Sizes.Finish(blows, fight)
-    if #steps == 0 or #blows == 0 then
+    if #steps == 0 or #blows == 0 or not ns.character then
         return nil
     end
+    Match(blows)
 
-    local _, gained, nextBlow = Match(blows)
-
-    -- Threat and damage only measure the same thing if all of the damage
-    -- went into the one enemy being watched.
-    local oneEnemy = fight.enemies and #fight.enemies == 1
-    local hasPet = false
-    for _, spell in ipairs(fight.spells) do
-        hasPet = hasPet or spell.kind == "pet"
+    -- Settle how damage compares with threat for this character, leaning
+    -- on what earlier fights showed and nudged by this one if it can say.
+    local character = ns.character
+    local checked = CheckedRatio(blows, fight.spells)
+    if checked then
+        local known = character.threatRatio or checked
+        character.threatRatio = known + (checked - known) * LEARNING_RATE
     end
-
-    local scale = ScaleFrom(blows, fight.spells) or 1
-    if scale < LOOSEST_SCALE or scale > TIGHTEST_SCALE then
-        return nil
-    end
-
-    -- The killing blow: the one blow after the last step, when everything
-    -- else is accounted for.
-    local unexplained = #blows - nextBlow + 1
-    if oneEnemy and not hasPet and unexplained == 1 then
-        local rest = fight.damage - gained * scale
-        if rest > 0 then
-            blows[#blows].size = rest / scale
-        end
-    end
+    local ratio = character.threatRatio or 1
 
     local sizes = { hits = 0, total = 0, crits = 0, critTotal = 0 }
     for _, blow in ipairs(blows) do
         if blow.size then
-            local damage = math.floor(blow.size * scale + 0.5)
+            local damage = math.floor(blow.size * ratio + 0.5)
 
             if blow.crit then
                 sizes.crits = sizes.crits + 1
@@ -190,9 +217,11 @@ function Sizes.Finish(blows, fight)
         end
     end
 
-    -- No single blow can have done more than the whole fight. If one
-    -- seems to have, the threat was measuring something else.
-    if not sizes.biggest or sizes.biggest > fight.damage + 1 then
+    -- The blows we sized can't add up to more than the whole fight, and
+    -- no one of them to more than everything. If they seem to, threat was
+    -- measuring something else and none of it can be trusted.
+    local sized = sizes.total + sizes.critTotal
+    if not sizes.biggest or sized > fight.damage * 1.05 + 2 then
         return nil
     end
     return sizes

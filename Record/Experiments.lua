@@ -27,9 +27,16 @@ ns.Experiments = Experiments
 Experiments.DEFAULT_SIZE = 5
 
 -- How many standard errors apart the two sides have to be before the
--- difference is called clear, or likely.
+-- difference is called clear, or likely. With only a few fights the
+-- spread itself is poorly known, so the bar for "clear" is higher.
 local CLEAR = 2
+local CLEAR_WITH_FEW = 3
+local FEW_FIGHTS = 5
 local LIKELY = 1
+
+-- For "no real difference" to be trusted, the chance wobble has to be
+-- small beside the damage itself.
+local STEADY = 0.05
 
 --- The experiment that isn't finished yet, or nil. There's only ever one.
 function Experiments.Running()
@@ -84,6 +91,13 @@ function Experiments.Continue(experiment)
         return
     end
 
+    -- With the first side's fights deleted there's nothing to compare
+    -- the second with.
+    if #Experiments.FightsOf(experiment, "before") == 0 then
+        Experiments.Delete(experiment)
+        return
+    end
+
     ns.Recorder.Start()
     experiment.after = ns.Recorder.Open().number
     experiment.state = "after"
@@ -101,8 +115,14 @@ local function Advance(experiment)
         end
         experiment.state = "change"
     elseif experiment.state == "after" then
-        experiment.state = "done"
-        experiment.finishedAt = GetServerTime()
+        -- A second side that ended with no fights hasn't happened yet.
+        if #Experiments.FightsOf(experiment, "after") == 0 then
+            experiment.after = nil
+            experiment.state = "change"
+        else
+            experiment.state = "done"
+            experiment.finishedAt = GetServerTime()
+        end
     end
     Changed()
 end
@@ -223,7 +243,12 @@ function Experiments.Verdict(experiment)
     local wobble = math.sqrt(spreadBefore / #was + spreadAfter / #is)
     local apart = wobble > 0 and math.abs(difference) / wobble or math.huge
 
-    if verdict.direction == "same" or apart >= CLEAR then
+    local clear = math.min(#was, #is) >= FEW_FIGHTS and CLEAR or CLEAR_WITH_FEW
+    local steady = wobble / before <= STEADY
+
+    if verdict.direction == "same" then
+        verdict.sureness = steady and "clear" or "unsure"
+    elseif apart >= clear then
         verdict.sureness = "clear"
     elseif apart >= LIKELY then
         verdict.sureness = "likely"
@@ -235,7 +260,7 @@ function Experiments.Verdict(experiment)
     -- so getting from where we are to "clear" takes this many in all.
     if verdict.sureness ~= "clear" and apart > 0 then
         local fights = math.max(#was, #is)
-        local needed = math.ceil(fights * (CLEAR / apart) ^ 2)
+        local needed = math.ceil(fights * (clear / apart) ^ 2)
         verdict.more = math.max(2, math.min(needed - fights, 30))
     end
 
@@ -246,6 +271,15 @@ end
 ---@return string headline, string detail
 function Experiments.InWords(verdict)
     local percent = math.floor(math.abs(verdict.change) * 100 + 0.5)
+
+    -- When there's no telling, the headline mustn't suggest otherwise.
+    if verdict.sureness == "unsure" then
+        return "Too close to call.",
+            (
+                "The two sets differ by %d%%, which is no more than one fight differs from "
+                .. "the next. About %d more fights each would tell."
+            ):format(percent, verdict.more or Experiments.DEFAULT_SIZE)
+    end
 
     local headline
     if verdict.direction == "same" then

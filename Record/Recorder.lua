@@ -91,8 +91,14 @@ local function Forget(recording)
     end
 
     -- Give the number back if it was the latest, so a Record pressed by
-    -- mistake doesn't leave a gap in the numbering.
-    if recording.number == character.nextNumber - 1 then
+    -- mistake doesn't leave a gap in the numbering. Not if an experiment
+    -- is holding on to it, though: the next recording would be taken for
+    -- one of that experiment's.
+    local held = false
+    for _, experiment in ipairs(character.experiments or {}) do
+        held = held or experiment.before == recording.number or experiment.after == recording.number
+    end
+    if not held and recording.number == character.nextNumber - 1 then
         character.nextNumber = recording.number
     end
 end

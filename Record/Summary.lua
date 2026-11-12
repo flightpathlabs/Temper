@@ -25,6 +25,9 @@ end
 -- better: the pause the game enforces between most abilities.
 local BUSY_SECONDS = 1.5
 
+-- The most entries a timeline holds (see Hits.lua).
+local FULL_TIMELINE = 120
+
 -- Outcomes of a cast, as the timeline records them, that count as landing.
 local LANDED = { HIT = true, CRIT = true, GLANCE = true }
 
@@ -204,8 +207,17 @@ function Summary.Of(fights)
 
         if fight.timeline then
             local busy, presses = ReadTimeline(fight, outcomes)
-            summary.watched = summary.watched + fight.length
-            summary.idle = summary.idle + math.max(fight.length - busy, 0)
+
+            -- A very long fight's timeline stops when it's full. Only the
+            -- part that was written down can be said to be watched.
+            local watched = fight.length
+            local last = fight.timeline[#fight.timeline]
+            if #fight.timeline >= FULL_TIMELINE and last then
+                watched = math.min(watched, last.t + BUSY_SECONDS)
+            end
+
+            summary.watched = summary.watched + watched
+            summary.idle = summary.idle + math.max(watched - busy, 0)
             summary.presses = summary.presses + presses
         end
 

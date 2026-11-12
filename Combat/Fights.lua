@@ -160,7 +160,9 @@ end
 ---                           when there's no new tally to read
 ---@return table spells
 ---@return table enemies
-local function ReadTally()
+---@param tallyBefore number|nil  the newest tally there was when the
+---                               fight began
+local function ReadTally(tallyBefore)
     local session = Enum.DamageMeterSessionType.Current
     local dealt = Enum.DamageMeterType.DamageDone
     local taken = Enum.DamageMeterType.EnemyDamageTaken
@@ -168,7 +170,7 @@ local function ReadTally()
     -- A fight in which the player hurt nothing may leave the game still
     -- showing the one before. That one's already on record.
     local newest = NewestTally()
-    if newest and newest == lastTally then
+    if newest and (newest == lastTally or newest == tallyBefore) then
         return nil
     end
 
@@ -290,6 +292,7 @@ ns.OnEvent("PLAYER_REGEN_DISABLED", function()
         target = target,
         enemyLevel = enemyLevel,
         rest = rest,
+        tallyBefore = select(2, pcall(NewestTally)),
         power = power,
         powerKind = powerKind,
         grouped = IsInGroup(),
@@ -322,7 +325,7 @@ ns.OnEvent("PLAYER_REGEN_ENABLED", function()
         return
     end
 
-    local ok, damage, spells, enemies = pcall(ReadTally)
+    local ok, damage, spells, enemies = pcall(ReadTally, began.tallyBefore)
     if not ok or not damage or damage <= 0 then
         return
     end

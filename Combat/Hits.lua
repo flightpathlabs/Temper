@@ -163,7 +163,14 @@ ns.OnEvent("UNIT_COMBAT", function(unit, action, flag, amount, school)
         cast.result = outcome
     end
 
-    if hit.avoided then
+    -- A blow with nothing to explain it, when there's a pet out, is the
+    -- pet's. It's still drawn, but it isn't the player's to count: a pet
+    -- that crits a lot shouldn't flatter its owner's crit rate.
+    local fromPet = not spell and hit.school == 1
+
+    if fromPet then
+        Remember({ pet = true })
+    elseif hit.avoided then
         Remember({ avoided = hit.avoided })
     else
         Remember({
@@ -200,6 +207,14 @@ ns.OnEvent("UNIT_SPELLCAST_SUCCEEDED", function(unit, _, spellID)
     end
 end)
 
+-- The game announces each swing of a melee weapon as it begins. Knowing
+-- a swing is on its way is what tells a weapon's blow from an ability's.
+ns.OnEvent("PLAYER_SWING", function(_, swingType)
+    if not IsSecret(swingType) and swingType ~= Enum.PlayerSwingType.Ranged then
+        ns.Guess.NoteSwing()
+    end
+end)
+
 -- The game says so when a skill is pressed without the mana, rage or
 -- energy for it. How full those are is hidden, so this is the only sign
 -- of running dry there is.
@@ -225,22 +240,28 @@ local function Earliest(startTime)
     return math.max(startTime - LEAD_SECONDS, lastFinish + STRAGGLER_SECONDS)
 end
 
---- Counts everything in the log from `earliest` on.
+--- Counts everything in the log from `earliest` on. Casts are counted
+--- from `earliestCast`, which can be sooner: a last tick of damage from
+--- the fight before mustn't be counted twice, but a cast made the moment
+--- that fight ended belongs to this one.
 ---@return table tally  { hits, crits, glancing, avoided, avoidedBy,
 ---                     starved }, where avoidedBy counts each way of
 ---                     missing by the game's word for it (MISS, DODGE,
 ---                     PARRY and so on) and starved is how often a skill
 ---                     was pressed without the mana or energy for it
 ---@return table casts  times each spell was cast, by spell ID
-local function Count(earliest)
+local function Count(earliest, earliestCast)
     local tally = { hits = 0, crits = 0, glancing = 0, avoided = 0, avoidedBy = {}, starved = 0 }
     local casts = {}
 
     for _, entry in ipairs(log) do
+        if entry.cast and entry.time >= earliestCast then
+            casts[entry.cast] = (casts[entry.cast] or 0) + 1
+        end
+
+        -- A pet's blow is in the log but isn't the player's to count.
         if entry.time >= earliest then
-            if entry.cast then
-                casts[entry.cast] = (casts[entry.cast] or 0) + 1
-            elseif entry.starved then
+            if entry.starved then
                 tally.starved = tally.starved + 1
             elseif entry.avoided then
                 tally.avoided = tally.avoided + 1
@@ -302,7 +323,7 @@ end
 --- The count so far for a fight that's still going on.
 ---@param startTime number  when the fight began, on GetTime's clock
 function Hits.Live(startTime)
-    return Count(Earliest(startTime))
+    return Count(Earliest(startTime), startTime - LEAD_SECONDS)
 end
 
 --- Counts up a fight and clears the log for the next one.
@@ -312,7 +333,7 @@ end
 ---@return table blows  as from Blows
 function Hits.Finish(startTime)
     local earliest = Earliest(startTime)
-    local tally, casts = Count(earliest)
+    local tally, casts = Count(earliest, startTime - LEAD_SECONDS)
     local timeline = Timeline(earliest, startTime)
     local blows = Blows(earliest)
 

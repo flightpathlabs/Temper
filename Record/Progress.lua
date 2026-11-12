@@ -14,8 +14,9 @@ ns.Progress = Progress
 local SHORTEST_COUNTED = 6
 
 -- A fight where this much of the damage came from items and other effects
--- wasn't won by the character's own skills.
-local MOSTLY_NOT_OURS = 0.25
+-- wasn't won by the character's own abilities. Set high, because some
+-- abilities do their damage through an effect the game files separately.
+local MOSTLY_NOT_OURS = 0.5
 
 local MOST_DAYS = 14
 
@@ -36,7 +37,7 @@ function Progress.WhyNotCounted(fight)
         end
     end
     if fight.damage > 0 and other / fight.damage >= MOSTLY_NOT_OURS then
-        return "Much of the damage came from an item or some other effect, not your skills."
+        return "Most of the damage came from an item or some other effect, not your abilities."
     end
     return nil
 end

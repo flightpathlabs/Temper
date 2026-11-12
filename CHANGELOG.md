@@ -6,19 +6,19 @@ First version.
 
 **The numbers**
 
-- Your hits appear in one column by your target's nameplate and follow the
-  enemy. By default they're a steady stream: small, staying put, stepping
-  up a line as new ones arrive, and lingering a few seconds so you can read
-  back over them.
+- Your hits appear in a column by each enemy's nameplate and follow it. By
+  default they're a steady stream: small, staying put, stepping up a line
+  as new ones arrive, and lingering a few seconds so you can read back
+  over them.
+- Numbers show above your target and any other enemy that's fighting you,
+  each with a column of its own.
 - Choose how they move (steady stream, rise and fade, arc away, shrink
   away), how long they stay, which side of the nameplate they sit on, how
   far off, and how large.
 - Critical hits are larger, land with a small pop, and can be gold, red or
   left in their own colour. Spell damage can be tinted by school. Misses,
   dodges and parries show as small grey words.
-- Optionally, a best-guess icon of the ability beside each number. The game
-  doesn't say which ability a hit was, so this is worked out from what you
-  just cast and the kind of damage, and improves as it watches.
+- Optionally, a best-guess icon of the ability beside each number.
 
 **The panel**
 
@@ -27,27 +27,26 @@ First version.
   exact figures in between. Click it for the window, right-click for a
   menu, drag it anywhere, or turn it off.
 
-**The record**
+**Fights**
 
 - Every solo fight is kept, up to 200 for each character, and listed with
   its damage, damage a second, length and crit rate.
-- Misses, dodges, parries, blocks and resists are counted separately.
-- "What stands out" also says what's holding your damage back, such as a
-  weapon skill that's behind the level of the enemies you're fighting,
-  with the figures.
 - Click a fight to read it. Shift-click and Ctrl-click select several, and
-  the page covers them all.
-- Record in the window, a key binding and `/temper record` mark a run of
-  fights as a recording, which then selects with one click. A small Record
-  button for the screen can be switched on in the options.
+  the page covers them all. Record marks a run of fights so it selects
+  with one click.
 - The page shows damage a second, damage a fight, time in battle and how
   often you crit, then a bar for each ability with its icon, rank, share,
-  damage per use, and damage per point of mana or energy. Hover a bar for
-  the game's own tooltip.
-- "What stands out" says in a few sentences what the figures show: which
-  skill gives the most for its cost, the hardest single use, and so on.
-- Damage is sorted into skills, auto attacks, pet, and items and other
-  effects. Fights against one enemy and against several are told apart.
+  damage per use, and damage per point of mana or energy.
+- Misses, dodges, parries, blocks and resists are counted separately.
+- A strip shows what you pressed, in order and to scale, with critical
+  hits and failures marked.
+- The biggest hit and biggest critical hit, worked out from how the
+  enemy's threat rose with each blow. These are close estimates.
+- "What stands out" says in a few sentences what the figures show and
+  what's holding your damage back: a weapon skill behind the level of the
+  enemies you're fighting, a skill that keeps failing, time with no skill
+  in use, pressing skills without the mana for them.
+- A note can be left on any fight or recording.
 
 **Comparing**
 
@@ -55,6 +54,23 @@ First version.
   figure shows how far it moved, the abilities that gained and lost most
   are named, and the gear that differs is listed.
 - Stopping a recording compares it with the one before automatically.
+
+**Experiments**
+
+- Say what you're trying, fight a few enemies as you are, make the change,
+  fight a few more. Temper gives a verdict and says how far to trust it:
+  clear, probably, or too close to call, with how many more fights would
+  settle it.
+
+**Progress**
+
+- Your bests: most damage a second, biggest critical hit, hardest single
+  use and more. Click one to open its fight.
+- A fluke can be left out with a click. Very short fights, and fights
+  where much of the damage came from an item or some other effect, are
+  left out automatically.
+- A column for each day you've played, with your level marked.
+- "Forget everything" wipes what's been recorded for the character.
 
 **Good manners**
 

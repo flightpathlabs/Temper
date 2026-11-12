@@ -92,6 +92,7 @@ read_globals = {
     "IsShiftKeyDown",
     "UnitCanAttack",
     "UnitDetailedThreatSituation",
+    "UnitExists",
     "UnitClass",
     "UnitGUID",
     "UnitIsUnit",
