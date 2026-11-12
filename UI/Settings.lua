@@ -91,6 +91,15 @@ ns.OnEvent("PLAYER_LOGIN", function()
         true
     )
 
+    AddCheckbox(
+        category,
+        "allEnemies",
+        "Show numbers above every enemy I'm fighting",
+        "Each enemy gets its own column, so hits on several at once don't pile up over "
+            .. "your target. Only enemies that are fighting you are included. Untick to "
+            .. "show your target's alone."
+    )
+
     local motions = {}
     for index, motion in ipairs(ns.Motions) do
         motions[index] = motion.label

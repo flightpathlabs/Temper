@@ -21,6 +21,63 @@ function Summary.PowerWord(power)
     return POWER_WORDS[power] or (power and power:lower()) or "resource"
 end
 
+-- How long one use of a skill keeps the player busy, when we can't know
+-- better: the pause the game enforces between most abilities.
+local BUSY_SECONDS = 1.5
+
+-- Outcomes of a cast, as the timeline records them, that count as landing.
+local LANDED = { HIT = true, CRIT = true, GLANCE = true }
+
+--- Whether a spell in a timeline is an auto attack, remembered so the game
+--- is only asked once per spell.
+local autoAttacks = {}
+local function IsAutoAttack(id)
+    if autoAttacks[id] == nil then
+        autoAttacks[id] = ns.Sources.Kind(id, false) == "auto"
+    end
+    return autoAttacks[id]
+end
+
+--- Goes through one fight's timeline for how the time was spent and how
+--- each ability fared.
+---@param outcomes table  running count by "kind..id": { landed, failed }
+---@return number busy   seconds with a skill in use
+---@return number presses  skills used
+local function ReadTimeline(fight, outcomes)
+    local busy, presses, busyUntil = 0, 0, 0
+
+    for _, item in ipairs(fight.timeline) do
+        local auto = IsAutoAttack(item.id)
+
+        if not auto then
+            presses = presses + 1
+
+            -- Two skills in quick succession overlap; count the time once.
+            local from = math.max(item.t, busyUntil, 0)
+            local to = math.min(math.max(item.t, 0) + BUSY_SECONDS, fight.length)
+            if to > from then
+                busy = busy + (to - from)
+                busyUntil = to
+            end
+        end
+
+        if item.r then
+            local key = (auto and "auto" or "skill") .. item.id
+            local outcome = outcomes[key]
+            if not outcome then
+                outcome = { landed = 0, failed = 0 }
+                outcomes[key] = outcome
+            end
+            if LANDED[item.r] then
+                outcome.landed = outcome.landed + 1
+            else
+                outcome.failed = outcome.failed + 1
+            end
+        end
+    end
+    return busy, presses
+end
+
 local function NewSplit()
     return { fights = 0, damage = 0, seconds = 0, dps = 0 }
 end
@@ -55,6 +112,18 @@ end
 ---                                              casts were seen
 ---                 cost, power                  what one use costs
 ---                 perCost                      damage per point of that
+---                 landed, failed               how many uses hit and
+---                                              how many missed or were
+---                                              avoided, as far as could
+---                                              be traced: an estimate
+---   watched     seconds of fighting for which a timeline was kept, and
+---   idle        how many of them had no skill in use
+---   presses     skills used in that time
+---   power       { kind, finish, fights }: how full mana, energy or rage
+---               was at the end of a fight, on average; nil if unknown
+---   rested      { fights, rest, seconds, damage, perMinute }: for fights
+---               whose rest beforehand is known, the damage a minute once
+---               that rest is counted
 ---   kinds       damage by kind of source: skill, auto, pet, other
 ---   best        { name, damage } for the hardest single use of a skill
 ---   single      fights against one enemy: { fights, damage, seconds, dps }
@@ -70,6 +139,9 @@ function Summary.Of(fights)
         glancing = 0,
         avoided = 0,
         avoidedBy = {},
+        watched = 0,
+        idle = 0,
+        presses = 0,
         abilities = {},
         kinds = { skill = 0, auto = 0, pet = 0, other = 0 },
         single = NewSplit(),
@@ -83,6 +155,10 @@ function Summary.Of(fights)
     -- The newest fight speaks for the set on things that are true of a
     -- moment: the player's level, the enemy's, and their weapon skills.
     local newest
+
+    local outcomes = {}
+    local power = { finish = 0, fights = 0 }
+    local rested = { fights = 0, rest = 0, seconds = 0, damage = 0 }
 
     for _, fight in ipairs(fights or {}) do
         summary.fights = summary.fights + 1
@@ -98,6 +174,26 @@ function Summary.Of(fights)
 
         if not newest or (fight.at or 0) > (newest.at or 0) then
             newest = fight
+        end
+
+        if fight.timeline then
+            local busy, presses = ReadTimeline(fight, outcomes)
+            summary.watched = summary.watched + fight.length
+            summary.idle = summary.idle + math.max(fight.length - busy, 0)
+            summary.presses = summary.presses + presses
+        end
+
+        if fight.power then
+            power.kind = fight.power.kind
+            power.finish = power.finish + fight.power.finish
+            power.fights = power.fights + 1
+        end
+
+        if fight.rest then
+            rested.fights = rested.fights + 1
+            rested.rest = rested.rest + fight.rest
+            rested.seconds = rested.seconds + fight.length
+            rested.damage = rested.damage + fight.damage
         end
 
         if fight.enemies and #fight.enemies > 1 then
@@ -145,6 +241,15 @@ function Summary.Of(fights)
         end
     end
 
+    if power.fights > 0 then
+        power.finish = power.finish / power.fights
+        summary.power = power
+    end
+    if rested.fights > 0 then
+        rested.perMinute = rested.damage / ((rested.seconds + rested.rest) / 60)
+        summary.rested = rested
+    end
+
     if newest then
         summary.level = newest.level
         summary.enemyLevel = newest.enemyLevel
@@ -164,6 +269,11 @@ function Summary.Of(fights)
     FinishSplit(summary.several)
 
     for _, ability in ipairs(summary.abilities) do
+        local outcome = outcomes[ability.kind .. ability.id]
+        if outcome then
+            ability.landed, ability.failed = outcome.landed, outcome.failed
+        end
+
         ability.share = summary.damage > 0 and ability.damage / summary.damage or 0
         if ability.casts and ability.casts > 0 then
             ability.perCast = ability.castDamage / ability.casts

@@ -21,6 +21,12 @@ local _, ns = ...
 --   weapons   the player's skill with each weapon in hand (see Weapons.lua)
 --   recording the number of the recording it belongs to, if any
 --   gear      which of the character's gear sets it was fought in
+--   timeline  what the player did, in order (see Hits.lua). Only kept
+--             for the latest fights, since it's the bulk of a record
+--   power     { kind, start, finish }: how full the player's mana, energy
+--             or rage was at each end, as a share of the most it can be
+--   rest      seconds between the fight before ending and this one
+--             beginning, when that was a pause and not a trip to town
 --   spells    list of { id, name, kind, damage, casts, icon, rank, cost,
 --             power }, biggest first; cost and power are what one use
 --             cost at the time ("MANA", "ENERGY"...), when it cost anything
@@ -33,12 +39,23 @@ ns.Fights = Fights
 -- opening shot doesn't read as a thousand damage per second.
 local SHORTEST_FIGHT = 1
 
+-- How many of the latest fights keep their timeline.
+local TIMELINES_KEPT = 60
+
+-- A gap between fights longer than this wasn't spent getting ready for
+-- the next one.
+local LONGEST_REST = 180
+
 local IsSecret = issecretvalue or function()
     return false
 end
 
 -- The fight in progress: { start, at, target, grouped, recording }.
 local current
+
+-- When the last fight ended, on GetTime's clock, whether or not it was
+-- worth saving.
+local lastEnd
 
 -- The game numbers its tallies. This is the number of the last one we
 -- saved, so the same fight is never saved twice.
@@ -74,6 +91,19 @@ local function Describe(spell)
         spell.cost = first.cost
         spell.power = first.name
     end
+end
+
+--- How full the player's mana, energy or rage is, as a share of the most
+--- it can be. Nil if the game won't say.
+---@return number|nil share, string|nil kind  e.g. 0.42, "MANA"
+local function PowerNow()
+    local kind, token = UnitPowerType("player")
+    local now = Readable(UnitPower("player", kind))
+    local most = Readable(UnitPowerMax("player", kind))
+    if not now or not most or most <= 0 or type(token) ~= "string" then
+        return nil
+    end
+    return math.floor(now / most * 100 + 0.5) / 100, token
 end
 
 --- Adds one source's rows from the game's tally to our list.
@@ -180,6 +210,15 @@ end
 
 -- A fight belongs to whichever recording was running when it began.
 -- Pressing Record or Stop in the middle of one takes effect from the next.
+--- How the player's mana, energy or rage stood at each end of the fight.
+local function PowerSpent(began)
+    local ok, finish, kind = pcall(PowerNow)
+    if not ok or not finish or not began.power or kind ~= began.powerKind then
+        return nil
+    end
+    return { kind = kind, start = began.power, finish = finish }
+end
+
 local function Save(fight, recording)
     if recording and ns.Recorder.StillKept(recording) then
         fight.recording = recording.number
@@ -190,6 +229,13 @@ local function Save(fight, recording)
     table.insert(fights, fight)
     while #fights > ns.MAX_FIGHTS do
         table.remove(fights, 1)
+    end
+
+    -- A timeline is most of what a fight weighs, and only the recent ones
+    -- are ever looked at that closely.
+    local fading = fights[#fights - TIMELINES_KEPT]
+    if fading then
+        fading.timeline = nil
     end
 
     -- Dropping the oldest fight may have emptied a recording.
@@ -210,6 +256,16 @@ ns.OnEvent("PLAYER_REGEN_DISABLED", function()
         target = nil
     end
 
+    local rest = lastEnd and GetTime() - lastEnd
+    if rest and rest > LONGEST_REST then
+        rest = nil
+    end
+
+    local okPower, power, powerKind = pcall(PowerNow)
+    if not okPower then
+        power, powerKind = nil, nil
+    end
+
     -- The level of what's being fought, if it's an enemy at all: combat
     -- can start with a friend targeted. A skull-level enemy reports its
     -- level as -1, which tells us nothing.
@@ -227,6 +283,9 @@ ns.OnEvent("PLAYER_REGEN_DISABLED", function()
         at = GetServerTime(),
         target = target,
         enemyLevel = enemyLevel,
+        rest = rest,
+        power = power,
+        powerKind = powerKind,
         grouped = IsInGroup(),
         recording = ns.Recorder.Open(),
     }
@@ -248,8 +307,9 @@ ns.OnEvent("PLAYER_REGEN_ENABLED", function()
     end
     local began = current
     current = nil
+    lastEnd = GetTime()
 
-    local tally, casts = ns.Hits.Finish(began.start)
+    local tally, casts, timeline = ns.Hits.Finish(began.start)
 
     -- With anyone else around, the hits on the target aren't all ours.
     if began.grouped or IsInGroup() or not ns.character then
@@ -281,6 +341,9 @@ ns.OnEvent("PLAYER_REGEN_ENABLED", function()
         enemyLevel = began.enemyLevel,
         level = UnitLevel("player"),
         weapons = ns.Weapons.Skills(),
+        timeline = timeline,
+        rest = began.rest and math.floor(began.rest + 0.5),
+        power = PowerSpent(began),
         spells = spells,
         enemies = enemies,
     }, began.recording)

@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- Every blow that lands on the player's target, as it happens.
+-- Every blow that lands on an enemy the player is fighting, as it happens.
 --
 -- Forever closes the combat log to addons. What it still reports, for any
 -- unit on screen, is that something struck it: whether that was a hit or a
@@ -9,10 +9,14 @@ local _, ns = ...
 -- else. It can't be read, compared, added up or saved.
 --
 -- The event doesn't say who struck the blow. Alone, it can only have been
--- the player or their pet, which is why Temper keeps to solo play.
+-- the player or their pet, which is why Temper keeps to solo play. Even
+-- alone there may be strangers fighting nearby, so a blow is only taken
+-- as ours if it lands on the player's target or on an enemy that has the
+-- player on its threat list.
 --
--- This file passes each blow on for the lane to draw, and keeps count of
--- hits, crits, misses of each kind and casts for the fight record.
+-- This file passes each blow on for the lane to draw, and keeps a log of
+-- blows and casts from which a finished fight gets its counts and its
+-- timeline.
 
 local Hits = {}
 ns.Hits = Hits
@@ -25,8 +29,11 @@ local LEAD_SECONDS = 2
 -- over. Anything this soon after one fight isn't the start of the next.
 local STRAGGLER_SECONDS = 0.75
 
+-- The most a fight's timeline will hold. A long fight keeps its start.
+local MAX_TIMELINE = 120
+
 -- Ways an attack can fail to hurt. Anything else the event reports about
--- the target (heals, energy gains) isn't ours to count.
+-- an enemy (heals, energy gains) isn't ours to count.
 local AVOIDED = {
     MISS = true,
     DODGE = true,
@@ -71,24 +78,66 @@ local function Remember(entry)
             table.remove(log, 1)
         end
     end
+    return entry
+end
+
+-- Whose blow is it? --------------------------------------------------------
+
+--- An answer from the game that may be withheld: the value, or `otherwise`.
+local function Plain(value, otherwise)
+    if IsSecret(value) then
+        return otherwise
+    end
+    return value
+end
+
+local function HasNameplate(unit)
+    local ok, plate = pcall(C_NamePlate.GetNamePlateForUnit, unit)
+    return ok and plate ~= nil
+end
+
+--- True if a blow reported on this unit should be taken as the player's.
+local function IsOurs(unit)
+    if type(unit) ~= "string" then
+        return false
+    end
+
+    -- Blows on a friend the player happens to have targeted are somebody
+    -- else's doing. If the game won't say, assume an enemy.
+    if not Plain(UnitCanAttack("player", unit), true) then
+        return false
+    end
+
+    if unit == "target" then
+        -- A target with a nameplate has every blow reported twice: here,
+        -- and under the nameplate's own name. The nameplate's is the one
+        -- to keep, as long as the game will tell us which nameplate is
+        -- the target's.
+        local canTell = not IsSecret(UnitIsUnit("target", "target"))
+        return not (canTell and HasNameplate("target"))
+    end
+
+    if unit:sub(1, 9) ~= "nameplate" then
+        return false
+    end
+    if Plain(UnitIsUnit(unit, "target"), false) then
+        return true
+    end
+
+    -- Any other enemy counts if it has the player on its threat list.
+    -- A stranger's fight nearby won't.
+    return ns.settings.allEnemies and Plain(UnitThreatSituation("player", unit), nil) ~= nil
 end
 
 ns.OnEvent("UNIT_COMBAT", function(unit, action, flag, amount, school)
-    if IsSecret(unit) or unit ~= "target" then
+    if IsSecret(unit) or IsSecret(action) or IsSecret(flag) then
         return
     end
-    if IsSecret(action) or IsSecret(flag) then
-        return
-    end
-
-    -- Blows landing on a friend the player happens to have targeted are
-    -- somebody else's doing.
-    local hostile = UnitCanAttack("player", "target")
-    if not IsSecret(hostile) and not hostile then
+    if not ns.settings or not IsOurs(unit) then
         return
     end
 
-    local hit = { action = action, flag = flag }
+    local hit = { unit = unit, action = action, flag = flag }
     if not IsSecret(school) then
         hit.school = school
     end
@@ -105,10 +154,25 @@ ns.OnEvent("UNIT_COMBAT", function(unit, action, flag, amount, school)
         return
     end
 
+    -- How it went, in one word, for the cast it's traced to.
+    local outcome = hit.avoided or (hit.crit and "CRIT") or (hit.glancing and "GLANCE") or "HIT"
+
+    local spell, cast = ns.Guess.Match(hit.school)
+    hit.spell = spell
+    if cast then
+        cast.result = outcome
+    end
+
     if hit.avoided then
         Remember({ avoided = hit.avoided })
     else
         Remember({ hit = true, crit = hit.crit, glancing = hit.glancing })
+    end
+
+    -- A swing of the weapon has no cast to hang its outcome on, so it
+    -- gets a place in the timeline of its own.
+    if spell == ns.Guess.MELEE_SWING and not cast then
+        log[#log].swing = outcome
     end
 
     ns.Publish("TARGET_HIT", hit)
@@ -121,11 +185,22 @@ ns.OnEvent("UNIT_SPELLCAST_SUCCEEDED", function(unit, _, spellID)
     if IsSecret(unit) or IsSecret(spellID) then
         return
     end
-    if unit == "player" or unit == "pet" then
-        Remember({ cast = spellID })
+
+    if unit == "player" then
+        ns.Guess.NoteCast(Remember({ cast = spellID, mine = true }))
         ns.Publish("PLAYER_CAST", spellID)
+    elseif unit == "pet" then
+        Remember({ cast = spellID })
     end
 end)
+
+-- Counting up -----------------------------------------------------------------
+
+--- How far back a fight's count reaches: a little before it was announced,
+--- but never into the tail of the fight before.
+local function Earliest(startTime)
+    return math.max(startTime - LEAD_SECONDS, lastFinish + STRAGGLER_SECONDS)
+end
 
 --- Counts everything in the log from `earliest` on.
 ---@return table tally  { hits, crits, glancing, avoided, avoidedBy }, where
@@ -157,10 +232,26 @@ local function Count(earliest)
     return tally, casts
 end
 
---- How far back a fight's count reaches: a little before it was announced,
---- but never into the tail of the fight before.
-local function Earliest(startTime)
-    return math.max(startTime - LEAD_SECONDS, lastFinish + STRAGGLER_SECONDS)
+--- What the player did, in order: each cast and each swing of the weapon,
+--- with how it went where that could be traced.
+---@return table  list of { t = seconds into the fight, id = spell,
+---               r = "HIT", "CRIT", "GLANCE", "MISS", "DODGE"... or nil
+---               when no blow was traced to it }
+local function Timeline(earliest, startTime)
+    local timeline = {}
+
+    for _, entry in ipairs(log) do
+        if entry.time >= earliest and #timeline < MAX_TIMELINE then
+            local t = math.floor((entry.time - startTime) * 10 + 0.5) / 10
+
+            if entry.cast and entry.mine then
+                table.insert(timeline, { t = t, id = entry.cast, r = entry.result })
+            elseif entry.swing then
+                table.insert(timeline, { t = t, id = ns.Guess.MELEE_SWING, r = entry.swing })
+            end
+        end
+    end
+    return timeline
 end
 
 --- Marks the start of a fight, so the log stops forgetting.
@@ -177,11 +268,14 @@ end
 --- Counts up a fight and clears the log for the next one.
 ---@param startTime number  when the fight began, on GetTime's clock
 ---@return table tally, table casts  as from Count
+---@return table timeline  as from Timeline
 function Hits.Finish(startTime)
-    local tally, casts = Count(Earliest(startTime))
+    local earliest = Earliest(startTime)
+    local tally, casts = Count(earliest)
+    local timeline = Timeline(earliest, startTime)
 
     log = {}
     fighting = false
     lastFinish = GetTime()
-    return tally, casts
+    return tally, casts, timeline
 end

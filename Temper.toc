@@ -17,6 +17,7 @@ Core\Database.lua
 Combat\Sources.lua
 Combat\Gear.lua
 Combat\Weapons.lua
+Combat\Guess.lua
 Combat\Hits.lua
 Combat\Fights.lua
 
@@ -24,9 +25,10 @@ Record\Recorder.lua
 Record\Summary.lua
 Record\Compare.lua
 Record\Findings.lua
+Record\Experiments.lua
+Record\Progress.lua
 
 Text\Motion.lua
-Text\Guess.lua
 Text\Lane.lua
 Text\Feed.lua
 

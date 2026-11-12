@@ -66,8 +66,7 @@ local function IconFor(hit)
         return nil
     end
 
-    local spell = ns.Guess.For(hit.school)
-    return spell and C_Spell.GetSpellTexture(spell)
+    return hit.spell and C_Spell.GetSpellTexture(hit.spell)
 end
 
 ns.Subscribe("TARGET_HIT", function(hit)
@@ -79,14 +78,15 @@ ns.Subscribe("TARGET_HIT", function(hit)
         if ns.settings.showMisses then
             -- The game's own words for these, in the player's language.
             local word = CombatFeedbackText and CombatFeedbackText[hit.avoided] or hit.avoided
-            ns.Lane.Show(word, { r = GREY[1], g = GREY[2], b = GREY[3], scale = WORD_SCALE })
+            local look = { r = GREY[1], g = GREY[2], b = GREY[3], scale = WORD_SCALE }
+            ns.Lane.Show(word, look, hit.unit)
         end
         return
     end
 
     local look = LookFor(hit)
     look.icon = IconFor(hit)
-    ns.Lane.Show(hit.amount, look)
+    ns.Lane.Show(hit.amount, look, hit.unit)
 end)
 
 -- Made-up hits for the options preview: plausible amounts, and the

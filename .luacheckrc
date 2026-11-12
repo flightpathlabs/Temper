@@ -86,8 +86,13 @@ read_globals = {
     "UnitCanAttack",
     "UnitClass",
     "UnitGUID",
+    "UnitIsUnit",
     "UnitLevel",
     "UnitName",
+    "UnitPower",
+    "UnitPowerMax",
+    "UnitPowerType",
+    "UnitThreatSituation",
     "geterrorhandler",
     "issecretvalue",
 }

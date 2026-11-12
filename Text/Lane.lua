@@ -1,9 +1,10 @@
 local _, ns = ...
 
--- The lane: one tidy column of numbers by the target's nameplate.
+-- The lane: one tidy column of numbers by an enemy's nameplate.
 --
--- Each number is a piece of text pinned to the nameplate, so it follows
--- the enemy around the screen without our doing anything. The client
+-- Each number is a piece of text pinned to the nameplate of the enemy it
+-- landed on, so it follows that enemy around the screen without our doing
+-- anything. Each enemy being fought gets a column of its own. The client
 -- won't say where a nameplate is, and won't let anything pinned to one be
 -- measured either. So a number is only ever moved by changing how far it
 -- sits from the nameplate, never by asking where it is now.
@@ -212,7 +213,9 @@ end
 ---                  never looked at here.
 ---@param look table  { r, g, b, scale, crit, icon }; icon is a texture to
 ---                   show beside the number, if any
-function Lane.Show(value, look)
+---@param unit string|nil  whose nameplate to pin it to; the target's if
+---                        not given
+function Lane.Show(value, look, unit)
     if #showing >= MAX_NUMBERS then
         Retire(1)
     end
@@ -224,7 +227,7 @@ function Lane.Show(value, look)
 
     local found, plate
     if not Lane.refusal then
-        found, plate = pcall(C_NamePlate.GetNamePlateForUnit, "target")
+        found, plate = pcall(C_NamePlate.GetNamePlateForUnit, unit or "target")
     end
     local wantsIcon = look.icon ~= nil and not Lane.iconRefusal
     if found and plate then

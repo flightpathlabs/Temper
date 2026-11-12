@@ -12,6 +12,8 @@ local addonName, ns = ...
 --                             Combat\Fights.lua)
 --                 recordings  the stretches the player chose to record;
 --                             a label on a run of fights (see Recorder)
+--                 experiments questions put to a pair of recordings (see
+--                             Record\Experiments.lua)
 --                 gearSets    each different set of gear a fight was
 --                             fought in (see Combat\Gear.lua)
 --                 schools     which school of damage each ability has been
@@ -33,6 +35,9 @@ local SCHEMA = 2
 ns.DEFAULT_SETTINGS = {
     -- Show the player's hits in a lane by the target's nameplate.
     lane = true,
+
+    -- Show numbers above every enemy being fought, not only the target.
+    allEnemies = true,
 
     -- How the numbers move: 1 a steady stream, 2 rise and fade, 3 arc
     -- away, 4 shrink away.
@@ -154,12 +159,13 @@ ns.OnEvent("PLAYER_LOGIN", function()
     local character = characters[guid]
 
     character.name = UnitName("player")
-    for _, list in ipairs({ "fights", "recordings", "gearSets", "schools" }) do
+    for _, list in ipairs({ "fights", "recordings", "experiments", "gearSets", "schools" }) do
         if type(character[list]) ~= "table" then
             character[list] = {}
         end
     end
     character.nextNumber = character.nextNumber or 1
+    character.nextExperiment = character.nextExperiment or 1
 
     FlattenFights(character)
     ns.db.schema = SCHEMA
