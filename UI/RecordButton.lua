@@ -20,7 +20,7 @@ local function Refresh()
 
     local recording = ns.Recorder.Open()
     if recording then
-        local fights = #recording.fights
+        local fights = #ns.Recorder.FightsOf(recording)
         button:SetText(
             ("|cffff4040Stop|r  %d %s"):format(fights, fights == 1 and "fight" or "fights")
         )
@@ -49,8 +49,9 @@ function ns.ToggleRecording()
         return
     end
 
+    -- A recording stopped during its first fight has nothing to show yet.
     local finished = ns.Recorder.Toggle()
-    if finished then
+    if finished and #ns.Recorder.FightsOf(finished) > 0 then
         ns.ShowRecording(finished)
     end
 end
@@ -96,5 +97,5 @@ ns.Subscribe("DATABASE_READY", function()
     Refresh()
 end)
 
-ns.Subscribe("RECORDINGS_CHANGED", Refresh)
+ns.Subscribe("FIGHTS_CHANGED", Refresh)
 ns.Subscribe("SETTINGS_CHANGED", Refresh)

@@ -12,7 +12,7 @@ local _, ns = ...
 -- the player or their pet, which is why Temper keeps to solo play.
 --
 -- This file passes each blow on for the lane to draw, and keeps count of
--- hits, crits and casts for the fight record.
+-- hits, crits, misses of each kind and casts for the fight record.
 
 local Hits = {}
 ns.Hits = Hits
@@ -24,15 +24,6 @@ local LEAD_SECONDS = 2
 -- A last tick of damage can be reported just after a fight is called
 -- over. Anything this soon after one fight isn't the start of the next.
 local STRAGGLER_SECONDS = 0.75
-
--- A wound that arrives with one of these did no damage at all: the whole
--- blow was soaked up. (A blow that's only partly blocked says so with a
--- flag of its own.) The amount would settle it, but we can't read that.
-local SOAKED = {
-    ABSORB = true,
-    BLOCK = true,
-    RESIST = true,
-}
 
 -- Ways an attack can fail to hurt. Anything else the event reports about
 -- the target (heals, energy gains) isn't ours to count.
@@ -47,6 +38,15 @@ local AVOIDED = {
     DEFLECT = true,
     REFLECT = true,
     EVADE = true,
+}
+
+-- A wound that arrives with one of these did no damage at all: the whole
+-- blow was soaked up. (A blow that's only partly blocked says so with a
+-- flag of its own.) The amount would settle it, but we can't read that.
+local SOAKED = {
+    ABSORB = true,
+    BLOCK = true,
+    RESIST = true,
 }
 
 local IsSecret = issecretvalue or function()
@@ -106,7 +106,7 @@ ns.OnEvent("UNIT_COMBAT", function(unit, action, flag, amount, school)
     end
 
     if hit.avoided then
-        Remember({ avoided = true })
+        Remember({ avoided = hit.avoided })
     else
         Remember({ hit = true, crit = hit.crit, glancing = hit.glancing })
     end
@@ -123,29 +123,26 @@ ns.OnEvent("UNIT_SPELLCAST_SUCCEEDED", function(unit, _, spellID)
     end
     if unit == "player" or unit == "pet" then
         Remember({ cast = spellID })
+        ns.Publish("PLAYER_CAST", spellID)
     end
 end)
 
---- Marks the start of a fight, so the log stops forgetting.
-function Hits.Begin()
-    fighting = true
-end
-
---- Counts up a fight and clears the log for the next one.
----@param startTime number  when the fight began, on GetTime's clock
----@return table tally  { hits, crits, glancing, avoided }
+--- Counts everything in the log from `earliest` on.
+---@return table tally  { hits, crits, glancing, avoided, avoidedBy }, where
+---                     avoidedBy counts each way of missing by the game's
+---                     word for it: MISS, DODGE, PARRY and so on
 ---@return table casts  times each spell was cast, by spell ID
-function Hits.Finish(startTime)
-    local tally = { hits = 0, crits = 0, glancing = 0, avoided = 0 }
+local function Count(earliest)
+    local tally = { hits = 0, crits = 0, glancing = 0, avoided = 0, avoidedBy = {} }
     local casts = {}
 
-    local earliest = math.max(startTime - LEAD_SECONDS, lastFinish + STRAGGLER_SECONDS)
     for _, entry in ipairs(log) do
         if entry.time >= earliest then
             if entry.cast then
                 casts[entry.cast] = (casts[entry.cast] or 0) + 1
             elseif entry.avoided then
                 tally.avoided = tally.avoided + 1
+                tally.avoidedBy[entry.avoided] = (tally.avoidedBy[entry.avoided] or 0) + 1
             elseif entry.hit then
                 tally.hits = tally.hits + 1
                 if entry.crit then
@@ -157,6 +154,31 @@ function Hits.Finish(startTime)
             end
         end
     end
+    return tally, casts
+end
+
+--- How far back a fight's count reaches: a little before it was announced,
+--- but never into the tail of the fight before.
+local function Earliest(startTime)
+    return math.max(startTime - LEAD_SECONDS, lastFinish + STRAGGLER_SECONDS)
+end
+
+--- Marks the start of a fight, so the log stops forgetting.
+function Hits.Begin()
+    fighting = true
+end
+
+--- The count so far for a fight that's still going on.
+---@param startTime number  when the fight began, on GetTime's clock
+function Hits.Live(startTime)
+    return Count(Earliest(startTime))
+end
+
+--- Counts up a fight and clears the log for the next one.
+---@param startTime number  when the fight began, on GetTime's clock
+---@return table tally, table casts  as from Count
+function Hits.Finish(startTime)
+    local tally, casts = Count(Earliest(startTime))
 
     log = {}
     fighting = false

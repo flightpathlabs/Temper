@@ -1,9 +1,19 @@
+![Temper](docs/images/temper-logo.png)
+
 # Temper
 
-An addon for World of Warcraft: Forever, for players who want to know
-whether a change made them hit harder.
+An addon for World of Warcraft: Forever that helps you understand your own
+damage: how much you do, where it comes from, what's holding it back, and
+whether a change you made helped.
 
 To temper steel is to test it and make it harder. Same idea.
+
+**It's about you, and it stays with you.** Temper looks only at your own
+damage. It doesn't rank you against anyone, it doesn't measure other
+players, and it has nothing to say about a group. It never posts to chat,
+never sends anything to other players or to any server, and has no way to
+share or export what it records. Your fights are kept in your own saved
+game data and nowhere else.
 
 It does two things.
 
@@ -19,21 +29,38 @@ or the order you press things in, record again, and the page shows what
 moved: up in green, down in red, with the gear you swapped listed
 underneath.
 
-It's for playing on your own. In a group it steps aside.
+Then it tells you, in plain sentences, what stands out: which skill gives
+the most for its mana, what's costing you hits, and what to try.
+
+It's for playing on your own. In a group it steps aside: no numbers, no
+record, no opinions.
 
 ## Using it
 
 There is nothing to set up.
 
-- **Record** is a small button on the screen. Left-click to start and stop,
-  right-click to open the window, drag to move it. There's a key binding
-  too, under Options > Keybindings > Temper.
-- **`/temper`** opens the window. `/temper record` starts and stops a
-  recording.
-- Fights are kept even when you aren't recording, under "Recent fights", so
-  there's something to compare with after the fact.
-- To compare, open a recording and choose **Compare with...**. Stopping a
-  recording compares it with the one before automatically.
+- **`/temper`** opens the window, as does Temper's entry in the addon list
+  by the minimap.
+- **Record** is at the bottom of the window. `/temper record` does the
+  same, and there's a key binding under Options > Keybindings > Temper.
+  If you'd like a small Record button on the screen as well, turn it on in
+  the options: left-click to start and stop, right-click for the window,
+  drag to move it.
+- Every fight is kept, recording or not, and listed with its damage, damage
+  a second, length and crit rate. Click one to read it. Shift-click selects
+  a run of fights and Ctrl-click adds one; the page covers whatever is
+  selected.
+- To compare, select the earlier fights and press **Keep as Before**, then
+  select the later ones. The strip above the page says which step you're
+  at. Stopping a recording compares it with the one before automatically.
+- Hover an ability's bar for the game's own tooltip, with what it did and
+  what each point of mana or energy bought.
+- "What stands out" says in a few sentences what the figures show, and what
+  is holding your damage back: a weapon skill that's behind the enemies
+  you're fighting, a lot of dodges and parries, glancing blows.
+- A small panel stays on screen with the fight you're in, or the last one:
+  damage a second, damage, hits, crits and misses. Click it for the window,
+  right-click for a menu, drag it anywhere, or turn it off in the options.
 - Options are in the game's own Options window, under AddOns > Temper.
 
 ## What it can and can't know
@@ -46,13 +73,15 @@ game still offers. That shapes what it shows.
 | Damage by ability, per fight | The game tallies it and lets addons read the tally when a fight ends |
 | Damage a second, time in battle | From the same tally and the length of the fight |
 | Hits, critical hits, misses, dodges, parries | The game reports each blow on your target as it lands |
+| Your skill with the weapon in hand, and what a shortfall costs | The game shows it on the character sheet, and its own skills window gives the sums |
 | How many times you used each skill | The game reports your own casts |
+| What each skill costs, and so its damage per point of mana or energy | The game says what a skill costs; the rest is division |
 
 | It can't know | Because |
 |---|---|
-| The size of any one hit | The game lets an addon draw the amount on screen but not read it |
+| The size of any one hit | The game lets an addon draw the amount on screen but not read it. The same goes for your running damage during a fight: the panel shows it, and the exact figures arrive when the fight ends |
 | Your biggest crit | Follows from the above. "Hardest single use" is the nearest thing: when an ability is used once in a fight, its total for that fight is that one use |
-| Which ability a given number on screen was | The game doesn't say what landed, only that something did |
+| Which ability a given number on screen was | The game doesn't say what landed, only that something did. The optional icon beside each number is a best guess from what you just cast and the kind of damage |
 | Whose hit it was, in a group | Likewise, which is why it keeps to solo play |
 
 Numbers are shown for your current target only. Damage to other enemies

@@ -2,9 +2,10 @@ local _, ns = ...
 
 -- What the character is wearing.
 --
--- A recording keeps a note of this, so that two recordings can be told
--- apart by what changed between them: "Swapped Worn Shortbow for
--- Hornwood Recurve Bow".
+-- Every fight keeps a note of this, so that two sets of fights can be
+-- told apart by what changed between them: "Swapped Worn Shortbow for
+-- Hornwood Recurve Bow". Gear changes far less often than fights happen,
+-- so each different set is stored once and fights point at it by number.
 
 local Gear = {}
 ns.Gear = Gear
@@ -51,6 +52,40 @@ local function Identity(link)
         return nil
     end
     return link:match("item:(%d*:%d*)") or link
+end
+
+--- True if two snapshots hold the same items.
+local function SameGear(a, b)
+    for _, slot in ipairs(SLOTS) do
+        if Identity(a[slot[1]]) ~= Identity(b[slot[1]]) then
+            return false
+        end
+    end
+    return true
+end
+
+--- Files a snapshot with a character's gear sets, reusing the latest one
+--- when nothing has changed.
+---@return number  the set's place in character.gearSets
+function Gear.Keep(character, snapshot)
+    local sets = character.gearSets
+    local latest = sets[#sets]
+    if latest and SameGear(latest, snapshot) then
+        return #sets
+    end
+
+    table.insert(sets, snapshot)
+    return #sets
+end
+
+--- The gear set the character is wearing right now, by number.
+function Gear.Current()
+    return Gear.Keep(ns.character, Gear.Snapshot())
+end
+
+--- A gear set by its number, or nil.
+function Gear.Set(number)
+    return number and ns.character.gearSets[number]
 end
 
 --- What differs between two snapshots.

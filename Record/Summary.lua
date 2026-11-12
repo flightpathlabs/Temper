@@ -1,12 +1,25 @@
 local _, ns = ...
 
--- Adds a recording's fights up into the figures the analysis shows.
+-- Adds a set of fights up into the figures the analysis shows.
 --
 -- Nothing here is saved. A summary is worked out from the fights each time
 -- it's wanted, so there's only ever one copy of the truth.
 
 local Summary = {}
 ns.Summary = Summary
+
+-- What to call each resource in a sentence.
+local POWER_WORDS = {
+    MANA = "mana",
+    ENERGY = "energy",
+    RAGE = "rage",
+    FOCUS = "focus",
+}
+
+--- The everyday word for a resource: "mana" for "MANA".
+function Summary.PowerWord(power)
+    return POWER_WORDS[power] or (power and power:lower()) or "resource"
+end
 
 local function NewSplit()
     return { fights = 0, damage = 0, seconds = 0, dps = 0 }
@@ -24,20 +37,29 @@ local function FinishSplit(split)
     end
 end
 
---- Sums up a recording.
----@param recording table  anything with a list of fights
+--- Sums up a set of fights.
+---@param fights table  list of fights, in any order
 ---@return table summary:
 ---   fights, damage, seconds, dps
----   hits, crits, glancing, avoided, critRate (nil without a single hit)
----   abilities  list of { id, name, kind, damage, share, casts, perCast },
----              biggest first; casts and perCast are only there for
----              skills, and only when their casts were seen
----   kinds      damage by kind of source: skill, auto, pet, other
----   best       { name, damage } for the hardest single use of an ability,
----              or nil
----   single     fights against one enemy: { fights, damage, seconds, dps }
----   several    fights against more than one, likewise
-function Summary.Of(recording)
+---   hits, crits, glancing, avoided
+---   avoidedBy   attacks that failed each way: MISS, DODGE, PARRY...
+---   level, enemyLevel, weapons   as they were in the newest fight
+---   critRate    crits as a share of hits; nil without a single hit
+---   avoidRate   attacks that missed or were avoided, as a share of all
+---               attacks; nil without a single attack
+---   abilities   list, biggest first, of:
+---                 id, name, kind, icon, rank   what it is
+---                 damage, share                what it did
+---                 casts, perCast               uses, and damage per use;
+---                                              only for skills whose
+---                                              casts were seen
+---                 cost, power                  what one use costs
+---                 perCost                      damage per point of that
+---   kinds       damage by kind of source: skill, auto, pet, other
+---   best        { name, damage } for the hardest single use of a skill
+---   single      fights against one enemy: { fights, damage, seconds, dps }
+---   several     fights against more than one, likewise
+function Summary.Of(fights)
     local summary = {
         fights = 0,
         damage = 0,
@@ -47,6 +69,7 @@ function Summary.Of(recording)
         crits = 0,
         glancing = 0,
         avoided = 0,
+        avoidedBy = {},
         abilities = {},
         kinds = { skill = 0, auto = 0, pet = 0, other = 0 },
         single = NewSplit(),
@@ -57,7 +80,11 @@ function Summary.Of(recording)
     -- don't end up on one line.
     local byKey = {}
 
-    for _, fight in ipairs(recording.fights or {}) do
+    -- The newest fight speaks for the set on things that are true of a
+    -- moment: the player's level, the enemy's, and their weapon skills.
+    local newest
+
+    for _, fight in ipairs(fights or {}) do
         summary.fights = summary.fights + 1
         summary.damage = summary.damage + fight.damage
         summary.seconds = summary.seconds + fight.length
@@ -65,6 +92,13 @@ function Summary.Of(recording)
         summary.crits = summary.crits + (fight.crits or 0)
         summary.glancing = summary.glancing + (fight.glancing or 0)
         summary.avoided = summary.avoided + (fight.avoided or 0)
+        for way, times in pairs(fight.avoidedBy or {}) do
+            summary.avoidedBy[way] = (summary.avoidedBy[way] or 0) + times
+        end
+
+        if not newest or (fight.at or 0) > (newest.at or 0) then
+            newest = fight
+        end
 
         if fight.enemies and #fight.enemies > 1 then
             AddToSplit(summary.several, fight)
@@ -83,6 +117,14 @@ function Summary.Of(recording)
 
             ability.damage = ability.damage + spell.damage
             summary.kinds[spell.kind] = (summary.kinds[spell.kind] or 0) + spell.damage
+
+            -- Icon, rank and cost as they were in whichever fight is read
+            -- last. Sets are usually close together in time, so they agree.
+            ability.icon = spell.icon or ability.icon
+            ability.rank = spell.rank or ability.rank
+            if spell.cost then
+                ability.cost, ability.power = spell.cost, spell.power
+            end
 
             -- Casts are only counted for skills. An auto attack is switched
             -- on once and swings many times, so its "casts" mean nothing.
@@ -103,11 +145,20 @@ function Summary.Of(recording)
         end
     end
 
+    if newest then
+        summary.level = newest.level
+        summary.enemyLevel = newest.enemyLevel
+        summary.weapons = newest.weapons
+    end
+
     if summary.seconds > 0 then
         summary.dps = summary.damage / summary.seconds
     end
     if summary.hits > 0 then
         summary.critRate = summary.crits / summary.hits
+    end
+    if summary.hits + summary.avoided > 0 then
+        summary.avoidRate = summary.avoided / (summary.hits + summary.avoided)
     end
     FinishSplit(summary.single)
     FinishSplit(summary.several)
@@ -116,6 +167,9 @@ function Summary.Of(recording)
         ability.share = summary.damage > 0 and ability.damage / summary.damage or 0
         if ability.casts and ability.casts > 0 then
             ability.perCast = ability.castDamage / ability.casts
+            if ability.cost then
+                ability.perCost = ability.perCast / ability.cost
+            end
         end
     end
     table.sort(summary.abilities, function(a, b)

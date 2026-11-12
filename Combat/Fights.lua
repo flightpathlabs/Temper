@@ -14,9 +14,16 @@ local _, ns = ...
 --   length    seconds in combat
 --   damage    everything the player and their pet dealt
 --   hits, crits, glancing, avoided   blows on the target, counted
+--   avoidedBy how many attacks failed each way: MISS, DODGE, PARRY...
 --   target    the name of what was targeted when it began
+--   enemyLevel  that target's level, when the game would say
 --   level     the player's level at the time
---   spells    list of { id, name, kind, damage, casts }, biggest first
+--   weapons   the player's skill with each weapon in hand (see Weapons.lua)
+--   recording the number of the recording it belongs to, if any
+--   gear      which of the character's gear sets it was fought in
+--   spells    list of { id, name, kind, damage, casts, icon, rank, cost,
+--             power }, biggest first; cost and power are what one use
+--             cost at the time ("MANA", "ENERGY"...), when it cost anything
 --   enemies   list of { name, damage }, one per enemy that was hurt
 
 local Fights = {}
@@ -45,6 +52,30 @@ local function Readable(value)
     return value
 end
 
+--- What the game knows about an ability beyond its name: its icon, its
+--- rank, and what one use costs. Noted with the fight, since all three
+--- change as the character levels.
+local function Describe(spell)
+    local id = spell.id
+    if id == 0 then
+        return
+    end
+
+    spell.icon = C_Spell.GetSpellTexture(id)
+
+    local rank = C_Spell.GetSpellSubtext(id)
+    if type(rank) == "string" and rank ~= "" then
+        spell.rank = rank
+    end
+
+    local costs = C_Spell.GetSpellPowerCost(id)
+    local first = costs and costs[1]
+    if first and Readable(first.cost) and first.cost > 0 and type(first.name) == "string" then
+        spell.cost = first.cost
+        spell.power = first.name
+    end
+end
+
 --- Adds one source's rows from the game's tally to our list.
 local function AddSpells(spells, rows, fromPet)
     if type(rows) ~= "table" then
@@ -62,12 +93,15 @@ local function AddSpells(spells, rows, fromPet)
             local isPet = fromPet
                 or (not IsSecret(creature) and type(creature) == "string" and creature ~= "")
 
-            table.insert(spells, {
+            local spell = {
                 id = id,
                 name = ns.Sources.Name(id),
                 kind = ns.Sources.Kind(id, isPet),
                 damage = damage,
-            })
+            }
+            -- The details are a nicety. A refusal mustn't cost the fight.
+            pcall(Describe, spell)
+            table.insert(spells, spell)
         end
     end
 end
@@ -144,31 +178,28 @@ local function ReadTally()
     return damage, spells, enemies
 end
 
---- True if the recording is still in the list, not deleted meanwhile.
-local function StillKept(recording)
-    for _, candidate in ipairs(ns.character.recordings) do
-        if candidate == recording then
-            return true
-        end
-    end
-    return false
-end
-
 -- A fight belongs to whichever recording was running when it began.
 -- Pressing Record or Stop in the middle of one takes effect from the next.
 local function Save(fight, recording)
-    if recording and StillKept(recording) then
-        table.insert(recording.fights, fight)
-    else
-        local recent = ns.character.recent
-        table.insert(recent, fight)
-        while #recent > ns.RECENT_FIGHTS do
-            table.remove(recent, 1)
-        end
+    if recording and ns.Recorder.StillKept(recording) then
+        fight.recording = recording.number
+    end
+    fight.gear = ns.Gear.Current()
+
+    local fights = ns.character.fights
+    table.insert(fights, fight)
+    while #fights > ns.MAX_FIGHTS do
+        table.remove(fights, 1)
     end
 
-    ns.Publish("FIGHT_SAVED", fight)
-    ns.Publish("RECORDINGS_CHANGED")
+    -- Dropping the oldest fight may have emptied a recording.
+    ns.Recorder.Tidy()
+
+    -- Now we know for certain which abilities do damage, which is what
+    -- the icon guesser needs to tell them from buffs and the like.
+    ns.Guess.NoteDamaging(fight.spells)
+
+    ns.Publish("FIGHTS_CHANGED")
 end
 
 ns.OnEvent("PLAYER_REGEN_DISABLED", function()
@@ -179,10 +210,23 @@ ns.OnEvent("PLAYER_REGEN_DISABLED", function()
         target = nil
     end
 
+    -- The level of what's being fought, if it's an enemy at all: combat
+    -- can start with a friend targeted. A skull-level enemy reports its
+    -- level as -1, which tells us nothing.
+    local enemyLevel
+    local hostile = UnitCanAttack("player", "target")
+    if not IsSecret(hostile) and hostile then
+        enemyLevel = Readable(UnitLevel("target"))
+        if enemyLevel and enemyLevel < 1 then
+            enemyLevel = nil
+        end
+    end
+
     current = {
         start = GetTime(),
         at = GetServerTime(),
         target = target,
+        enemyLevel = enemyLevel,
         grouped = IsInGroup(),
         recording = ns.Recorder.Open(),
     }
@@ -232,8 +276,11 @@ ns.OnEvent("PLAYER_REGEN_ENABLED", function()
         crits = tally.crits,
         glancing = tally.glancing,
         avoided = tally.avoided,
+        avoidedBy = tally.avoidedBy,
         target = began.target,
+        enemyLevel = began.enemyLevel,
         level = UnitLevel("player"),
+        weapons = ns.Weapons.Skills(),
         spells = spells,
         enemies = enemies,
     }, began.recording)

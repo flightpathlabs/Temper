@@ -98,10 +98,18 @@ ns.OnEvent("PLAYER_LOGIN", function()
     AddDropdown(
         category,
         "motion",
-        "How a number leaves",
-        "Rise and fade is the calmest. Arc away tosses each number to one side. "
-            .. "Shrink away keeps them close to the nameplate.",
+        "How the numbers move",
+        "Steady stream is the calmest: numbers stay put and step up a line as new ones "
+            .. "arrive, like a chat log. The others drift, arc or shrink as they go.",
         motions
+    )
+
+    AddDropdown(
+        category,
+        "stay",
+        "How long a number stays",
+        "Longer shows more of your recent hits at once.",
+        { "Briefly", "A few seconds", "A good while" }
     )
 
     AddDropdown(
@@ -146,6 +154,16 @@ ns.OnEvent("PLAYER_LOGIN", function()
 
     AddCheckbox(
         category,
+        "icons",
+        "Show a best-guess ability icon beside each number",
+        "The game doesn't tell addons which ability a hit was, so Temper works it out from "
+            .. "what you just cast and the kind of damage. It's usually right, gets better "
+            .. "the more it sees, and is sometimes wrong when two things land at once.",
+        true
+    )
+
+    AddCheckbox(
+        category,
         "showMisses",
         "Show misses, dodges and parries",
         "As a small grey word in the same column."
@@ -161,10 +179,20 @@ ns.OnEvent("PLAYER_LOGIN", function()
 
     AddCheckbox(
         category,
+        "widget",
+        "Show the fight panel",
+        "A small panel with your damage a second, damage, hits and crits for the fight "
+            .. "you're in, or the last one. Click it for the full window, right-click for "
+            .. "a menu, drag it anywhere."
+    )
+
+    AddCheckbox(
+        category,
         "recordButton",
-        "Show the Record button",
-        "You can also record with a key (Options > Keybindings > Temper), "
-            .. "with /temper record, or from the Temper window."
+        "Show a Record button on the screen",
+        "A small button you can drag anywhere: left-click to record, right-click for the "
+            .. "window. Without it, record from the Temper window, with a key "
+            .. "(Options > Keybindings > Temper), or with /temper record."
     )
 
     Settings.RegisterAddOnCategory(category)

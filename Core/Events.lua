@@ -66,6 +66,6 @@ end
 --   SETTINGS_CHANGED             the player changed an option
 --   TARGET_HIT        hit        something landed on, or missed, the
 --                                player's target (see Combat\Hits.lua)
---   FIGHT_SAVED       fight      a fight ended and has been put on record
---   RECORDINGS_CHANGED           a recording started, stopped, grew or
---                                was deleted
+--   PLAYER_CAST       spellID    the player or their pet cast something
+--   FIGHTS_CHANGED               a fight was saved or deleted, or a
+--                                recording started or stopped

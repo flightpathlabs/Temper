@@ -8,26 +8,35 @@ local _, ns = ...
 -- measured either. So a number is only ever moved by changing how far it
 -- sits from the nameplate, never by asking where it is now.
 --
+-- New numbers appear at the bottom of the column and step the earlier
+-- ones up a line, so the column reads like a short log of recent hits.
+--
 -- When the target has no nameplate, numbers appear at a fixed spot above
 -- the middle of the screen instead.
 
 local Lane = {}
 ns.Lane = Lane
 
-local MAX_NUMBERS = 14
-local LIFETIME = 1.2
-local CRIT_LIFETIME = 1.6
+local MAX_NUMBERS = 24
+
+-- How long a number stays, by the "stay" setting. A critical hit lingers
+-- a little longer than the rest.
+local STAY_SECONDS = { 1.4, 2.8, 4.5 }
+local CRIT_LINGER = 1.25
 
 -- Room to leave between one number and the next, at normal size.
-local LINE_HEIGHT = 22
+local LINE_HEIGHT = 17
 
 -- The game's combat font is drawn very large and scaled down by whoever
--- uses it. This brings it to about the height of a line.
-local FONT_SCALE = LINE_HEIGHT / 64
+-- uses it. This brings it to a little under the height of a line.
+local FONT_SCALE = 15 / 64
 
--- A nameplate can vanish between a number being pinned and being moved,
--- which is no reason to give up on nameplates. This many refusals is.
-local REFUSALS_ALLOWED = 3
+-- An ability's icon, when shown, is this many times the line height.
+local ICON_SIZE = 0.8
+
+-- How quickly numbers step up to make room: the share of the remaining
+-- distance covered each second. Higher is snappier.
+local STEP_SPEED = 12
 
 -- Setting values to sizes and distances.
 local SIZES = { 0.8, 1, 1.3 }
@@ -44,6 +53,10 @@ local SIDES = {
 -- Where numbers go when there's no nameplate to pin them to.
 local SPARE_HEIGHT = 140
 
+-- A nameplate can vanish between a number being pinned and being moved,
+-- which is no reason to give up on nameplates. This many refusals is.
+local REFUSALS_ALLOWED = 3
+
 -- A frame of our own to own the text, sitting under the game's windows.
 -- It's shown only while there are numbers to move.
 local holder = CreateFrame("Frame", nil, UIParent)
@@ -59,12 +72,16 @@ local nextLean = 1
 
 -- How long the sample numbers from the options page stay in front of the
 -- game's windows, and how many times they've been asked for.
-local PREVIEW_SECONDS = 2.5
+local PREVIEW_SECONDS = 4
 local previews = 0
 
 -- Set once the client has refused to pin text to a nameplate too often,
 -- after which the fixed spot is used for the rest of the session.
 Lane.refusal = nil
+
+-- Set if the client refuses to draw an icon beside a pinned number, after
+-- which icons are left off for the rest of the session.
+Lane.iconRefusal = nil
 local refusals = 0
 
 local function UseFixedSpot(number)
@@ -76,23 +93,46 @@ local function Put(number, x, y, alpha, scale)
     local text = number.text
     text:SetPoint(number.point, number.anchor, number.anchorPoint, x, y)
     text:SetAlpha(alpha)
-    text:SetTextScale(scale)
+    text:SetTextScale(scale * FONT_SCALE)
+end
+
+local function PutIcon(number, alpha, scale)
+    local size = LINE_HEIGHT * ICON_SIZE * scale
+    number.icon:SetSize(size, size)
+    number.icon:SetAlpha(alpha)
 end
 
 --- Moves a number to where its motion says it should be by now.
-local function Place(number, now)
+local function Place(number, now, elapsed)
     local progress = (now - number.start) / number.life
     local motion = ns.Motions[ns.settings.motion] or ns.Motions[1]
     local dx, dy, alpha, scale = motion.move(progress, number.lean)
 
+    -- Step up toward the height the newer numbers have asked for, quickly
+    -- but not in one jump.
+    local remaining = number.liftWanted - number.lift
+    number.lift = number.lift + remaining * math.min(1, elapsed * STEP_SPEED)
+
     number.rise = dy
-    scale = scale * number.scale * FONT_SCALE
+    scale = scale * number.scale
     if number.crit then
         scale = scale * ns.Motions.Pop(now - number.start)
     end
 
     local x, y = number.x + dx, number.y + dy + number.lift
     local ok, problem = pcall(Put, number, x, y, alpha, scale)
+
+    -- The icon is handled apart from the number, so that if the client
+    -- objects to it the numbers themselves carry on as before.
+    if number.hasIcon then
+        local drawn, objection = pcall(PutIcon, number, alpha, scale)
+        if not drawn then
+            Lane.iconRefusal = tostring(objection)
+            number.hasIcon = false
+            number.icon:Hide()
+        end
+    end
+
     if ok or number.anchor == UIParent then
         return
     end
@@ -112,11 +152,11 @@ local function Retire(index)
     local number = table.remove(showing, index)
     number.text:Hide()
     number.text:ClearAllPoints()
+    number.icon:Hide()
     table.insert(spare, number)
 end
 
---- Nudges the numbers already showing upward, so the new one has room.
--- Rapid hits would otherwise land on top of each other.
+--- Asks the numbers already showing to step up, so the new one has room.
 -- Only numbers pinned to the same thing share a column; ones still fading
 -- over the last target are left alone.
 local function MakeRoom(anchor, newScale)
@@ -125,9 +165,9 @@ local function MakeRoom(anchor, newScale)
     for index = #showing, 1, -1 do
         local number = showing[index]
         if number.anchor == anchor then
-            local height = number.rise + number.lift
+            local height = number.rise + number.liftWanted
             if height < floor then
-                number.lift = number.lift + (floor - height)
+                number.liftWanted = number.liftWanted + (floor - height)
                 height = floor
             end
             floor = height + LINE_HEIGHT * number.scale
@@ -135,7 +175,7 @@ local function MakeRoom(anchor, newScale)
     end
 end
 
-holder:SetScript("OnUpdate", function()
+holder:SetScript("OnUpdate", function(_, elapsed)
     local now = GetTime()
 
     for index = #showing, 1, -1 do
@@ -143,7 +183,7 @@ holder:SetScript("OnUpdate", function()
         if now - number.start >= number.life then
             Retire(index)
         else
-            Place(number, now)
+            Place(number, now, elapsed)
         end
     end
 
@@ -152,20 +192,32 @@ holder:SetScript("OnUpdate", function()
     end
 end)
 
+local function NewNumber()
+    local number = {
+        text = holder:CreateFontString(nil, "OVERLAY", "CombatTextFontOutline"),
+        icon = holder:CreateTexture(nil, "OVERLAY"),
+    }
+
+    -- The icon rides just to the left of its number. Trimmed a touch, as
+    -- the game does, to lose the border drawn into every icon.
+    number.icon:SetPoint("RIGHT", number.text, "LEFT", -2, 0)
+    number.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    number.icon:Hide()
+    return number
+end
+
 --- Adds a number, or a word such as "Dodge", to the lane.
 ---@param value any  what to show. May be an amount the client won't let us
 ---                  read, which is why it goes straight to the text and is
 ---                  never looked at here.
----@param look table  { r, g, b, scale, crit }
+---@param look table  { r, g, b, scale, crit, icon }; icon is a texture to
+---                   show beside the number, if any
 function Lane.Show(value, look)
     if #showing >= MAX_NUMBERS then
         Retire(1)
     end
 
-    local number = table.remove(spare)
-    if not number then
-        number = { text = holder:CreateFontString(nil, "OVERLAY", "CombatTextFontOutline") }
-    end
+    local number = table.remove(spare) or NewNumber()
 
     local side = SIDES[ns.settings.laneSide] or SIDES[1]
     local gap = GAPS[ns.settings.laneDistance] or GAPS[1]
@@ -174,9 +226,15 @@ function Lane.Show(value, look)
     if not Lane.refusal then
         found, plate = pcall(C_NamePlate.GetNamePlateForUnit, "target")
     end
+    local wantsIcon = look.icon ~= nil and not Lane.iconRefusal
     if found and plate then
         number.point, number.anchor, number.anchorPoint = side.point, plate, side.plate
         number.x, number.y = side.x * gap, side.y * gap
+
+        -- To the right of the nameplate, the icon would sit on top of it.
+        if wantsIcon and side.x > 0 then
+            number.x = number.x + LINE_HEIGHT
+        end
     else
         UseFixedSpot(number)
     end
@@ -190,11 +248,15 @@ function Lane.Show(value, look)
     end
 
     number.start = GetTime()
-    number.life = look.crit and CRIT_LIFETIME or LIFETIME
+    number.life = STAY_SECONDS[ns.settings.stay] or STAY_SECONDS[2]
+    if look.crit then
+        number.life = number.life * CRIT_LINGER
+    end
     number.scale = look.scale * (SIZES[ns.settings.textSize] or 1)
     number.crit = look.crit
     number.rise = 0
     number.lift = 0
+    number.liftWanted = 0
 
     MakeRoom(number.anchor, number.scale)
 
@@ -202,30 +264,35 @@ function Lane.Show(value, look)
     number.text:SetTextColor(look.r, look.g, look.b)
     number.text:Show()
 
+    number.hasIcon = wantsIcon
+    if number.hasIcon then
+        number.icon:SetTexture(look.icon)
+    end
+    number.icon:SetShown(number.hasIcon)
+
     table.insert(showing, number)
-    Place(number, number.start)
+    Place(number, number.start, 0)
     holder:Show()
 end
 
---- A few sample numbers, so a change in the options can be seen at once
---- without finding something to hit.
+--- A handful of sample numbers, so a change in the options can be seen at
+--- once without finding something to hit.
 function Lane.Preview()
     -- The options window would otherwise be in the way.
     previews = previews + 1
     local thisPreview = previews
     holder:SetFrameStrata("TOOLTIP")
-    C_Timer.After(PREVIEW_SECONDS, function()
+    C_Timer.After(PREVIEW_SECONDS + (STAY_SECONDS[ns.settings.stay] or 0), function()
         if thisPreview == previews then
             holder:SetFrameStrata("LOW")
         end
     end)
 
-    local white = { r = 1, g = 1, b = 1, scale = 1 }
-    Lane.Show(41, white)
-    C_Timer.After(0.25, function()
-        Lane.Show(38, white)
-    end)
-    C_Timer.After(0.5, function()
-        ns.Feed.ShowSample()
-    end)
+    for index = 0, 4 do
+        C_Timer.After(index * 0.45, function()
+            if thisPreview == previews then
+                ns.Feed.ShowSample(index == 3)
+            end
+        end)
+    end
 end

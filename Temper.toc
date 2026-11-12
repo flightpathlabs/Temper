@@ -1,10 +1,10 @@
 ## Interface: 16001
 ## Title: Temper
-## Notes: Tidy damage numbers by your target, and a record of your fights you can compare: fight, change something, fight again, see what it did.
+## Notes: Understand your own damage: where it comes from, what's holding it back, and whether a change helped. Tidy numbers by your target and a private record of your fights to compare. Nothing is shared or posted.
 ## Version: 0.1.0
 ## Author: Flight Path Labs
 ## SavedVariables: TemperDB
-## IconTexture: Interface\Icons\Ability_MeleeDamage
+## IconTexture: Interface\AddOns\Temper\Media\icon
 ## AddonCompartmentFunc: Temper_OnAddonCompartmentClick
 ## X-License: MIT
 
@@ -16,18 +16,22 @@ Core\Database.lua
 
 Combat\Sources.lua
 Combat\Gear.lua
+Combat\Weapons.lua
 Combat\Hits.lua
 Combat\Fights.lua
 
 Record\Recorder.lua
 Record\Summary.lua
 Record\Compare.lua
+Record\Findings.lua
 
 Text\Motion.lua
+Text\Guess.lua
 Text\Lane.lua
 Text\Feed.lua
 
 UI\RecordButton.lua
+UI\Widget.lua
 UI\Card.lua
 UI\MainWindow.lua
 UI\Settings.lua

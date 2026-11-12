@@ -11,7 +11,7 @@ ns.Feed = Feed
 
 local BLIZZARD_DAMAGE_TEXT = "floatingCombatTextCombatDamage_v2"
 
-local CRIT_SCALE = 1.4
+local CRIT_SCALE = 1.3
 local GLANCING_SCALE = 0.85
 local WORD_SCALE = 0.7
 
@@ -59,6 +59,17 @@ local function LookFor(hit)
     return { r = color[1], g = color[2], b = color[3], scale = scale, crit = hit.crit }
 end
 
+--- The icon of the ability a hit most likely was, if icons are wanted and
+--- there's a guess to be had.
+local function IconFor(hit)
+    if not ns.settings.icons then
+        return nil
+    end
+
+    local spell = ns.Guess.For(hit.school)
+    return spell and C_Spell.GetSpellTexture(spell)
+end
+
 ns.Subscribe("TARGET_HIT", function(hit)
     if not Showing() then
         return
@@ -73,12 +84,26 @@ ns.Subscribe("TARGET_HIT", function(hit)
         return
     end
 
-    ns.Lane.Show(hit.amount, LookFor(hit))
+    local look = LookFor(hit)
+    look.icon = IconFor(hit)
+    ns.Lane.Show(hit.amount, look)
 end)
 
---- A made-up critical hit for the options preview.
-function Feed.ShowSample()
-    ns.Lane.Show(97, LookFor({ crit = true, school = 1 }))
+-- Made-up hits for the options preview: plausible amounts, and the
+-- auto-attack icon when icons are switched on.
+local SAMPLES = { 41, 38, 12, 97, 44 }
+local nextSample = 0
+
+--- Shows one made-up hit.
+---@param crit boolean  make this one a critical hit
+function Feed.ShowSample(crit)
+    nextSample = nextSample % #SAMPLES + 1
+
+    local look = LookFor({ crit = crit, school = 1 })
+    if ns.settings.icons then
+        look.icon = C_Spell.GetSpellTexture(6603)
+    end
+    ns.Lane.Show(crit and 97 or SAMPLES[nextSample], look)
 end
 
 -- Blizzard's numbers ---------------------------------------------------------

@@ -45,6 +45,7 @@ read_globals = {
     "Enum",
 
     -- Blizzard's shared Lua helpers
+    "AbbreviateNumbers",
     "BreakUpLargeNumbers",
     "ButtonFrameTemplate_HidePortrait",
     "CombatFeedbackText",
@@ -63,6 +64,8 @@ read_globals = {
 
     -- Namespaced API
     "C_DamageMeter",
+    "C_Item",
+    "C_SkillInfo",
     "C_NamePlate",
     "C_Spell",
     "C_SpellBook",
@@ -71,12 +74,17 @@ read_globals = {
     -- Loose API functions
     "GetCVar",
     "SetCVar",
+    "GetInventoryItemID",
     "GetInventoryItemLink",
     "GetServerTime",
+    "GetShapeshiftForm",
     "GetTime",
     "InCombatLockdown",
+    "IsControlKeyDown",
     "IsInGroup",
+    "IsShiftKeyDown",
     "UnitCanAttack",
+    "UnitClass",
     "UnitGUID",
     "UnitLevel",
     "UnitName",
