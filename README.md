@@ -74,8 +74,11 @@ Lua 5.1, no libraries. From the addon folder:
 ```
 stylua .
 luacheck .
-node ../../tools/check-toc.mjs .
 ```
+
+Every Lua file has to be listed in `Strikewise.toc`, in an order where each
+file only uses what the ones above it define. The game says nothing about
+a file that exists but isn't listed.
 
 Files newly added to the TOC need a full restart of the game, not a
 `/reload`.
