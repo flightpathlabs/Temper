@@ -1,6 +1,6 @@
-<!-- Key bindings, found under Options > Keybindings > Strikewise. The game
+<!-- Key bindings, found under Options > Keybindings > Temper. The game
      loads this file by its name; it isn't listed in the TOC. The label for
      the binding is set in UI\MainWindow.lua. -->
 <Bindings>
-	<Binding name="STRIKEWISE_RECORD" category="Strikewise">Strikewise_ToggleRecording()</Binding>
+	<Binding name="TEMPER_RECORD" category="Temper">Temper_ToggleRecording()</Binding>
 </Bindings>

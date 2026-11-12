@@ -126,7 +126,7 @@ ns.Subscribe("SETTINGS_CHANGED", LookAfterBlizzardNumbers)
 ns.OnEvent("GROUP_ROSTER_UPDATE", LookAfterBlizzardNumbers)
 
 -- The game saves that setting when it closes. Put the player's own value
--- back first, so that with Strikewise switched off or removed their
+-- back first, so that with Temper switched off or removed their
 -- damage numbers are as they left them.
 ns.OnEvent("PLAYER_LOGOUT", function()
     if ns.db and hiding then

@@ -2,7 +2,7 @@ local addonName, ns = ...
 
 -- Saved data.
 --
--- One account-wide table, StrikewiseDB, laid out like this:
+-- One account-wide table, TemperDB, laid out like this:
 --
 --   schema      version of this layout, for migrations
 --   settings    the player's options
@@ -72,10 +72,10 @@ ns.OnEvent("ADDON_LOADED", function(name)
         return
     end
 
-    if type(StrikewiseDB) ~= "table" then
-        StrikewiseDB = {}
+    if type(TemperDB) ~= "table" then
+        TemperDB = {}
     end
-    local db = StrikewiseDB
+    local db = TemperDB
 
     db.schema = db.schema or SCHEMA
     if type(db.settings) ~= "table" then

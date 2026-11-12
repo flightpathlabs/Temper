@@ -151,7 +151,7 @@ local function ShowCompareMenu(button)
 end
 
 local function Create()
-    local frame = CreateFrame("Frame", "StrikewiseWindow", UIParent, "ButtonFrameTemplate")
+    local frame = CreateFrame("Frame", "TemperWindow", UIParent, "ButtonFrameTemplate")
     frame:SetSize(WIDTH, HEIGHT)
     frame:SetPoint("CENTER")
     frame:SetFrameStrata("HIGH")
@@ -288,9 +288,8 @@ local function PrintCheck()
     end
 end
 
-SLASH_STRIKEWISE1 = "/strikewise"
-SLASH_STRIKEWISE2 = "/strike"
-SlashCmdList.STRIKEWISE = function(message)
+SLASH_TEMPER1 = "/temper"
+SlashCmdList.TEMPER = function(message)
     message = strtrim(message or ""):lower()
 
     if message == "record" or message == "stop" then
@@ -304,13 +303,13 @@ SlashCmdList.STRIKEWISE = function(message)
     end
 end
 
-BINDING_NAME_STRIKEWISE_RECORD = "Start or stop recording"
+BINDING_NAME_TEMPER_RECORD = "Start or stop recording"
 
-function Strikewise_ToggleRecording()
+function Temper_ToggleRecording()
     ns.ToggleRecording()
 end
 
-function Strikewise_OnAddonCompartmentClick(_, mouseButton)
+function Temper_OnAddonCompartmentClick(_, mouseButton)
     if mouseButton == "RightButton" then
         ns.OpenOptions()
     else

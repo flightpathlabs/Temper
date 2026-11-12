@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
--- Strikewise
+-- Temper
 --
 -- Everything hangs off the private table the client hands every file in an
 -- addon (ns). Nothing here is global except the saved-variables table, the
@@ -10,7 +10,7 @@ local addonName, ns = ...
 ns.name = addonName
 
 -- What the addon is called wherever a player reads it.
-ns.TITLE = "Strikewise"
+ns.TITLE = "Temper"
 
 --- Formats a whole number the way the game does, with thousands separated.
 ---@param number number
@@ -61,7 +61,7 @@ function ns.Change(before, after)
 end
 
 --- Prints a line to chat with the addon's name in front.
---- Used for slash-command replies only. Strikewise doesn't narrate in chat.
+--- Used for slash-command replies only. Temper doesn't narrate in chat.
 function ns.Print(text, ...)
     if select("#", ...) > 0 then
         text = text:format(...)

@@ -36,22 +36,22 @@ jobs:
           echo "Built $zip"
           unzip -Z1 "$zip" > "$RUNNER_TEMP/files.txt"
 
-          if grep -v '^Strikewise/' "$RUNNER_TEMP/files.txt"; then
-            echo "::error::Everything should be under Strikewise/."
+          if grep -v '^Temper/' "$RUNNER_TEMP/files.txt"; then
+            echo "::error::Everything should be under Temper/."
             exit 1
           fi
-          if grep -E '^Strikewise/(docs/|stylua\.toml|\.)' "$RUNNER_TEMP/files.txt"; then
+          if grep -E '^Temper/(docs/|stylua\.toml|\.)' "$RUNNER_TEMP/files.txt"; then
             echo "::error::Files that are only for development got into the package."
             exit 1
           fi
 
           # Every file the TOC loads has to be there, or the game stops
           # at the first one that's missing.
-          unzip -p "$zip" Strikewise/Strikewise.toc | tr -d '\r' | tr '\' '/' \
+          unzip -p "$zip" Temper/Temper.toc | tr -d '\r' | tr '\' '/' \
             | grep -v -e '^#' -e '^$' > "$RUNNER_TEMP/listed.txt"
           missing=0
           while read -r file; do
-            if ! grep -qxF "Strikewise/$file" "$RUNNER_TEMP/files.txt"; then
+            if ! grep -qxF "Temper/$file" "$RUNNER_TEMP/files.txt"; then
               echo "::error::The TOC lists $file, which isn't in the package."
               missing=1
             fi

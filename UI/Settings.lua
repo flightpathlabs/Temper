@@ -1,11 +1,11 @@
 local _, ns = ...
 
--- Strikewise's page in the game's own Options window.
+-- Temper's page in the game's own Options window.
 --
 -- Everything works without a visit here. These are for people who want to
 -- change how the numbers look or where they sit.
 
-local PREFIX = "Strikewise_"
+local PREFIX = "Temper_"
 
 -- Changing how numbers look shows a few samples, so the choice can be
 -- judged without going to find something to hit.
@@ -63,7 +63,7 @@ end
 -- Our page, once it exists. Kept so it can be opened directly.
 local category
 
---- Opens the game's Options window on Strikewise's page.
+--- Opens the game's Options window on Temper's page.
 function ns.OpenOptions()
     -- The Options window is one of the panels the game won't let addons
     -- open during combat.
@@ -156,15 +156,15 @@ ns.OnEvent("PLAYER_LOGIN", function()
         "hideBlizzardNumbers",
         "Hide the game's own damage numbers while mine are showing",
         "Otherwise every hit is shown twice. Your own setting is put back whenever "
-            .. "Strikewise steps aside, and when you log out."
+            .. "Temper steps aside, and when you log out."
     )
 
     AddCheckbox(
         category,
         "recordButton",
         "Show the Record button",
-        "You can also record with a key (Options > Keybindings > Strikewise), "
-            .. "with /strike record, or from the Strikewise window."
+        "You can also record with a key (Options > Keybindings > Temper), "
+            .. "with /temper record, or from the Temper window."
     )
 
     Settings.RegisterAddOnCategory(category)

@@ -5,7 +5,7 @@ local _, ns = ...
 -- A fight runs from the moment the game says the player is in combat to
 -- the moment it says they aren't. The game keeps its own tally of damage
 -- for each fight, ability by ability, and lets addons read it the instant
--- the fight is over. That tally is where every damage figure in Strikewise
+-- the fight is over. That tally is where every damage figure in Temper
 -- comes from. The counts of hits, crits and casts come from Hits.lua.
 --
 -- A saved fight looks like this:

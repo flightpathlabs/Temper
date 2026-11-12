@@ -8,7 +8,7 @@ name: Release
 # Work happens on dev. main only moves when there's a release, so what's on
 # main is always what the addon sites are handing out.
 #
-#   1. On dev, set "## Version" in Strikewise.toc and rename the changelog's
+#   1. On dev, set "## Version" in Temper.toc and rename the changelog's
 #      "Unreleased" section to that version.
 #   2. Merge dev into main.
 #   3. git tag v<version> && git push origin main v<version>
@@ -45,7 +45,7 @@ jobs:
       - name: Check the tag against the TOC
         run: |
           version="${GITHUB_REF_NAME#v}"
-          toc="$(sed -n 's/^## Version: *//p' Strikewise.toc | tr -d '\r')"
+          toc="$(sed -n 's/^## Version: *//p' Temper.toc | tr -d '\r')"
           if [ "$version" != "$toc" ]; then
             echo "::error::Tag $GITHUB_REF_NAME doesn't match the TOC, which says $toc."
             exit 1
@@ -80,4 +80,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release edit "$GITHUB_REF_NAME" \
-            --title "Strikewise $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+            --title "Temper $VERSION" --notes-file "$RUNNER_TEMP/notes.md"

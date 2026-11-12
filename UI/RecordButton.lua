@@ -43,7 +43,7 @@ local function ShowTooltip(self)
 end
 
 --- Starts or stops a recording, and shows the analysis of one that has
---- just been stopped. Shared by the button, the key binding and /strike.
+--- just been stopped. Shared by the button, the key binding and /temper.
 function ns.ToggleRecording()
     if not ns.character then
         return
@@ -56,7 +56,7 @@ function ns.ToggleRecording()
 end
 
 local function Create()
-    button = CreateFrame("Button", "StrikewiseRecordButton", UIParent, "UIPanelButtonTemplate")
+    button = CreateFrame("Button", "TemperRecordButton", UIParent, "UIPanelButtonTemplate")
     button:SetSize(WIDTH, HEIGHT)
     button:SetFrameStrata("MEDIUM")
     button:SetClampedToScreen(true)

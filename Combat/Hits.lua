@@ -9,7 +9,7 @@ local _, ns = ...
 -- else. It can't be read, compared, added up or saved.
 --
 -- The event doesn't say who struck the blow. Alone, it can only have been
--- the player or their pet, which is why Strikewise keeps to solo play.
+-- the player or their pet, which is why Temper keeps to solo play.
 --
 -- This file passes each blow on for the lane to draw, and keeps count of
 -- hits, crits and casts for the fight record.

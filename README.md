@@ -1,7 +1,9 @@
-# Strikewise
+# Temper
 
 An addon for World of Warcraft: Forever, for players who want to know
 whether a change made them hit harder.
+
+To temper steel is to test it and make it harder. Same idea.
 
 It does two things.
 
@@ -25,18 +27,18 @@ There is nothing to set up.
 
 - **Record** is a small button on the screen. Left-click to start and stop,
   right-click to open the window, drag to move it. There's a key binding
-  too, under Options > Keybindings > Strikewise.
-- **`/strike`** opens the window. `/strike record` starts and stops a
+  too, under Options > Keybindings > Temper.
+- **`/temper`** opens the window. `/temper record` starts and stops a
   recording.
 - Fights are kept even when you aren't recording, under "Recent fights", so
   there's something to compare with after the fact.
 - To compare, open a recording and choose **Compare with...**. Stopping a
   recording compares it with the one before automatically.
-- Options are in the game's own Options window, under AddOns > Strikewise.
+- Options are in the game's own Options window, under AddOns > Temper.
 
 ## What it can and can't know
 
-Forever closes the combat log to addons, so Strikewise works from what the
+Forever closes the combat log to addons, so Temper works from what the
 game still offers. That shapes what it shows.
 
 | It knows exactly | Because |
@@ -58,13 +60,13 @@ still counts in the analysis; it just isn't drawn.
 
 ## Blizzard's damage numbers
 
-While Strikewise's column is showing, it switches the game's own damage
+While Temper's column is showing, it switches the game's own damage
 numbers off so each hit isn't shown twice, and puts your setting back when
 it steps aside and when you log out. You can turn this off in the options.
 
-Your setting is kept in Strikewise's saved data, so it's put back
+Your setting is kept in Temper's saved data, so it's put back
 correctly even if the game closed badly while the numbers were off. If you
-remove Strikewise straight after a crash and find them missing, turn them
+remove Temper straight after a crash and find them missing, turn them
 back on under Options > Combat.
 
 ## Working on it
@@ -76,7 +78,7 @@ stylua .
 luacheck .
 ```
 
-Every Lua file has to be listed in `Strikewise.toc`, in an order where each
+Every Lua file has to be listed in `Temper.toc`, in an order where each
 file only uses what the ones above it define. The game says nothing about
 a file that exists but isn't listed.
 

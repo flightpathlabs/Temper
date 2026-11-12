@@ -16,7 +16,7 @@
 *.mp3  binary
 
 # Left out of the zip a release builds. These are for people working on
-# Strikewise, and the game has no use for them.
+# Temper, and the game has no use for them.
 .github         export-ignore
 docs            export-ignore
 .editorconfig   export-ignore

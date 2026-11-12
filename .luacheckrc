@@ -1,4 +1,4 @@
--- Luacheck configuration for Strikewise.
+-- Luacheck configuration for Temper.
 -- Run from the repo root:  luacheck .
 --
 -- There is no maintained luacheck "std" for the 12.x / Forever API, so we
@@ -22,19 +22,18 @@ ignore = {
     "212/event", -- event handlers often ignore the event name
 }
 
--- The only globals Strikewise creates: its saved data, slash command, key
+-- The only globals Temper creates: its saved data, slash command, key
 -- binding and the addon-list click handler named in the TOC.
 globals = {
     "SlashCmdList",
     "UISpecialFrames",
 
     -- Ours
-    "StrikewiseDB",
-    "SLASH_STRIKEWISE1",
-    "SLASH_STRIKEWISE2",
-    "Strikewise_OnAddonCompartmentClick",
-    "Strikewise_ToggleRecording",
-    "BINDING_NAME_STRIKEWISE_RECORD",
+    "TemperDB",
+    "SLASH_TEMPER1",
+    "Temper_OnAddonCompartmentClick",
+    "Temper_ToggleRecording",
+    "BINDING_NAME_TEMPER_RECORD",
 }
 
 read_globals = {

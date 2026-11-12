@@ -2,7 +2,7 @@ local _, ns = ...
 
 -- Two small message buses.
 --
--- Game events come from the client. Messages are how Strikewise's own parts
+-- Game events come from the client. Messages are how Temper's own parts
 -- tell each other that something changed, so the part that records a fight
 -- can say so without knowing that a window exists to redraw.
 
@@ -43,7 +43,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
     Dispatch(eventHandlers[event], ...)
 end)
 
---- Calls handler whenever another part of Strikewise publishes a message.
+--- Calls handler whenever another part of Temper publishes a message.
 ---@param message string
 ---@param handler fun(...)
 function ns.Subscribe(message, handler)

@@ -1,11 +1,11 @@
 ## Interface: 16001
-## Title: Strikewise
+## Title: Temper
 ## Notes: Tidy damage numbers by your target, and a record of your fights you can compare: fight, change something, fight again, see what it did.
 ## Version: 0.1.0
 ## Author: Flight Path Labs
-## SavedVariables: StrikewiseDB
+## SavedVariables: TemperDB
 ## IconTexture: Interface\Icons\Ability_MeleeDamage
-## AddonCompartmentFunc: Strikewise_OnAddonCompartmentClick
+## AddonCompartmentFunc: Temper_OnAddonCompartmentClick
 ## X-License: MIT
 
 # Load order matters: each group only uses what the groups above it define.
