@@ -1,0 +1,33 @@
+## Interface: 16001
+## Title: Strikewise
+## Notes: Tidy damage numbers by your target, and a record of your fights you can compare: fight, change something, fight again, see what it did.
+## Version: 0.1.0
+## Author: Flight Path Labs
+## SavedVariables: StrikewiseDB
+## IconTexture: Interface\Icons\Ability_MeleeDamage
+## AddonCompartmentFunc: Strikewise_OnAddonCompartmentClick
+## X-License: MIT
+
+# Load order matters: each group only uses what the groups above it define.
+
+Core\Init.lua
+Core\Events.lua
+Core\Database.lua
+
+Combat\Sources.lua
+Combat\Gear.lua
+Combat\Hits.lua
+Combat\Fights.lua
+
+Record\Recorder.lua
+Record\Summary.lua
+Record\Compare.lua
+
+Text\Motion.lua
+Text\Lane.lua
+Text\Feed.lua
+
+UI\RecordButton.lua
+UI\Card.lua
+UI\MainWindow.lua
+UI\Settings.lua

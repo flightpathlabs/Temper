@@ -1,0 +1,6 @@
+<!-- Key bindings, found under Options > Keybindings > Strikewise. The game
+     loads this file by its name; it isn't listed in the TOC. The label for
+     the binding is set in UI\MainWindow.lua. -->
+<Bindings>
+	<Binding name="STRIKEWISE_RECORD" category="Strikewise">Strikewise_ToggleRecording()</Binding>
+</Bindings>

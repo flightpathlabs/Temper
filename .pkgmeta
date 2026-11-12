@@ -1,0 +1,14 @@
+package-as: Strikewise
+
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
+enable-nolib-creation: no
+
+ignore:
+  - docs
+  - stylua.toml
+  - .github
+  - .editorconfig
+  - .luacheckrc

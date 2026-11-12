@@ -1,0 +1,27 @@
+# Keep line endings predictable no matter who checks the repo out.
+* text=auto eol=lf
+
+*.lua  text eol=lf
+*.toc  text eol=lf
+*.xml  text eol=lf
+*.md   text eol=lf
+*.ps1  text eol=crlf
+
+# Art and audio the game loads directly.
+*.tga  binary
+*.blp  binary
+*.png  binary
+*.ttf  binary
+*.ogg  binary
+*.mp3  binary
+
+# Left out of the zip a release builds. These are for people working on
+# Strikewise, and the game has no use for them.
+.github         export-ignore
+docs            export-ignore
+.editorconfig   export-ignore
+.gitattributes  export-ignore
+.gitignore      export-ignore
+.luacheckrc     export-ignore
+.pkgmeta        export-ignore
+stylua.toml     export-ignore

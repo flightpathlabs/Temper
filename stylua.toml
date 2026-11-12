@@ -1,0 +1,18 @@
+# StyLua formatter settings, shared by every addon in the workspace.
+# Run from the repo root:  stylua .
+#
+# WoW embeds Lua 5.1, so we pin the parser to that dialect. Otherwise StyLua
+# will happily accept newer syntax (goto, integer division, etc.) that the
+# game client rejects at load time.
+syntax = "Lua51"
+
+column_width = 100
+line_endings = "Unix"
+indent_type = "Spaces"
+indent_width = 4
+quote_style = "AutoPreferDouble"
+call_parentheses = "Always"
+collapse_simple_statement = "Never"
+
+[sort_requires]
+enabled = false
