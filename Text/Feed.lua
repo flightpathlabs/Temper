@@ -111,6 +111,11 @@ end
 -- True while it's us holding Blizzard's numbers off, this session.
 local hiding = false
 
+-- Whether "off" found in the game's setting can be taken as the player's
+-- own choice. Not at first: straight after login it might be our doing,
+-- left behind when the game closed badly.
+local offIsTheirs = false
+
 --- Puts Blizzard's numbers back the way the player had them.
 local function PutBack()
     local db = ns.db
@@ -132,10 +137,10 @@ local function LookAfterBlizzardNumbers()
     if wantHidden and not hiding then
         -- What the player has it set to is remembered in the saved data
         -- and kept there, so it survives the game closing badly while the
-        -- numbers are off. "0" found here could be that, so it only
-        -- counts as the player's choice when there's nothing on record.
+        -- numbers are off. "0" found at login could be that, so then it
+        -- only counts as the player's choice if there's nothing on record.
         local theirs = GetCVar(BLIZZARD_DAMAGE_TEXT)
-        if theirs ~= "0" or db.blizzardDamageText == nil then
+        if theirs ~= "0" or offIsTheirs or db.blizzardDamageText == nil then
             db.blizzardDamageText = theirs or "1"
         end
 
@@ -144,6 +149,10 @@ local function LookAfterBlizzardNumbers()
     elseif not wantHidden and hiding then
         PutBack()
     end
+
+    -- From here on, whenever we aren't hiding them, the setting is
+    -- whatever the player has made it.
+    offIsTheirs = true
 end
 
 ns.Subscribe("DATABASE_READY", LookAfterBlizzardNumbers)

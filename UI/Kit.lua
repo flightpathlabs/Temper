@@ -264,6 +264,42 @@ function Kit.Bar(parent)
     return row
 end
 
+--- Dresses a list row the way the auction house dresses its own: the
+--- game's glow under the mouse, and its band across a row that's chosen.
+--- Call row.chosen:SetShown(...) to mark it.
+function Kit.DressRow(row)
+    row.chosen = row:CreateTexture(nil, "BACKGROUND")
+    row.chosen:SetAtlas("auctionhouse-ui-row-select")
+    row.chosen:SetAllPoints()
+    row.chosen:Hide()
+
+    row.hover = row:CreateTexture(nil, "HIGHLIGHT")
+    row.hover:SetAtlas("auctionhouse-ui-row-highlight")
+    row.hover:SetAllPoints()
+end
+
+--- A sunken panel in the game's style, for setting a list apart from the
+--- page beside it. Anchor it around whatever it should frame.
+function Kit.Inset(parent)
+    return CreateFrame("Frame", nil, parent, "InsetFrameTemplate")
+end
+
+--- A small "i" that explains something when the mouse is over it, in
+--- place of a paragraph of instructions that's always on show.
+---@param lines table  list of strings
+function Kit.HelpButton(parent, title, lines)
+    local button = CreateFrame("Button", nil, parent)
+    button:SetSize(18, 18)
+
+    local icon = Kit.Icon(button, 18, "tip")
+    icon:SetAllPoints()
+
+    Kit.Tooltip(button, title, function()
+        return lines
+    end)
+    return button
+end
+
 --- One of the game's ordinary buttons.
 function Kit.Button(parent, text, width, onClick)
     local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")

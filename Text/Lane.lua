@@ -55,7 +55,8 @@ local SIDES = {
 local SPARE_HEIGHT = 140
 
 -- A nameplate can vanish between a number being pinned and being moved,
--- which is no reason to give up on nameplates. This many refusals is.
+-- which is no reason to give up on nameplates. This many refusals in a
+-- row, with no success between them, is.
 local REFUSALS_ALLOWED = 3
 
 -- A frame of our own to own the text, sitting under the game's windows.
@@ -97,6 +98,11 @@ local function Put(number, x, y, alpha, scale)
     text:SetTextScale(scale * FONT_SCALE)
 end
 
+local function ShowIcon(number, texture)
+    number.icon:SetTexture(texture)
+    number.icon:Show()
+end
+
 local function PutIcon(number, alpha, scale)
     local size = LINE_HEIGHT * ICON_SIZE * scale
     number.icon:SetSize(size, size)
@@ -122,6 +128,9 @@ local function Place(number, now, elapsed)
 
     local x, y = number.x + dx, number.y + dy + number.lift
     local ok, problem = pcall(Put, number, x, y, alpha, scale)
+    if ok then
+        refusals = 0
+    end
 
     -- The icon is handled apart from the number, so that if the client
     -- objects to it the numbers themselves carry on as before.
@@ -267,13 +276,15 @@ function Lane.Show(value, look, unit)
     number.text:SetTextColor(look.r, look.g, look.b)
     number.text:Show()
 
-    number.hasIcon = wantsIcon
-    if number.hasIcon then
-        number.icon:SetTexture(look.icon)
-    end
-    number.icon:SetShown(number.hasIcon)
-
+    -- On the books before anything else can go wrong, so that whatever
+    -- happens the number is taken down again when its time is up.
     table.insert(showing, number)
+
+    number.hasIcon = wantsIcon and pcall(ShowIcon, number, look.icon)
+    if not number.hasIcon then
+        pcall(number.icon.Hide, number.icon)
+    end
+
     Place(number, number.start, 0)
     holder:Show()
 end
