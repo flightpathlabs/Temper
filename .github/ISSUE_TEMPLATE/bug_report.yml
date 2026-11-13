@@ -1,0 +1,78 @@
+name: Something went wrong
+description: An error, a figure that looks wrong, or numbers in the wrong place.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. The quickest way to a fix is the report
+        Temper writes for you: type `/temper report` in game (or press Report
+        a problem on the About tab), press Select all, then Ctrl+C, and paste
+        it into the box below.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you saw, and what you expected to see instead.
+      placeholder: My numbers show in the middle of the screen, even with enemy nameplates on.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: What were you doing?
+      description: What you were fighting and what you'd just used or clicked, if you remember. "It just appeared" is a fine answer.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: where
+    attributes:
+      label: Which part of Temper?
+      multiple: true
+      options:
+        - The damage numbers
+        - The fight panel
+        - The healing panel
+        - The buff icons or the note above the panel
+        - The ability alert
+        - The combo points
+        - Fights
+        - Healing and defence
+        - Experiments
+        - Progress
+        - About or the problem report
+        - Options or the example enemy
+        - Not sure
+    validations:
+      required: false
+
+  - type: textarea
+    id: report
+    attributes:
+      label: The report from /temper report
+      description: |
+        Paste the whole thing. It lists versions, your settings, what /temper check says and which other combat addons are loaded.
+        It has no character names or realm in it, and you can read it before you send it.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: error
+    attributes:
+      label: An error message, if the game showed one
+      description: Temper doesn't keep its errors, so if the game's error window showed one, copy it here.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: A screenshot, if it's something you can see
+      description: Drag the image into this box.
+    validations:
+      required: false

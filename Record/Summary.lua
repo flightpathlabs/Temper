@@ -114,39 +114,164 @@ local function FinishSplit(split)
     end
 end
 
+-- The typical fight ---------------------------------------------------------
+
+-- All the damage over all the time is a fair figure for one fight, but
+-- over many it's easily thrown. A few seconds on a critter can do more
+-- damage a second than a long fight with something that hits back, and
+-- one lucky fight can lift a whole evening. So a set of fights is also
+-- given a typical figure, worked out in two steps.
+--
+-- First, fights that would only mislead are left out: those that don't
+-- count towards bests (left out by hand, over in under six seconds, or
+-- won mostly by an item; see Progress.WhyNotCounted), and those against
+-- critters or enemies so far below the player that the game gives no
+-- experience for them (Foes.IsTrivial).
+--
+-- Then each fight that's left is taken at its own DPS, long or short, and
+-- from three fights up the highest and the lowest are set aside before
+-- the rest are averaged: one from each end, and from twenty fights up a
+-- tenth from each end. With three or four fights that leaves the middle
+-- one or two, which is the median. With one or two fights there's nothing
+-- to set aside, and the figure is just their average.
+
+-- From this many fights up, the highest and lowest are set aside.
+local FEWEST_TO_TRIM = 3
+
+-- The share set aside from each end, once that comes to more than one.
+local TRIMMED_FROM_EACH_END = 0.1
+
+--- The rule in a sentence, for a tooltip beside any typical figure.
+Summary.TYPICAL_RULE = "Very short fights, fights won mostly by an item, fights against "
+    .. "critters or enemies far below your level, and any you left out aren't counted. "
+    .. "From three fights up, the highest and lowest of the rest are set aside, so one "
+    .. "fluke can't tip it."
+
+--- Whether a fight goes towards a typical figure. Progress and Foes both
+--- load after this file, so they're looked up when they're wanted.
+local function GoesTowardsTypical(fight)
+    if (fight.length or 0) <= 0 then
+        return false
+    end
+
+    local progress = ns.Progress
+    if progress and progress.WhyNotCounted(fight) then
+        return false
+    end
+
+    -- Foes is missing only straight after an update, until the game is
+    -- restarted and finds the new file.
+    local foes = ns.Foes
+    if foes and foes.IsTrivial and foes.IsTrivial(fight) then
+        return false
+    end
+    return true
+end
+
+--- The average of a list of DPS figures once the extremes are set aside.
+---@param rates table  one figure per fight; sorted here
+---@return number|nil dps  nil for an empty list
+---@return string how  how it was reached, for a tooltip
+---@return number trimmed  how many were set aside from each end
+local function MiddleAverage(rates)
+    local count = #rates
+    if count == 0 then
+        return nil, "no fights", 0
+    end
+    table.sort(rates)
+
+    local trimmed = 0
+    if count >= FEWEST_TO_TRIM then
+        trimmed = math.max(1, math.floor(count * TRIMMED_FROM_EACH_END))
+    end
+
+    local total = 0
+    for index = 1 + trimmed, count - trimmed do
+        total = total + rates[index]
+    end
+    local kept = count - 2 * trimmed
+
+    local how
+    if count == 1 then
+        how = "1 fight"
+    elseif trimmed == 0 then
+        how = ("average of %d fights"):format(count)
+    elseif kept == 1 then
+        how = ("median of %d fights"):format(count)
+    else
+        how = ("middle %d of %d fights"):format(kept, count)
+    end
+    return total / kept, how, trimmed
+end
+
+--- A typical DPS across a set of fights: see the top of this section for
+--- how it's reached.
+---@param fights table|nil  list of fights, in any order
+---@return table typical:
+---   dps       the figure; nil when no fight is left to go by
+---   counted   how many fights it went by
+---   left      how many were left out before that; counted + left is
+---             every fight in the set
+---   trimmed   of those counted, how many were set aside from each end
+---   how       a few words for a tooltip: "middle 8 of 10 fights"
+function Summary.Typical(fights)
+    local rates, left = {}, 0
+    for _, fight in ipairs(fights or {}) do
+        if GoesTowardsTypical(fight) then
+            table.insert(rates, fight.damage / fight.length)
+        else
+            left = left + 1
+        end
+    end
+
+    local dps, how, trimmed = MiddleAverage(rates)
+    return { dps = dps, counted = #rates, left = left, trimmed = trimmed, how = how }
+end
+
+--- The DPS a set of fights is shown by: its typical figure when there are
+--- several fights and any of them count, and otherwise all the damage over
+--- all the time, which for a single fight is simply its own DPS.
+---@param summary table  from Summary.Of
+---@return number dps
+---@return boolean typical  true when it's the typical figure
+function Summary.DpsOf(summary)
+    if summary.fights > 1 and summary.typical.dps then
+        return summary.typical.dps, true
+    end
+    return summary.dps, false
+end
+
 -- Fewer fights than this and "the earlier half" is one or two fights.
 local FEWEST_FOR_A_TREND = 6
 
---- DPS in the earlier and the later half of a set of fights.
+--- Typical DPS in the earlier and the later half of a set of fights. Only
+--- the fights that go towards a typical figure are halved, so that a run
+--- of critters at one end can't make a trend of its own.
 ---@return table|nil  { early, late }; nil with too few fights to halve
 local function Trend(fights)
-    if not fights or #fights < FEWEST_FOR_A_TREND then
-        return nil
-    end
-
     local ordered = {}
-    for _, fight in ipairs(fights) do
-        table.insert(ordered, fight)
+    for _, fight in ipairs(fights or {}) do
+        if GoesTowardsTypical(fight) then
+            table.insert(ordered, fight)
+        end
+    end
+    if #ordered < FEWEST_FOR_A_TREND then
+        return nil
     end
     table.sort(ordered, function(a, b)
         return (a.at or 0) < (b.at or 0)
     end)
 
     local half = math.floor(#ordered / 2)
-    local function Rate(from, to)
-        local damage, seconds = 0, 0
+    local function Typical(from, to)
+        local rates = {}
         for index = from, to do
-            damage = damage + ordered[index].damage
-            seconds = seconds + ordered[index].length
+            table.insert(rates, ordered[index].damage / ordered[index].length)
         end
-        return seconds > 0 and damage / seconds or nil
+        return (MiddleAverage(rates))
     end
 
-    local early, late = Rate(1, half), Rate(#ordered - half + 1, #ordered)
-    if not early or not late then
-        return nil
-    end
-    return { early = early, late = late }
+    return { early = Typical(1, half), late = Typical(#ordered - half + 1, #ordered) }
 end
 
 --- Sums up a set of fights.
@@ -180,8 +305,11 @@ end
 ---               whose rest beforehand is known, the damage a minute once
 ---               that rest is counted
 ---   resource    what the player fights with: "MANA", "ENERGY"...
----   trend       { early, late }: DPS in the earlier and later half of
----               the fights, when there are enough to halve; else nil
+---   typical     from Summary.Typical: a DPS that leaves out flukes and
+---               easy fights; dps is the plain total over the total time
+---   trend       { early, late }: typical DPS in the earlier and later
+---               half of the fights, when there are enough to halve;
+---               else nil
 ---   starved     times an ability was tried without the mana or energy
 ---   sizes       how hard blows landed, where that could be worked out;
 ---               all of it an estimate. nil if none could be:
@@ -350,6 +478,7 @@ function Summary.Of(fights)
         summary.rested = rested
     end
 
+    summary.typical = Summary.Typical(fights)
     summary.trend = Trend(fights)
 
     if newest then

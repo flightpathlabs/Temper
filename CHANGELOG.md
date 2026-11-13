@@ -7,8 +7,8 @@ First version.
 **The numbers**
 
 - Your hits appear in a column by each enemy's nameplate and follow it. By
-  default they're a rising stream: small numbers climbing straight up at
-  a steady pace, like a scrolling log.
+  default they sit to the right of it, each with its ability's icon, and
+  step up a line as new ones arrive, like a short log.
 - Numbers show above your target and any other enemy that's fighting you,
   each with a column of its own.
 - Choose how they move (rising stream, stay and step up, arc away, shrink
@@ -63,6 +63,13 @@ First version.
   silent, except that a fight begun with the fishing pole turns it red and
   plays your alert sound. Both can be switched off.
 
+- Combo points as small pips just under your target's nameplate, lit as
+  you build them, for rogues and druids in cat form.
+- Numbers on an enemy that dies or goes out of sight go with it, rather
+  than moving to the next enemy the game gives its nameplate to.
+- Both panels come in a normal and a large size, and the buff icons
+  along the bottom are a little larger.
+
 **Fights**
 
 - Every solo fight is kept, up to 200 for each character, and listed with
@@ -104,9 +111,9 @@ First version.
   and how much of it you healed back, a bar for each healing ability and
   each thing that hurt you, and a few plain sentences on what to work on.
 - A healing panel, a twin of the fight panel, shows your healing and HPS
-  live during a fight and the last fight's figures in between. It's off
-  to begin with: turn it on from the fight panel's right-click menu or
-  the options.
+  live during a fight and the last fight's figures in between. It's on
+  to begin with, and can be put away from the fight panel's right-click
+  menu or the options.
 - Only healing done during a fight is counted. Fights recorded before
   this version have no healing on record.
 - **Who healed you.** The tab shows a bar each for you, your pet and
@@ -144,6 +151,30 @@ First version.
   show in a fight too. These have no sound yet.
 - `/temper check` says which of your class's alerts this client lets
   Temper watch, and how.
+
+**Your enemies**
+
+- Each fight now keeps who you fought: the target's level and whether it
+  was elite, rare or a boss, and every enemy you struck.
+- The list of fights names each by its boss, its enemy or its group
+  ("Greater Tarantula ×3", "Group of 4"), with the level and a mark for
+  elite, rare or boss beside it, and the fight's length where the time
+  of day was. A search box at its top finds fights by enemy name.
+
+**A typical DPS**
+
+- Wherever fights are averaged (several fights on the Fights page,
+  comparisons, experiments' verdicts, the day-by-day chart, the panel's
+  session average and its arrow), the figure is a typical one: fights against critters and grey
+  enemies, very short ones and the highest and lowest are left out, and
+  it says how many it went by.
+
+**About and problems**
+
+- An About tab: what Temper is for, how to get the most from it, answers
+  to the usual questions, the commands and the small print.
+- Report a problem gathers what a report needs (nothing personal) into a
+  box to copy, with the address to paste it at. Also `/temper report`.
 
 **Comparing**
 

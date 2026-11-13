@@ -107,6 +107,10 @@ local SPARE_HEIGHT = 140
 -- row, with no success between them, is.
 local REFUSALS_ALLOWED = 3
 
+local IsSecret = issecretvalue or function()
+    return false
+end
+
 -- A frame of our own to own the text, sitting under the game's windows.
 -- It's shown only while there are numbers to move.
 local holder = CreateFrame("Frame", nil, UIParent)
@@ -548,3 +552,23 @@ function Lane.Clear(stand)
         end
     end
 end
+
+-- The game keeps a handful of nameplates and hands them from one enemy to
+-- the next. When an enemy dies or goes out of sight, its nameplate is
+-- taken back, and soon given to another. Numbers still pinned to it would
+-- ride along to that enemy, which they have nothing to do with. So they
+-- go when the nameplate is taken back, and anything left over goes when
+-- it's handed out again.
+local function LetGoOf(unit)
+    if IsSecret(unit) or type(unit) ~= "string" then
+        return
+    end
+
+    local found, plate = pcall(C_NamePlate.GetNamePlateForUnit, unit)
+    if found and plate then
+        Lane.Clear(plate)
+    end
+end
+
+ns.OnEvent("NAME_PLATE_UNIT_REMOVED", LetGoOf)
+ns.OnEvent("NAME_PLATE_UNIT_ADDED", LetGoOf)

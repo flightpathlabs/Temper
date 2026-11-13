@@ -33,6 +33,7 @@ Record\Findings.lua
 Record\Healing.lua
 Record\Experiments.lua
 Record\Progress.lua
+Record\Foes.lua
 
 Text\Motion.lua
 Text\Lane.lua
@@ -44,12 +45,15 @@ UI\Widget.lua
 UI\HealWidget.lua
 UI\ProcAlert.lua
 UI\ReadyAlert.lua
+UI\ComboPoints.lua
 UI\Timeline.lua
 UI\Card.lua
 UI\FightsTab.lua
 UI\ExperimentsTab.lua
 UI\ProgressTab.lua
 UI\HealingTab.lua
+UI\Report.lua
+UI\AboutTab.lua
 UI\MainWindow.lua
 UI\Example.lua
 UI\Settings.lua

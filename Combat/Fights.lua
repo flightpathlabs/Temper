@@ -85,6 +85,20 @@ local _, ns = ...
 --             to each school of magic that hit them. Each only when the
 --             game would say (see Mitigation.lua, which also does the
 --             sums: nothing worked out from these is saved)
+--   classification  the target's standing as the fight began, in the game's
+--             own words: "normal", "elite", "rare", "rareelite",
+--             "worldboss", "minus" (a lesser creature) or "trivial". Only
+--             when the target was an enemy
+--   foes      list of { name, level, classification, count, boss }: the
+--             enemies the player struck, one entry for each kind (the same
+--             name, level and classification), with how many of that kind
+--             there were; the biggest group first. level is nil when the
+--             game hid it (a skull), name when it withheld it, and boss is
+--             set on one the game calls a boss (see Hits.lua for how each
+--             enemy is told apart and counted once)
+--   greyRange how many levels below the player an enemy could be before
+--             the game showed its level in grey, as worth no experience,
+--             at the player's level then (see Record\Foes.lua)
 
 local Fights = {}
 ns.Fights = Fights
@@ -121,6 +135,15 @@ local function Readable(value)
         return nil
     end
     return value
+end
+
+--- What a reading of the game gives, or nil if it fails.
+local function Try(read)
+    local ok, value = pcall(read)
+    if ok then
+        return value
+    end
+    return nil
 end
 
 --- What the game knows about an ability beyond its name: its icon, its
@@ -169,6 +192,22 @@ local function PowerNow()
         return nil
     end
     return math.floor(now / most * 100 + 0.5) / 100, token
+end
+
+--- What the game calls the target's standing: "elite", "rare" and so on.
+--- Nil if it won't say.
+local function Classification()
+    local classification = UnitClassification("target")
+    if IsSecret(classification) or type(classification) ~= "string" or classification == "" then
+        return nil
+    end
+    return classification
+end
+
+--- How far below the player an enemy can be before the game greys its
+--- level out. The nameplates colour levels by the same number.
+local function GreyRange()
+    return Readable(C_QuestLog.GetTrivialRange())
 end
 
 --- Adds one source's rows from the game's tally to our list.
@@ -378,16 +417,17 @@ ns.OnEvent("PLAYER_REGEN_DISABLED", function()
         power, powerKind = nil, nil
     end
 
-    -- The level of what's being fought, if it's an enemy at all: combat
-    -- can start with a friend targeted. A skull-level enemy reports its
-    -- level as -1, which tells us nothing.
-    local enemyLevel
+    -- The level and standing of what's being fought, if it's an enemy at
+    -- all: combat can start with a friend targeted. A skull-level enemy
+    -- reports its level as -1, which tells us nothing.
+    local enemyLevel, classification
     local hostile = UnitCanAttack("player", "target")
     if not IsSecret(hostile) and hostile then
         enemyLevel = Readable(UnitLevel("target"))
         if enemyLevel and enemyLevel < 1 then
             enemyLevel = nil
         end
+        classification = Try(Classification)
     end
 
     current = {
@@ -395,6 +435,7 @@ ns.OnEvent("PLAYER_REGEN_DISABLED", function()
         at = GetServerTime(),
         target = target,
         enemyLevel = enemyLevel,
+        classification = classification,
         rest = rest,
         power = power,
         powerKind = powerKind,
@@ -429,7 +470,7 @@ ns.OnEvent("PLAYER_REGEN_ENABLED", function()
     current = nil
     lastEnd = GetTime()
 
-    local tally, casts, timeline, blows = ns.Hits.Finish(began.start)
+    local tally, casts, timeline, blows, foes = ns.Hits.Finish(began.start)
 
     -- With anyone else around, the hits on the target aren't all ours.
     -- The game still made a tally for the fight, so note its number: a
@@ -463,9 +504,12 @@ ns.OnEvent("PLAYER_REGEN_ENABLED", function()
         starved = tally.starved > 0 and tally.starved or nil,
         target = began.target,
         enemyLevel = began.enemyLevel,
+        classification = began.classification,
+        foes = foes and foes[1] and foes or nil,
         level = UnitLevel("player"),
+        greyRange = Try(GreyRange),
         weapons = ns.Weapons.Skills(),
-        resource = select(2, pcall(PowerKind)) or nil,
+        resource = Try(PowerKind),
         timeline = timeline,
         rest = began.rest and math.floor(began.rest + 0.5),
         power = PowerSpent(began),

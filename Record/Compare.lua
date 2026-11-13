@@ -27,6 +27,11 @@ end
 ---   was, is         the two summaries
 ---   dps, perFight   each { before, after, change }, where change is a
 ---                   fraction of before, or nil
+---                   dps is each set's as the page shows it (see
+---                   Summary.DpsOf), and also has typicalBefore and
+---                   typicalAfter, true where that's a typical figure,
+---                   and fightsBefore and fightsAfter, how many fights
+---                   each figure went by
 ---   critRate        { before, after, points }, where points is how far
 ---                   the rate itself moved: 0.02 from 10% to 12%
 ---   abilities       by "kind..id": { before, after, change } of damage a
@@ -41,10 +46,19 @@ function Compare.Between(before, after)
         return { before = a, after = b, change = ns.Change(a, b) }
     end
 
+    -- DPS is compared the way each set is shown, typical where it has a
+    -- typical figure, so the arrow agrees with the figures beside it.
+    local dpsBefore, typicalBefore = ns.Summary.DpsOf(was)
+    local dpsAfter, typicalAfter = ns.Summary.DpsOf(is)
+    local dps = Pair(dpsBefore, dpsAfter)
+    dps.typicalBefore, dps.typicalAfter = typicalBefore, typicalAfter
+    dps.fightsBefore = typicalBefore and was.typical.counted or was.fights
+    dps.fightsAfter = typicalAfter and is.typical.counted or is.fights
+
     local comparison = {
         was = was,
         is = is,
-        dps = Pair(was.dps, is.dps),
+        dps = dps,
         critRate = {
             before = was.critRate,
             after = is.critRate,

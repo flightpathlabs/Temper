@@ -256,6 +256,21 @@ local function TimeWithoutAnAbility(summary)
     return share >= MUCH_TIME_WITHOUT_AN_ABILITY and share or nil
 end
 
+--- How the sentence comparing DPS names its two figures. Each says
+--- "typical" where it is one (see Summary.DpsOf); when both are, once is
+--- enough.
+---@param dps table  comparison.dps from Compare.Between
+---@return string yours  "your typical DPS"
+---@return string earlier  "in the earlier fights"
+local function DpsWords(dps)
+    local yours = dps.typicalAfter and "your typical DPS" or "your DPS"
+    if dps.typicalBefore == dps.typicalAfter then
+        return yours, "in the earlier fights"
+    end
+    local earlier = dps.typicalBefore and "your typical DPS" or "your DPS"
+    return yours, earlier .. " in the earlier fights"
+end
+
 --- A few sentences about a set of fights.
 ---@param summary table  from Summary.Of
 ---@param comparison table|nil  from Compare.Between, when comparing
@@ -280,18 +295,26 @@ function Findings.For(summary, comparison)
     if comparison and comparison.dps.change then
         most = MOST_ABOUT_CHANGE
 
-        local change = comparison.dps.change
+        local dps = comparison.dps
+        local change = dps.change
         local percent = math.floor(math.abs(change) * 100 + 0.5)
+        local yours, earlier = DpsWords(dps)
         if percent == 0 then
-            Say("tip", "Overall, your DPS is the same as in the earlier fights.")
+            Say("tip", "Overall, %s is the same as %s.", yours, earlier)
         elseif change > 0 then
-            Say("good", "Overall, your DPS is %d%% higher than in the earlier fights.", percent)
+            Say("good", "Overall, %s is %d%% higher than %s.", yours, percent, earlier)
         else
-            Say("warning", "Overall, your DPS is %d%% lower than in the earlier fights.", percent)
+            Say("warning", "Overall, %s is %d%% lower than %s.", yours, percent, earlier)
         end
 
-        if summary.fights < FAIR_SAMPLE or comparison.was.fights < FAIR_SAMPLE then
-            Say("tip", "That's from very few fights. Three or more on each side is a fairer test.")
+        -- Fights left out of a typical figure don't count towards a fair
+        -- test either.
+        if dps.fightsAfter < FAIR_SAMPLE or dps.fightsBefore < FAIR_SAMPLE then
+            Say(
+                "tip",
+                "That goes by very few fights. Three or more that count on each side is a "
+                    .. "fairer test."
+            )
         end
 
         local gain, loss = BiggestMoves(comparison)
@@ -419,13 +442,14 @@ function Findings.For(summary, comparison)
     end
 
     -- How DPS moved across the fights themselves, when there are enough
-    -- of them for the two halves to mean something.
+    -- of them for the two halves to mean something. Each half is taken
+    -- at its typical fight (see Summary.Typical).
     local trend = summary.trend
     local moved = trend and ns.Change(trend.early, trend.late)
     if moved and math.abs(moved) >= TREND_WORTH_MENTIONING then
         Say(
             moved > 0 and "good" or "tip",
-            "Your DPS %s over %s: %s in the earlier half, %s in the later.",
+            "Your DPS %s over %s: typically %s in the earlier half, %s in the later.",
             moved > 0 and "rose" or "fell",
             these,
             ns.Rate(trend.early),

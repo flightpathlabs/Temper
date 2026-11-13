@@ -53,8 +53,12 @@ function Progress.SetIgnored(fight, ignored)
 end
 
 --- The character's fights by day, oldest first, for the last days that
---- had any.
----@return table  list of { day = "12 Nov", fights, seconds, dps, level }
+--- had any. Each day's DPS is its typical one (see Summary.Typical), so a
+--- day isn't made by one lucky fight or a run of critters. A day of
+--- nothing but easy fights has no typical figure and is left out.
+---@return table  list of { day = "12 Nov", fights, seconds, level, and
+---               dps, how, left from Summary.Typical }; fights and
+---               seconds are of the fights that count, easy ones included
 function Progress.ByDay()
     local days, byKey = {}, {}
 
@@ -63,25 +67,31 @@ function Progress.ByDay()
             local key = date("%Y%m%d", fight.at)
             local day = byKey[key]
             if not day then
-                day = { day = date("%d %b", fight.at), fights = 0, damage = 0, seconds = 0 }
+                day = { day = date("%d %b", fight.at), fights = 0, seconds = 0, list = {} }
                 byKey[key] = day
                 table.insert(days, day)
             end
 
             day.fights = day.fights + 1
-            day.damage = day.damage + fight.damage
             day.seconds = day.seconds + fight.length
             day.level = fight.level or day.level
+            table.insert(day.list, fight)
         end
     end
 
+    local shown = {}
     for _, day in ipairs(days) do
-        day.dps = day.damage / day.seconds
+        local typical = ns.Summary.Typical(day.list)
+        day.list = nil
+        if typical.dps then
+            day.dps, day.how, day.left = typical.dps, typical.how, typical.left
+            table.insert(shown, day)
+        end
     end
-    while #days > MOST_DAYS do
-        table.remove(days, 1)
+    while #shown > MOST_DAYS do
+        table.remove(shown, 1)
     end
-    return days
+    return shown
 end
 
 --- The character's bests among the fights that count.
@@ -130,7 +140,7 @@ function Progress.Bests()
 
     local bests = {}
     local function Add(title, value, fight)
-        local detail = ("%s, %s"):format(fight.target or "A fight", date("%d %b", fight.at))
+        local detail = ("%s, %s"):format(ns.FightTitle(fight, "A fight"), date("%d %b", fight.at))
         if fight.level then
             detail = ("%s, level %d"):format(detail, fight.level)
         end

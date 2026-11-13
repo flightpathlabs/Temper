@@ -4,11 +4,12 @@ local _, ns = ...
 -- Widget.lua, for what the player healed in the fight in progress or,
 -- between fights, the last one.
 --
--- It's off to begin with, and is popped out from the fight panel's menu
+-- It's on to begin with, and can be put away from the fight panel's menu
 -- or the options. It's the same width and is laid out the same way as its
--- twin, so the two can sit side by side or stacked and read as a pair.
--- Click it for the Healing and defence tab, right-click for a short menu, drag it
--- anywhere.
+-- twin, so the two can sit side by side or stacked and read as a pair,
+-- and it's drawn at whichever of the two sizes its twin is (see
+-- Widget.lua). Click it for the Healing and defence tab, right-click for
+-- a short menu, drag it anywhere.
 --
 -- During a fight the game lets an addon show its running healing but not
 -- read it, exactly as it does for damage. So the two live figures are
@@ -30,10 +31,12 @@ local LIVE_REFRESH_SECONDS = 0.5
 
 -- Where it starts out. The fight panel starts at the left of the screen,
 -- centred 60 below the middle, and with everything on it switched on,
--- buffs included, it reaches about 170 below. This one hangs by its top
--- edge just under that.
+-- buffs included, it's 224 tall, so it reaches 112 below that at the
+-- normal size and more when drawn large. This one hangs by its top edge
+-- just under it, a little further down at the larger size.
 local START_X = 40
-local START_Y = -178
+local FIGHT_PANEL_Y = -60
+local UNDER_FIGHT_PANEL = 118
 
 -- The session's figures take at most this many lines.
 local SESSION_LINES = 2
@@ -148,7 +151,8 @@ local function ShowLast()
     -- Summed up by the same code as the Healing tab, so the two agree.
     local summary = ns.Healing.Of({ fight })
 
-    widget.title:SetText(TitleText(fight.target and Kit.Colored(fight.target, MUTED)))
+    local name = ns.FightTitle(fight, nil)
+    widget.title:SetText(TitleText(name and Kit.Colored(name, MUTED)))
     widget.time:SetText(ns.Duration(fight.length))
     widget.interrupts:SetText(InterruptsText(summary.interrupts))
 
@@ -215,6 +219,18 @@ local function RefreshSession()
     widget:SetHeight(MAIN_HEIGHT + lower)
 end
 
+--- Where this panel starts out, before it's ever moved: under where the
+--- fight panel starts, however large the two are drawn. In the screen's
+--- own measure, as places are kept (see ns.PlacePanel in Widget.lua).
+local function StartingPlace()
+    return {
+        point = "TOPLEFT",
+        relativePoint = "LEFT",
+        x = START_X,
+        y = FIGHT_PANEL_Y - UNDER_FIGHT_PANEL * ns.PanelScale(),
+    }
+end
+
 --- Shows or hides our mark in the corner, and moves the title to suit. It
 --- follows the fight panel's setting, so the pair's titles stay in line.
 local function RefreshBranding()
@@ -233,6 +249,11 @@ end
 local function Refresh()
     if not widget then
         return
+    end
+
+    -- The size follows the fight panel's setting, so the two stay a pair.
+    if widget:GetScale() ~= ns.PanelScale() then
+        ns.PlacePanel(widget, ns.db.healWidget, StartingPlace())
     end
 
     widget:SetShown(ns.settings.healWidget)
@@ -257,6 +278,9 @@ local function ShowMenu(self)
     MenuUtil.CreateContextMenu(self, function(_, root)
         root:CreateTitle(TITLE)
         root:CreateButton("Open Temper", OpenWindow)
+
+        root:CreateDivider()
+        ns.AddPanelSizes(root)
 
         root:CreateDivider()
         root:CreateButton("Options", function()
@@ -305,21 +329,15 @@ local function Create()
     widget:SetClampedToScreen(true)
 
     -- Back where it was last left, or just under where the fight panel
-    -- starts.
-    local place = ns.db.healWidget
-    if type(place) == "table" and place.point then
-        widget:SetPoint(place.point, UIParent, place.relativePoint or place.point, place.x, place.y)
-    else
-        widget:SetPoint("TOPLEFT", UIParent, "LEFT", START_X, START_Y)
-    end
+    -- starts, at the size chosen.
+    ns.PlacePanel(widget, ns.db.healWidget, StartingPlace())
 
     widget:SetMovable(true)
     widget:RegisterForDrag("LeftButton")
     widget:SetScript("OnDragStart", widget.StartMoving)
     widget:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
-        local point, _, relativePoint, x, y = self:GetPoint(1)
-        ns.db.healWidget = { point = point, relativePoint = relativePoint, x = x, y = y }
+        ns.db.healWidget = ns.PanelPlace(self)
     end)
 
     widget:RegisterForClicks("LeftButtonUp", "RightButtonUp")

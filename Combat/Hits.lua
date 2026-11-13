@@ -16,7 +16,8 @@ local _, ns = ...
 --
 -- This file passes each blow on for the lane to draw, and keeps a log of
 -- blows and casts from which a finished fight gets its counts and its
--- timeline.
+-- timeline. It also notes who each blow landed on, once per enemy, so a
+-- fight can say what it was against.
 --
 -- The same event reports what lands on the player: heals, enemy attacks
 -- that hit or were avoided, and spells. There's no doubt whose those are, so
@@ -170,6 +171,81 @@ local function IsOurs(unit)
     return ns.settings.allEnemies and Plain(UnitThreatSituation("player", unit), nil) ~= nil
 end
 
+-- Who the player fought ------------------------------------------------------
+
+-- Each enemy is looked up once, on the first of the player's blows to land
+-- on it, and not on every blow after. This is what has been looked up so
+-- far, by the unit token the blow was reported under.
+local lookedUp = {}
+
+-- A unit token can come to stand for another enemy: a nameplate's token is
+-- handed on when the plate goes, and "target" changes with the target.
+-- When the game won't give an enemy's GUID, the token and the number of
+-- times it has changed hands are what tell one enemy from the next.
+local handedOn = {}
+
+local function HandOn(unit)
+    if type(unit) == "string" and not IsSecret(unit) then
+        lookedUp[unit] = nil
+        handedOn[unit] = (handedOn[unit] or 0) + 1
+    end
+end
+
+ns.OnEvent("NAME_PLATE_UNIT_ADDED", HandOn)
+ns.OnEvent("NAME_PLATE_UNIT_REMOVED", HandOn)
+ns.OnEvent("PLAYER_TARGET_CHANGED", function()
+    HandOn("target")
+end)
+
+--- A plain string from the game, or nil if it's withheld or empty.
+local function Words(value)
+    if IsSecret(value) or type(value) ~= "string" or value == "" then
+        return nil
+    end
+    return value
+end
+
+--- What the game will say about an enemy: who it is, how strong, and
+--- something to know it by again. Run under pcall: any of it may be
+--- refused, and a refusal costs only the enemy's description.
+---@return table  { key, name, level, classification, boss }; level is nil
+---               when the game hides it (a skull reports -1)
+local function LookUp(unit)
+    local guid = UnitGUID(unit)
+    local key = Words(guid) or ("%s#%d"):format(unit, handedOn[unit] or 0)
+
+    local level = UnitLevel(unit)
+    if IsSecret(level) or type(level) ~= "number" or level < 1 then
+        level = nil
+    end
+
+    -- The target frame's gold-winged boss art goes by this. It's asked
+    -- apart from the rest, so a refusal still leaves the enemy described.
+    local okBoss, boss = pcall(UnitIsBossMob, unit)
+
+    return {
+        key = key,
+        name = Words(UnitName(unit)),
+        level = level,
+        classification = Words(UnitClassification(unit)),
+        boss = okBoss and Plain(boss, false) == true or nil,
+    }
+end
+
+--- Notes the enemy a blow of the player's landed on, the first time.
+--- Before the hit itself is logged, so the hit stays last in the log.
+local function NoteFoe(unit)
+    if lookedUp[unit] then
+        return
+    end
+
+    local ok, foe = pcall(LookUp, unit)
+    if ok and foe then
+        lookedUp[unit] = true
+        Remember({ foe = foe })
+    end
+end
+
 --- True if a blow on this enemy was plainly somebody else's. Only a blow
 --- on the player's target needs asking: any other enemy is only looked at
 --- in the first place if it has the player on its threat list (IsOurs).
@@ -232,6 +308,8 @@ ns.OnEvent("UNIT_COMBAT", function(unit, action, flag, amount, school)
         ns.Publish("TARGET_HIT", hit)
         return
     end
+
+    NoteFoe(unit)
 
     -- How it went, in one word, for the cast it's traced to.
     local outcome = hit.avoided or (hit.crit and "CRIT") or (hit.glancing and "GLANCE") or "HIT"
@@ -462,9 +540,60 @@ local function Blows(earliest)
     return blows
 end
 
---- Marks the start of a fight, so the log stops forgetting.
+--- The enemies the player struck, grouped by kind: one entry for each
+--- name, level and classification, with how many of them there were.
+--- Each enemy is counted once, however many times it was looked up. By
+--- its GUID where the game gives one; where it doesn't, by the token it
+--- was struck under, until that token changes hands (see HandOn). An enemy
+--- whose nameplate goes off screen and comes back, or a target swapped
+--- away from and back to, is then counted again: the game gives nothing
+--- else to know it by.
+---@return table  list of { name, level, classification, boss, count },
+---               the biggest group first
+local function Foes(earliest)
+    local counted, kinds, list, firstSeen = {}, {}, {}, {}
+
+    for _, entry in ipairs(log) do
+        local foe = entry.foe
+        if foe and entry.time >= earliest and not counted[foe.key] then
+            counted[foe.key] = true
+
+            local kind =
+                table.concat({ foe.name or "", foe.level or "", foe.classification or "" }, "/")
+            local group = kinds[kind]
+            if not group then
+                group = {
+                    name = foe.name,
+                    level = foe.level,
+                    classification = foe.classification,
+                    boss = foe.boss,
+                    count = 0,
+                }
+                kinds[kind] = group
+                table.insert(list, group)
+                firstSeen[group] = #list
+            end
+            group.count = group.count + 1
+        end
+    end
+
+    -- Groups of the same size stay in the order they were met.
+    table.sort(list, function(a, b)
+        if a.count ~= b.count then
+            return a.count > b.count
+        end
+        return firstSeen[a] < firstSeen[b]
+    end)
+    return list
+end
+
+--- Marks the start of a fight, so the log stops forgetting. Whoever was
+--- struck just before it is still in the log; the enemies are looked up
+--- afresh from here, so that one struck long before, and forgotten with
+--- the rest of the log, isn't taken as already noted.
 function Hits.Begin()
     fighting = true
+    lookedUp = {}
 end
 
 --- The count so far for a fight that's still going on.
@@ -478,14 +607,19 @@ end
 ---@return table tally, table casts  as from Count
 ---@return table timeline  as from Timeline
 ---@return table blows  as from Blows
+---@return table|nil foes  as from Foes; nil if they couldn't be told
 function Hits.Finish(startTime)
     local earliest = Earliest(startTime)
     local tally, casts = Count(earliest, startTime - LEAD_SECONDS, startTime)
     local timeline = Timeline(earliest, startTime)
     local blows = Blows(earliest)
 
+    -- Who was fought is a nicety. It mustn't cost the counts.
+    local ok, foes = pcall(Foes, earliest)
+
     log = {}
+    lookedUp = {}
     fighting = false
     lastFinish = GetTime()
-    return tally, casts, timeline, blows
+    return tally, casts, timeline, blows, ok and foes or nil
 end

@@ -186,7 +186,15 @@ local function Spread(fights)
     if seconds == 0 then
         return nil
     end
+
+    -- The set's typical DPS, the same figure the Fights tab shows when the
+    -- two sets are compared there, so the verdict and that page agree.
+    -- All damage over all time when there's no typical figure to be had.
     local mean = damage / seconds
+    local ok, typical = pcall(ns.Summary.Typical, fights)
+    if ok and type(typical) == "table" and typical.dps then
+        mean = typical.dps
+    end
 
     -- How much single fights stray from that. With one fight there's no
     -- telling, which the verdict treats as "can't be sure of anything".

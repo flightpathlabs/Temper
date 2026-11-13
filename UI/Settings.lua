@@ -296,6 +296,17 @@ local function AddNumberOptions(layout)
             .. "Temper steps aside, and when you log out."
     )
 
+    -- Only offered to a character with combo points to build, and drawn
+    -- from a file the game only finds when it starts.
+    if ns.ComboPoints and ns.ComboPoints.ForThisClass() then
+        AddCheckbox(
+            category,
+            "comboPoints",
+            "Show combo points under your target",
+            "Small pips just under your target's nameplate, lit as you build combo points."
+        )
+    end
+
     AddHeader(layout, "Critical hits")
 
     AddSlider(
@@ -351,8 +362,9 @@ local function AddScreenOptions(layout)
         "widgetStats",
         "Session figures on the panels",
         "How many fights, your average DPS, how often you crit and your biggest hit, for "
-            .. "the session you started or else since you logged in. The healing panel shows "
-            .. "its own: how much you healed and your average HPS."
+            .. "the session you started or else since you logged in. The average leaves out "
+            .. "quick fights against critters and the odd fight far off the rest. The healing "
+            .. "panel shows its own: how much you healed and your average HPS."
     )
 
     AddCheckbox(
@@ -395,6 +407,15 @@ local function AddScreenOptions(layout)
         "Show the healing panel",
         "A second small panel, the fight panel's twin, with your HPS and what you healed in "
             .. "the fight you're in or the last one."
+    )
+
+    AddDropdown(
+        category,
+        "widgetSize",
+        "Size of the panels",
+        "Large draws the fight panel and the healing panel a quarter bigger, with the "
+            .. "warning above and the buffs along the bottom. Each stays where you put it.",
+        { "Normal", "Large" }
     )
 
     AddCheckbox(

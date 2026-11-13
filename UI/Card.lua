@@ -97,6 +97,11 @@ local AVOIDED_WAYS = {
 -- What a tooltip calls a figure as it stood in the fights compared with.
 local EARLIER = "In the earlier fights"
 
+-- Several fights are shown by a typical one (see Summary.Typical). When
+-- none of them goes towards that, the plain figure stands in, and says so.
+local NONE_TYPICAL = "None of these fights counts towards a typical figure, so this is "
+    .. "all the damage over all the time."
+
 -- The size of a single blow is worked out, not read (see Sizes.lua), so
 -- it's always "about", and its tooltip says why.
 local SIZES_ARE_ESTIMATES = "The game doesn't say how hard a single blow lands, so its size is "
@@ -368,10 +373,14 @@ local function Compared(stat, changeText, change, earlier)
     end
 end
 
+--- DPS: a single fight's own, and for several the typical fight's (see
+--- Summary.Typical), with the plain figure and how the typical one was
+--- reached in its tooltip.
 local function DpsStat(summary, comparison)
+    local dps, typical = ns.Summary.DpsOf(summary)
     local stat = {
         label = "DPS",
-        value = ns.Rate(summary.dps),
+        value = ns.Rate(dps),
         title = "Damage per second",
         figures = {
             { "Damage", ns.Number(summary.damage) },
@@ -379,9 +388,27 @@ local function DpsStat(summary, comparison)
         },
     }
 
+    if typical then
+        local reached = summary.typical
+        stat.label = "DPS, typical"
+        stat.title = "Typical damage per second"
+        stat.figures = { { "Going by", reached.how } }
+        if reached.left > 0 then
+            table.insert(stat.figures, { "Not counted", ns.Count(reached.left, "fight") })
+        end
+        table.insert(stat.figures, { "All damage over all time", ns.Rate(summary.dps) })
+        stat.note = ns.Summary.TYPICAL_RULE
+    elseif summary.fights > 1 then
+        stat.note = NONE_TYPICAL
+    end
+
     if comparison then
-        local dps = comparison.dps
-        Compared(stat, Kit.ChangeText(dps.change), dps.change, ns.Rate(dps.before))
+        local pair = comparison.dps
+        local earlier = ns.Rate(pair.before)
+        if pair.typicalBefore then
+            earlier = earlier .. " typical"
+        end
+        Compared(stat, Kit.ChangeText(pair.change), pair.change, earlier)
     end
     return stat
 end

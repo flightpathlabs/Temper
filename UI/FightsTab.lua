@@ -16,6 +16,10 @@ local _, ns = ...
 -- Whichever of the two sets is older is the one changes are measured
 -- from, whatever order they were clicked in, so green always means
 -- "better than it used to be".
+--
+-- The search box over the list narrows it to the fights against an enemy
+-- by that name. It only hides rows: whatever was selected stays selected,
+-- and a run of fights with Shift held is a run of the rows on show.
 
 local FightsTab = {}
 ns.FightsTab = FightsTab
@@ -33,6 +37,38 @@ local SCROLL_BAR_WIDTH = 8
 local PANEL_WIDTH = LIST_EDGE + LIST_WIDTH + SCROLL_BAR_GAP + SCROLL_BAR_WIDTH + LIST_EDGE
 local FIGHT_HEIGHT = 40
 local HEADER_HEIGHT = 26
+
+-- Down the top of the panel: a gap, the search box, a gap and a rule, and
+-- then the list. The box's border is drawn a little to the left of the
+-- box itself, so the box starts that much further in to line its border
+-- up with the rows.
+local SEARCH_TOP = 6
+local SEARCH_HEIGHT = 20
+local SEARCH_GAP = 6
+local SEARCH_BORDER = 5
+local SEARCH_LETTERS = 40
+local LIST_TOP = SEARCH_TOP + SEARCH_HEIGHT + SEARCH_GAP + 1
+local SEARCH_PROMPT = "Search by enemy"
+local NO_MATCH = "No fights match your search."
+
+-- Inside a fight's row: where its name starts, how far in from the right
+-- edge the length stops, and the small things beside the name.
+local ROW_LEFT = 10
+local ROW_RIGHT = 6
+local BESIDE_NAME = 4
+local MARK_SIZE = 14
+local BEST_SIZE = 12
+
+-- The game's own marks for an elite, a rare and a boss: the gold dragon
+-- and the star its nameplates and damage meter show beside a creature's
+-- name, and the skull its target frame and character sheet show for one
+-- too strong to read. Found in the Forever client's nameplate, damage
+-- meter and character sheet code.
+local MARKS = {
+    elite = { atlas = "nameplates-icon-elite-gold" },
+    rare = { atlas = "UI-HUD-UnitFrame-Target-PortraitOn-Boss-Rare-Star" },
+    boss = { file = "Interface\\TargetingFrame\\UI-TargetingFrame-Skull" },
+}
 
 -- The strip under the window's title bar, which starts clear of the
 -- emblem in the corner, and the buttons on its right: one wide one as a
@@ -57,6 +93,7 @@ local HELP = {
     "Click a session's heading to select all its fights.",
     "Right-click a fight or a heading to compare with it, delete it, or leave a fight out "
         .. "of your bests.",
+    "Type in the box over the list to find the fights against an enemy.",
 }
 
 local tab
@@ -68,10 +105,15 @@ local chosen = {}
 local other
 local picking = false
 
--- Fights in the order the list shows them, newest first, and the last one
--- clicked, for Shift-click to run from.
+-- Every fight, newest first; the ones the list shows, in the same order;
+-- and the last one clicked, for Shift-click to run from. The two lists are
+-- the same unless something is typed in the search box.
+local everyFight = {}
 local order = {}
 local lastClicked
+
+-- What the search box holds, in lower case, or nil when it's empty.
+local searchFor
 
 local Refresh
 
@@ -85,10 +127,11 @@ local function Count(set)
     return count
 end
 
---- The fights of a set as a list, newest first.
+--- The fights of a set as a list, newest first. Fights the search is
+--- hiding are still in it.
 local function ListOf(set)
     local list = {}
-    for _, fight in ipairs(order) do
+    for _, fight in ipairs(everyFight) do
         if set[fight] then
             table.insert(list, fight)
         end
@@ -116,7 +159,7 @@ local function SameSet(a, b)
     return true
 end
 
---- Where a fight sits in the list, or nil if it's gone.
+--- Where a fight sits in the list as it's shown, or nil if it isn't.
 local function PlaceOf(wanted)
     for place, fight in ipairs(order) do
         if fight == wanted then
@@ -127,7 +170,7 @@ end
 
 --- Drops fights that have since been deleted from a set.
 local function Prune(set)
-    local kept = SetOf(order)
+    local kept = SetOf(everyFight)
     for fight in pairs(set) do
         if not kept[fight] then
             set[fight] = nil
@@ -181,11 +224,34 @@ end
 
 -- What to call things ---------------------------------------------------------
 
-local function CritText(fight)
-    if not fight.hits or fight.hits == 0 then
-        return "-"
+--- What to call a fight and what to show beside its name (see Foes.lua).
+--- A file that's new to an addon is only picked up when the game is
+--- restarted, so until then a fight goes by what was targeted.
+local function Describe(fight)
+    if ns.Foes then
+        return ns.Foes.Describe(fight)
     end
-    return ns.Percent(fight.crits / fight.hits)
+    return {
+        title = fight.target or "Fight",
+        level = fight.enemyLevel and tostring(fight.enemyLevel) or nil,
+        group = false,
+    }
+end
+
+--- A fight's figures, the one that matters most first: its damage per
+--- second, then the rest set back.
+local function FiguresText(fight)
+    local dps = ns.Rate(fight.damage / fight.length) .. " DPS"
+    local rest = ns.Number(fight.damage) .. " dmg"
+    if fight.hits and fight.hits > 0 then
+        rest = rest .. "   " .. ns.Percent(fight.crits / fight.hits) .. " crit"
+    end
+
+    -- A fight left out of the bests is set back altogether.
+    if fight.ignored then
+        return Kit.Colored(dps .. "   " .. rest, Kit.MUTED)
+    end
+    return dps .. "   " .. Kit.Colored(rest, Kit.MUTED)
 end
 
 local function FightsText(count)
@@ -238,7 +304,7 @@ end
 ---@param fights table  list of fights, newest first
 local function Heading(fights)
     local heading = { empty = "Select a fight on the left to read it." }
-    if #order == 0 then
+    if #everyFight == 0 then
         heading.empty = NO_FIGHTS
     end
     if #fights == 0 then
@@ -248,7 +314,7 @@ local function Heading(fights)
     local newest, oldest = fights[1], fights[#fights]
 
     if #fights == 1 then
-        heading.title = newest.target or "Fight"
+        heading.title = Describe(newest).title
         heading.subtitle = date("%d %b %H:%M", newest.at)
     else
         heading.title = SetName(fights)
@@ -267,6 +333,37 @@ local function Heading(fights)
     return heading
 end
 
+-- Searching --------------------------------------------------------------------
+
+--- True if a name has the search in it, whatever its case.
+local function Contains(name)
+    return type(name) == "string" and name:lower():find(searchFor, 1, true) ~= nil
+end
+
+--- True if the list should show a fight: when nothing is being searched
+--- for, or when what it's called or any enemy in it has the search in its
+--- name. Older fights have no list of enemies, but the game's own tally
+--- of whom the player hurt is kept with every fight.
+local function Matches(fight, described)
+    if not searchFor then
+        return true
+    end
+    if Contains(described.title) or Contains(fight.target) then
+        return true
+    end
+    for _, foe in ipairs(fight.foes or {}) do
+        if Contains(foe.name) then
+            return true
+        end
+    end
+    for _, enemy in ipairs(fight.enemies or {}) do
+        if Contains(enemy.name) then
+            return true
+        end
+    end
+    return false
+end
+
 -- The list ---------------------------------------------------------------------
 
 local function ShowFightMenu(row, fight)
@@ -277,7 +374,7 @@ local function ShowFightMenu(row, fight)
         local count = Count(target)
         local one = count == 1
 
-        root:CreateTitle(one and (fight.target or "Fight") or FightsText(count))
+        root:CreateTitle(one and Describe(fight).title or FightsText(count))
 
         local compare = one and "Compare with this"
             or ("Compare with these %d fights"):format(count)
@@ -305,14 +402,31 @@ local function ShowFightMenu(row, fight)
     end)
 end
 
-local function ShowSessionMenu(row, session)
+--- The fights a session's heading stands for: those of the session the
+--- list is showing. With a search on, that may be only some of them, and
+--- the heading's menu then acts on those alone, so that deleting from it
+--- never takes fights the player can't see.
+local function FightsUnder(data)
+    return data.shown or ns.Recorder.FightsOf(data.recording)
+end
+
+local function ShowSessionMenu(row, data)
+    local session = data.recording
+    local fights = FightsUnder(data)
+    local whole = #fights == #ns.Recorder.FightsOf(session)
+
     MenuUtil.CreateContextMenu(row, function(_, root)
         root:CreateTitle("Session " .. session.number)
-        root:CreateButton("Compare with this session", function()
-            CompareWith(ns.Recorder.FightsOf(session))
+
+        local compare = whole and "Compare with this session"
+            or ("Compare with these %d fights"):format(#fights)
+        root:CreateButton(compare, function()
+            CompareWith(fights)
         end)
-        root:CreateButton("Delete these fights", function()
-            ns.Recorder.DeleteFights(SetOf(ns.Recorder.FightsOf(session)))
+
+        local delete = whole and "Delete these fights" or ("Delete these %d fights"):format(#fights)
+        root:CreateButton(delete, function()
+            ns.Recorder.DeleteFights(SetOf(fights))
         end)
     end)
 end
@@ -348,6 +462,10 @@ end
 local function OnRowClick(row, mouseButton)
     local data = row.data
 
+    -- Clicking in the list doesn't take the cursor out of the search box
+    -- by itself, and the box would go on holding the movement keys.
+    tab.search:ClearFocus()
+
     -- The "Other fights" divider is only a label.
     if data.divider then
         return
@@ -355,11 +473,11 @@ local function OnRowClick(row, mouseButton)
 
     if data.recording then
         if mouseButton == "RightButton" then
-            ShowSessionMenu(row, data.recording)
+            ShowSessionMenu(row, data)
             return
         end
 
-        local fights = SetOf(ns.Recorder.FightsOf(data.recording))
+        local fights = SetOf(FightsUnder(data))
         if picking then
             other = fights
         else
@@ -387,10 +505,40 @@ local function OnRowClick(row, mouseButton)
     Refresh()
 end
 
+--- Who a group was, for a row whose name only says how many: each kind of
+--- enemy with how many there were, and its level and standing.
+local function ShowFoesTooltip(row)
+    local data = row.data
+    local described = data and data.described
+    if not described or not described.group or not data.fight.foes then
+        return
+    end
+
+    GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
+    GameTooltip:SetText(described.title, 1, 1, 1)
+    for _, foe in ipairs(data.fight.foes) do
+        local name = foe.name or "Enemy"
+        if foe.count > 1 then
+            name = ("%s ×%d"):format(name, foe.count)
+        end
+
+        -- The game writes a level it hides as "??".
+        local standing = "level " .. (foe.level or "??")
+        local mark = ns.Foes and ns.Foes.MarkOf(foe.classification, foe.boss)
+        if mark then
+            standing = standing .. ", " .. ns.Foes.MARK_WORDS[mark]
+        end
+        Kit.TooltipFigure(name, standing)
+    end
+    GameTooltip:Show()
+end
+
 local function CreateRowWidgets(row)
     row.created = true
     row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     row:SetScript("OnClick", OnRowClick)
+    row:SetScript("OnEnter", ShowFoesTooltip)
+    row:SetScript("OnLeave", GameTooltip_Hide)
 
     -- The auction house's glow under the mouse and its band across a
     -- selected row.
@@ -400,7 +548,12 @@ local function CreateRowWidgets(row)
     -- fights under it.
     row.band = row:CreateTexture(nil, "BACKGROUND")
     row.band:SetAllPoints()
-    row.band:SetColorTexture(1, 1, 1, 0.05)
+    row.band:SetColorTexture(1, 1, 1, 0.06)
+
+    -- A hairline along the foot of every row, in the colour the window's
+    -- boxes are edged with, so the rows don't run together.
+    row.rule = Kit.Rule(row)
+    row.rule:SetHeight(1)
 
     -- A blue stripe down the left edge of a fight that's being compared
     -- with, and a word on the right to say what the stripe means.
@@ -412,39 +565,58 @@ local function CreateRowWidgets(row)
 
     row.title = Kit.Text(row, "GameFontNormal")
 
-    row.when = Kit.Text(row, "GameFontHighlightSmall", "RIGHT")
-    row.when:SetPoint("TOPRIGHT", -6, -7)
-    row.when:SetTextColor(unpack(Kit.MUTED))
+    -- Close behind the name, small: the enemy's level and its mark.
+    row.level = Kit.Text(row, "GameFontHighlightSmall")
+    row.level:SetPoint("BOTTOMLEFT", row.title, "BOTTOMRIGHT", BESIDE_NAME, 0)
+    row.level:SetTextColor(unpack(Kit.MUTED))
+
+    row.mark = row:CreateTexture(nil, "ARTWORK")
+    row.mark:SetSize(MARK_SIZE, MARK_SIZE)
+
+    -- On the right: how long a fight lasted, or how many fights a session
+    -- holds.
+    row.aside = Kit.Text(row, "GameFontHighlightSmall", "RIGHT")
+    row.aside:SetPoint("TOPRIGHT", -ROW_RIGHT, -7)
+    row.aside:SetTextColor(unpack(Kit.MUTED))
 
     -- A star on a fight that holds one of the character's bests.
-    row.best = Kit.Icon(row, 12, "best")
-    row.best:SetPoint("RIGHT", row.when, "LEFT", -4, 0)
+    row.best = Kit.Icon(row, BEST_SIZE, "best")
+    row.best:SetPoint("RIGHT", row.aside, "LEFT", -4, 0)
 
     row.tag = Kit.Text(row, "GameFontHighlightSmall", "RIGHT")
     row.tag:SetTextColor(unpack(Kit.MUTED))
     row.tag:SetText("compared")
 
     row.detail = Kit.Text(row, "GameFontHighlightSmall")
-    row.detail:SetPoint("BOTTOMLEFT", 10, 6)
-    row.detail:SetPoint("RIGHT", -6, 0)
+    row.detail:SetPoint("BOTTOMLEFT", ROW_LEFT, 6)
+    row.detail:SetPoint("RIGHT", -ROW_RIGHT, 0)
 end
 
 --- A heading row: a session's name and how many fights it holds, or the
---- divider that marks where a session's fights stop.
+--- divider that marks where a session's fights stop. Set in a band with a
+--- rule under it, and in white, apart from the gold of the fights' names.
 local function FillHeading(row, data)
+    row.title:SetFontObject("GameFontHighlight")
     row.title:SetPoint("LEFT", 6, 0)
-    row.title:SetPoint("RIGHT", row.when, "LEFT", -6, 0)
+    row.title:SetPoint("RIGHT", row.aside, "LEFT", -6, 0)
+    row.title:SetWidth(0)
     row.detail:SetText("")
     row.band:Show()
     row.chosen:Hide()
     row.stripe:Hide()
     row.tag:Hide()
     row.best:Hide()
+    row.level:Hide()
+    row.mark:Hide()
     row.hover:SetAlpha(data.divider and 0 or 1)
+
+    row.rule:ClearAllPoints()
+    row.rule:SetPoint("BOTTOMLEFT")
+    row.rule:SetPoint("BOTTOMRIGHT")
 
     if data.divider then
         row.title:SetText(Kit.Colored("Other fights", Kit.MUTED))
-        row.when:SetText("")
+        row.aside:SetText("")
         return
     end
 
@@ -454,7 +626,29 @@ local function FillHeading(row, data)
         title = title .. "  " .. Kit.Colored("in progress", Kit.GOOD)
     end
     row.title:SetText(title)
-    row.when:SetText(FightsText(#ns.Recorder.FightsOf(session)))
+
+    local count = FightsText(#ns.Recorder.FightsOf(session))
+    if data.shown then
+        count = ("%d of %s"):format(#data.shown, count)
+    end
+    row.aside:SetText(count)
+end
+
+--- Shows an elite, rare or boss mark, or hides it.
+local function ShowMark(texture, mark)
+    local art = MARKS[mark]
+    if not art then
+        texture:Hide()
+        return
+    end
+
+    if art.atlas then
+        texture:SetAtlas(art.atlas)
+    else
+        texture:SetTexture(art.file)
+        texture:SetTexCoord(0, 1, 0, 1)
+    end
+    texture:Show()
 end
 
 local function FillRow(row, data)
@@ -466,45 +660,65 @@ local function FillRow(row, data)
         return
     end
 
-    local fight = data.fight
+    local fight, described = data.fight, data.described
     local compared = other ~= nil and other[fight] == true
 
+    row.title:SetFontObject("GameFontNormal")
     row.band:Hide()
     row.hover:SetAlpha(1)
     row.chosen:SetShown(chosen[fight] == true)
     row.stripe:SetShown(compared)
     row.best:SetShown(data.best == true)
 
-    -- Along the top, right to left: the time, the star, the tag. The
-    -- name has whatever is left.
-    local edge = data.best and row.best or row.when
+    -- Between fights the rule stops short of the edges, as a divider in a
+    -- list does.
+    row.rule:ClearAllPoints()
+    row.rule:SetPoint("BOTTOMLEFT", ROW_LEFT - 4, 0)
+    row.rule:SetPoint("BOTTOMRIGHT", -ROW_RIGHT + 2, 0)
+
+    -- Along the top, right to left: the length, the star, the tag.
+    row.aside:SetText(ns.Duration(fight.length))
+    local taken = row.aside:GetStringWidth()
+    local edge = row.aside
+    if data.best then
+        taken = taken + 4 + BEST_SIZE
+        edge = row.best
+    end
     row.tag:SetShown(compared)
     if compared then
         row.tag:SetPoint("RIGHT", edge, "LEFT", -6, 0)
-        edge = row.tag
+        taken = taken + 6 + row.tag:GetStringWidth()
     end
 
-    row.title:SetPoint("TOPLEFT", 10, -6)
-    row.title:SetPoint("RIGHT", edge, "LEFT", -6, 0)
-    row.title:SetText(fight.target or "Fight")
-    row.when:SetText(date("%H:%M", fight.at))
+    -- From the left: the name, then its level and mark close behind it.
+    -- The name has whatever room those leave, and is cut short to fit.
+    row.level:SetText(described.level or "")
+    row.level:SetShown(described.level ~= nil)
+    local beside = described.level and BESIDE_NAME + row.level:GetStringWidth() or 0
 
-    local detail = ("%s dmg   %s DPS   %s   %s crit"):format(
-        ns.Number(fight.damage),
-        ns.Rate(fight.damage / fight.length),
-        ns.Duration(fight.length),
-        CritText(fight)
-    )
-    row.detail:SetText(fight.ignored and Kit.Colored(detail, Kit.MUTED) or detail)
+    ShowMark(row.mark, described.mark)
+    row.mark:ClearAllPoints()
+    row.mark:SetPoint("LEFT", described.level and row.level or row.title, "RIGHT", BESIDE_NAME, 0)
+    if described.mark then
+        beside = beside + BESIDE_NAME + MARK_SIZE
+    end
+
+    row.title:SetPoint("TOPLEFT", ROW_LEFT, -6)
+    row.title:SetText(described.title)
+    local room = LIST_WIDTH - ROW_LEFT - ROW_RIGHT - taken - 6 - beside
+    row.title:SetWidth(math.max(1, math.min(math.ceil(row.title:GetUnboundedStringWidth()), room)))
+
+    row.detail:SetText(FiguresText(fight))
 end
 
 --- The rows of the list: fights newest first, with a heading above each
 --- session's run of them and a divider where a run gives way to fights
---- that weren't part of a session.
+--- that weren't part of a session. With a search on, only the fights that
+--- match, and the headings of the sessions they're in.
 local function BuildRows()
     local fights = ns.character.fights
     local rows = {}
-    order = {}
+    everyFight, order = {}, {}
 
     local holdsBest = {}
     for _, best in ipairs(ns.Progress.Bests()) do
@@ -512,36 +726,104 @@ local function BuildRows()
     end
 
     -- A session with no fights yet still wants its heading, so the
-    -- player can see that Start session did something.
+    -- player can see that Start session did something. A search can't
+    -- have found anything in it.
     local open = ns.Recorder.Open()
     local headed = false
-    if open and #ns.Recorder.FightsOf(open) == 0 then
+    if open and not searchFor and #ns.Recorder.FightsOf(open) == 0 then
         table.insert(rows, { recording = open })
         headed = true
     end
 
     -- Which session the rows being added belong to: a number, or false
     -- for none. Starts as nil so the first fight always counts as a change.
-    local run
+    -- With a search on, each heading notes the fights shown under it.
+    local run, heading
     for index = #fights, 1, -1 do
         local fight = fights[index]
-        local session = fight.recording and ns.Recorder.Numbered(fight.recording)
-        local belongs = session and session.number or false
+        local described = Describe(fight)
+        table.insert(everyFight, fight)
 
-        if belongs ~= run then
-            run = belongs
-            if session then
-                table.insert(rows, { recording = session })
-                headed = true
-            elseif headed then
-                table.insert(rows, { divider = true })
+        if Matches(fight, described) then
+            local session = fight.recording and ns.Recorder.Numbered(fight.recording)
+            local belongs = session and session.number or false
+
+            if belongs ~= run then
+                run = belongs
+                heading = nil
+                if session then
+                    heading = { recording = session, shown = searchFor and {} or nil }
+                    table.insert(rows, heading)
+                    headed = true
+                elseif headed then
+                    table.insert(rows, { divider = true })
+                end
             end
-        end
+            if heading and heading.shown then
+                table.insert(heading.shown, fight)
+            end
 
-        table.insert(order, fight)
-        table.insert(rows, { fight = fight, best = holdsBest[fight] })
+            table.insert(order, fight)
+            table.insert(rows, { fight = fight, described = described, best = holdsBest[fight] })
+        end
     end
     return rows
+end
+
+--- Puts rows in the list, and says so when a search has found nothing.
+---@param toTop boolean|nil  true to go back to the top, as when the search
+---                          changes; otherwise the list stays where it was
+local function ShowRows(rows, toTop)
+    -- The game's two choices are true and false, so they can't be picked
+    -- between with "and" and "or".
+    local keep = ScrollBoxConstants.RetainScrollPosition
+    if toTop then
+        keep = ScrollBoxConstants.DiscardScrollPosition
+    end
+    tab.scrollBox:SetDataProvider(CreateDataProvider(rows), keep)
+    tab.noMatch:SetShown(searchFor ~= nil and #order == 0)
+end
+
+--- Narrows the list as the player types. Nothing else on the page changes
+--- with it, so only the list is redrawn.
+local function OnSearchChanged(box)
+    local text = strtrim(box:GetText() or ""):lower()
+    local wanted = text ~= "" and text or nil
+    if wanted == searchFor then
+        return
+    end
+    searchFor = wanted
+
+    if tab and tab:IsVisible() then
+        ShowRows(BuildRows(), true)
+    end
+end
+
+--- The search box over the list, in the game's own style: a magnifying
+--- glass, a prompt while it's empty, and a cross to clear it. Enter and
+--- Escape both let go of the keyboard, as the game's own search boxes do.
+local function CreateSearchBox(panel)
+    local box = CreateFrame("EditBox", nil, tab, "SearchBoxTemplate")
+    box:SetHeight(SEARCH_HEIGHT)
+    box:SetPoint("TOPLEFT", panel, "TOPLEFT", LIST_EDGE + SEARCH_BORDER, -SEARCH_TOP)
+    box:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -LIST_EDGE, -SEARCH_TOP)
+
+    -- Opening the window mustn't swallow the player's movement keys.
+    box:SetAutoFocus(false)
+    box:SetMaxLetters(SEARCH_LETTERS)
+    box.Instructions:SetText(SEARCH_PROMPT)
+
+    -- Hooked, not set, so the template still shows and hides its prompt
+    -- and its cross.
+    box:HookScript("OnTextChanged", OnSearchChanged)
+
+    -- A rule under it, to set it off from the list.
+    local rule = Kit.Rule(panel)
+    rule:SetHeight(1)
+    rule:SetPoint("TOPLEFT", LIST_EDGE, -(LIST_TOP - 1))
+    rule:SetPoint("TOPRIGHT", -LIST_EDGE, -(LIST_TOP - 1))
+
+    return box
 end
 
 -- The strip under the title bar -------------------------------------------------
@@ -615,14 +897,17 @@ function FightsTab.Create(parent, window)
     tab = CreateFrame("Frame", nil, parent)
     tab:SetAllPoints()
 
-    -- Left: the list, framed the way the game frames its own.
+    -- Left: the search box and the list under it, framed the way the game
+    -- frames its own.
     local panel = Kit.Inset(tab)
     panel:SetPoint("TOPLEFT")
     panel:SetPoint("BOTTOMLEFT")
     panel:SetWidth(PANEL_WIDTH)
 
+    tab.search = CreateSearchBox(panel)
+
     local scrollBox = CreateFrame("Frame", nil, tab, "WowScrollBoxList")
-    scrollBox:SetPoint("TOPLEFT", panel, "TOPLEFT", LIST_EDGE, -LIST_EDGE)
+    scrollBox:SetPoint("TOPLEFT", panel, "TOPLEFT", LIST_EDGE, -LIST_TOP)
     scrollBox:SetPoint("BOTTOMLEFT", panel, "BOTTOMLEFT", LIST_EDGE, LIST_EDGE)
     scrollBox:SetWidth(LIST_WIDTH)
 
@@ -644,6 +929,13 @@ function FightsTab.Create(parent, window)
     end)
     ScrollUtil.InitScrollBoxListWithScrollBar(scrollBox, scrollBar, view)
     tab.scrollBox = scrollBox
+
+    -- Where the list would be, when a search finds nothing.
+    tab.noMatch = Kit.Text(scrollBox, "GameFontHighlightSmall", "CENTER")
+    tab.noMatch:SetPoint("TOP", 0, -16)
+    tab.noMatch:SetTextColor(unpack(Kit.MUTED))
+    tab.noMatch:SetText(NO_MATCH)
+    tab.noMatch:Hide()
 
     -- In the window's own strip under the title bar, clear of the emblem
     -- in its corner: where things stand and what to do next in two lines,
@@ -688,10 +980,14 @@ function FightsTab.Create(parent, window)
 
     -- A comparison belongs to a sitting. Closing the window or turning to
     -- another tab ends it, so the next visit starts with plain reading
-    -- and not with green and red figures nobody remembers asking for.
+    -- and not with green and red figures nobody remembers asking for. A
+    -- search goes the same way, so the list never comes back mysteriously
+    -- short.
     tab:SetScript("OnHide", function()
         other = nil
         StopPicking()
+        tab.search:ClearFocus()
+        tab.search:SetText("")
     end)
 
     tab.Refresh = Refresh
@@ -714,15 +1010,16 @@ function Refresh()
             other = nil
         end
     end
-    if not next(chosen) and order[1] then
-        chosen = { [order[1]] = true }
-        lastClicked = not picking and order[1] or nil
+    local newest = order[1] or everyFight[1]
+    if not next(chosen) and newest then
+        chosen = { [newest] = true }
+        lastClicked = not picking and newest or nil
     end
-    if #order == 0 then
+    if #everyFight == 0 then
         StopPicking()
     end
 
-    tab.scrollBox:SetDataProvider(CreateDataProvider(rows), ScrollBoxConstants.RetainScrollPosition)
+    ShowRows(rows)
 
     -- The page shows the newer of the two sets, measured against the
     -- older. Compared with themselves, fights have nothing to show.
@@ -739,12 +1036,13 @@ function Refresh()
     local status, nextStep = StripText(selected, newer, older)
     tab.strip.status:SetText(status)
     tab.strip.next:SetText(nextStep)
-    ShowStripButtons(#order > 1)
+    ShowStripButtons(#everyFight > 1)
 
     tab.record:SetText(ns.Recorder.Open() and "End session" or "Start session")
 end
 
---- Chooses what the tab shows the next time it's drawn.
+--- Chooses what the tab shows the next time it's drawn. Any search is
+--- cleared, so the fights asked for are there in the list to be seen.
 ---@param fights table  list of fights to read
 ---@param against table|nil  list of fights to compare them with; nil for
 ---                          no comparison
@@ -753,5 +1051,8 @@ function FightsTab.Select(fights, against)
     other = against and #against > 0 and SetOf(against) or nil
     picking = false
     lastClicked = fights[1]
+    if tab then
+        tab.search:SetText("")
+    end
     Refresh()
 end

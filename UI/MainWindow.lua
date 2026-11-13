@@ -1,6 +1,6 @@
 local addonName, ns = ...
 
--- The window: a frame in the game's own style with four tabs along the
+-- The window: a frame in the game's own style with five tabs along the
 -- bottom, the way the auction house and the character sheet have them.
 --
 --   Fights       every fight, and the analysis of whichever are selected
@@ -8,6 +8,8 @@ local addonName, ns = ...
 --                was stopped, over a set of fights picked from a menu
 --   Experiments  a question, two sets of fights, and a verdict
 --   Progress     bests and the trend, against nobody but yourself
+--   About        what Temper is, how to use it, questions and the small
+--                print, and the way to report a problem
 --
 -- Each tab is built by its own file and knows how to redraw itself. This
 -- file only owns the frame and decides which tab is showing.
@@ -82,6 +84,17 @@ local TABS = {
         blurb = "Your own bests and your trend, measured against nobody but you.",
         build = function(...)
             return ns.ProgressTab.Create(...)
+        end,
+    },
+    {
+        -- Last, out of the way of the tabs that are used every day.
+        label = "About",
+        blurb = "What Temper is for, how to get the most from it, and where to send a problem.",
+        build = function(parent, ...)
+            if ns.AboutTab then
+                return ns.AboutTab.Create(parent, ...)
+            end
+            return PlaceHolder(parent, RESTART)
         end,
     },
 }
@@ -284,49 +297,88 @@ ns.Subscribe("EXPERIMENTS_CHANGED", Refresh)
 
 -- Slash command, key binding and the addon list -------------------------------
 
-local function PrintCheck()
+--- What /temper check says: how Temper is getting on with the game, as
+--- lines of text. The command prints them, and a problem report gathers
+--- them up (see Report.lua).
+---@return table  list of strings
+function ns.CheckLines()
+    local lines = {}
+    local function Add(text, ...)
+        if select("#", ...) > 0 then
+            text = text:format(...)
+        end
+        table.insert(lines, text)
+    end
+
     local fights = ns.character and #ns.character.fights or 0
     local recordings = ns.character and #ns.character.recordings or 0
-    ns.Print("%d fights on record, %d recordings.", fights, recordings)
+    Add("%d fights on record, %d recordings.", fights, recordings)
 
     -- Where the numbers have been going, and anything the game objected
     -- to along the way.
     local lane = ns.Lane
-    ns.Print(
+    Add(
         "%d numbers followed a nameplate this session; %d had none and went mid-screen.",
         lane.pinned,
         lane.loose
     )
     if not GetCVarBool("nameplateShowEnemies") then
-        ns.Print("Enemy nameplates are switched off, so numbers have nothing to follow.")
+        Add("Enemy nameplates are switched off, so numbers have nothing to follow.")
     end
     if lane.knockedOff > 0 then
-        ns.Print(
+        Add(
             "%d more found a nameplate but the game wouldn't pin them to it: %s",
             lane.knockedOff,
-            lane.lastRefusal
+            tostring(lane.lastRefusal)
         )
     end
     if lane.refusal then
-        ns.Print("That happened often enough that nameplates are being left alone for now.")
+        Add("That happened often enough that nameplates are being left alone for now.")
     end
     for what, problem in pairs(lane.complaints) do
-        ns.Print("The game objected to a number's %s: %s", what, problem)
+        Add("The game objected to a number's %s: %s", what, problem)
     end
 
     -- What the alerts can watch for this character, and how. Missing
     -- straight after an update, until the game is restarted.
     if ns.Procs then
         for _, line in ipairs(ns.Procs.CheckLines()) do
-            ns.Print(line)
+            Add(line)
+        end
+    end
+
+    -- Whether the combo points above the target can be drawn here.
+    if ns.ComboPoints then
+        for _, line in ipairs(ns.ComboPoints.CheckLines()) do
+            Add(line)
         end
     end
 
     -- Anything the readiness warnings and the buff row had to give up on.
     if ns.Readiness then
         for what, problem in pairs(ns.Readiness.complaints) do
-            ns.Print("Temper couldn't read your %s, and has stopped trying: %s", what, problem)
+            Add("Temper couldn't read your %s, and has stopped trying: %s", what, problem)
         end
+    end
+
+    return lines
+end
+
+local function PrintCheck()
+    for _, line in ipairs(ns.CheckLines()) do
+        ns.Print(line)
+    end
+end
+
+--- Opens the problem report. Straight after the update that added it, the
+--- game hasn't loaded its file yet.
+local function ShowReport()
+    if ns.ShowReport then
+        ns.ShowReport()
+    else
+        ns.Print(
+            "The problem report is new. Quit the game and start it again to finish installing it."
+        )
     end
 end
 
@@ -342,6 +394,8 @@ SlashCmdList.TEMPER = function(message)
         ns.Example.Toggle()
     elseif message == "check" then
         PrintCheck()
+    elseif message == "report" or message == "bug" then
+        ShowReport()
     else
         ns.ToggleWindow()
     end

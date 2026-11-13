@@ -20,10 +20,10 @@ game data and nowhere else.
 
 **Tidy damage numbers.** Your hits appear in a column by each enemy's
 nameplate and follow it around, in place of numbers flying all over the
-screen. By default they're a rising stream: small numbers climbing
-straight up at a steady pace, like a scrolling log. Weapon swings are
-white, abilities yellow and magic the colour of its school; critical hits
-are larger and land with a pop. All of it can be changed, and an example
+screen. By default they sit to the right of the nameplate, each with
+its ability's icon, and step up a line as new ones arrive, like a short
+log. Weapon swings are white, abilities yellow and magic the colour of
+its school; critical hits are larger, red, and land with a pop. All of it can be changed, and an example
 plays beside the options while you do.
 
 **A panel for the fight you're in.** A small panel shows your DPS, damage,

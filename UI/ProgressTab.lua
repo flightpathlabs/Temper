@@ -5,10 +5,11 @@ local _, ns = ...
 --
 -- Read top to bottom it's four things. The bests, four at most, to have
 -- something to beat. A line on which fights count towards them. A column
--- for each day's DPS, to see which way it's going. And, out of the way in
--- the bottom right-hand corner of the window, the button that forgets the
--- lot. The first three each sit in a box of their own (see Kit.Section),
--- as the parts of the Fights and Healing pages do.
+-- for each day's typical DPS (see Summary.Typical), to see which way it's
+-- going. And, out of the way in the bottom right-hand corner of the
+-- window, the button that forgets the lot. The first three each sit in a
+-- box of their own (see Kit.Section), as the parts of the Fights and
+-- Healing pages do.
 --
 -- A best is only worth having if it was earned, so each one can be left
 -- out with a click when it was a fluke, and the next best takes its place
@@ -80,7 +81,13 @@ local WHAT_COUNTS = {
         .. "an item or some other effect.",
     "You can leave a fight out yourself, and put it back by right-clicking it on the "
         .. "Fights tab.",
+    "Each day's DPS is that day's typical fight. Fights against critters or enemies far "
+        .. "below your level are left out of it, and from three fights up so are the day's "
+        .. "highest and lowest, so one fluke can't tip it.",
 }
+
+local NO_DAYS = "No day to show yet. Fights against critters or enemies far below your level "
+    .. "are left out of each day's DPS, and so far they're all there has been."
 
 local NO_FIGHTS = "No fights on record yet.\n\n"
     .. "Fight something on your own and your bests will appear here, "
@@ -153,13 +160,17 @@ local function CountedText(fights)
     return text .. "."
 end
 
---- The lines of a column's tooltip.
+--- The lines of a column's tooltip: the day's fighting, then its typical
+--- DPS and how that was reached.
 local function DayLines(day)
     local lines = {
         FightsText(day.fights),
         ns.Duration(day.seconds) .. " of fighting",
-        ns.Rate(day.dps) .. " DPS",
+        ("%s DPS, typical (%s)"):format(ns.Rate(day.dps), day.how),
     }
+    if day.left > 0 then
+        table.insert(lines, ("%s against easy enemies not counted"):format(FightsText(day.left)))
+    end
     if day.level then
         table.insert(lines, "Level " .. day.level)
     end
@@ -167,19 +178,21 @@ local function DayLines(day)
 end
 
 --- The latest day set against the one before it, in a sentence.
----@param days table  from Progress.ByDay; at least one day
+---@param days table  from Progress.ByDay; may be empty
 ---@return string text
 ---@return number|nil change  the figure behind it, for the arrow
 local function Trend(days)
     local latest, earlier = days[#days], days[#days - 1]
-    if not earlier then
+    if not latest then
+        return NO_DAYS
+    elseif not earlier then
         return ONE_DAY
     end
 
     -- A day on which nothing landed leaves nothing to measure from.
     local change = ns.Change(earlier.dps, latest.dps)
     if not change then
-        return ("%s DPS on %s."):format(ns.Rate(latest.dps), latest.day)
+        return ("Typical DPS %s on %s."):format(ns.Rate(latest.dps), latest.day)
     end
 
     local percent = math.floor(math.abs(change) * 100 + 0.5)
@@ -194,7 +207,7 @@ local function Trend(days)
 
     -- The day before is the last day there was a fight, which needn't be
     -- yesterday, so both days are named.
-    local text = ("%s the day before: %s DPS on %s, %s on %s."):format(
+    local text = ("%s the day before: typical DPS %s on %s, %s on %s."):format(
         verdict,
         ns.Rate(latest.dps),
         latest.day,
@@ -510,15 +523,22 @@ local function FillTrend(row, days, width)
 end
 
 --- A column a day, and under the chart the sentence on what it shows.
+--- With no day to show, there's only the sentence, saying why.
 local function PlaceDays(layout, days)
     local section = tab.daysSection
     local inside = Inside(layout, section)
 
-    Place(inside, tab.chart, 0)
-    FillChart(days, inside.width)
+    local gap = 0
+    if #days > 0 then
+        Place(inside, tab.chart, 0)
+        FillChart(days, inside.width)
+        gap = LINE_GAP
+    else
+        tab.chart:Hide()
+    end
 
     FillTrend(tab.trendRow, days, inside.width)
-    Place(inside, tab.trendRow, LINE_GAP)
+    Place(inside, tab.trendRow, gap)
 
     PlaceSection(layout, section, inside)
 end
@@ -537,11 +557,13 @@ local function Refresh()
     end
 
     local fights = ns.character.fights
+    local bests = ns.Progress.Bests()
     local days = ns.Progress.ByDay()
 
     -- Bests and days are drawn from the same fights, the ones that count,
-    -- so when there are no days there are no bests either.
-    local nothing = #days == 0
+    -- so when there are no bests there are no days either. There can be
+    -- bests without days, when every fight that counts was an easy one.
+    local nothing = #bests == 0
     tab.content:SetShown(not nothing)
     tab.empty:SetShown(nothing)
     if nothing then
@@ -551,7 +573,7 @@ local function Refresh()
 
     local layout = { frame = tab.page, left = 0, width = PageWidth(), y = 0 }
 
-    PlaceBests(layout, ns.Progress.Bests())
+    PlaceBests(layout, bests)
     PlaceCounted(layout, fights)
     PlaceDays(layout, days)
 
@@ -619,7 +641,7 @@ function ProgressTab.Create(parent, window)
     tab.countedRow = CreateCountedRow(tab.countedSection)
 
     -- Then a column a day, and the upshot of it in a sentence.
-    tab.daysSection = Kit.Section(tab.page, "DPS, day by day")
+    tab.daysSection = Kit.Section(tab.page, "Typical DPS, day by day")
     AddCaption(tab.daysSection, "One column for each day you fought.")
     tab.chart = CreateChart(tab.daysSection)
     tab.trendRow = CreateTrendRow(tab.daysSection)

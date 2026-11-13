@@ -21,8 +21,10 @@ local addonName, ns = ...
 --                 ticking     how often each ability has been seen ticking
 --                             after its cast, like a bleed (also Guess.lua)
 --                 nextNumber  the number the next recording will carry
---   widget      where the last-fight panel was dragged to
---   healWidget  where the healing panel was dragged to
+--   widget      where the last-fight panel was dragged to, as it would be
+--               at the normal size whatever size it's drawn at (see
+--               ns.PlacePanel in UI\Widget.lua)
+--   healWidget  where the healing panel was dragged to, the same way
 --   button      where the record button was dragged to
 --   procAlert   where the ability alert was dragged to, by its middle
 --   example     where the example enemy in the options was dragged to
@@ -48,13 +50,13 @@ ns.DEFAULT_SETTINGS = {
 
     -- How the numbers move: 1 rise steadily, 2 stay and step up, 3 arc
     -- away, 4 shrink away.
-    motion = 1,
+    motion = 2,
 
     -- How long a number stays: 1 briefly, 2 a few seconds, 3 a good while.
-    stay = 2,
+    stay = 3,
 
     -- Where the lane sits by the nameplate: 1 above, 2 left, 3 right.
-    laneSide = 1,
+    laneSide = 3,
 
     -- How far from the nameplate: 1 close, 2 a little off, 3 well clear.
     laneDistance = 1,
@@ -62,7 +64,7 @@ ns.DEFAULT_SETTINGS = {
     -- The height of an ordinary number, in pixels, and its font: 1 the
     -- game's usual, 2 a narrow one, 3 the game's own damage-number font, 4
     -- a decorative one (see Text\Lane.lua).
-    fontSize = 13,
+    fontSize = 18,
     font = 1,
 
     -- What the colour of a number says: 1 its kind (weapon swings white,
@@ -72,13 +74,13 @@ ns.DEFAULT_SETTINGS = {
     -- A critical hit: how large it's drawn, as a percentage of an
     -- ordinary hit; its colour (1 gold, 2 red, 3 the hit's own); and how
     -- it lands (1 no fuss, 2 a small pop, 3 a big pop, 4 a shake).
-    critSize = 140,
-    critStyle = 3,
-    critLanding = 2,
+    critSize = 160,
+    critStyle = 2,
+    critLanding = 3,
 
     -- Put the icon of the ability beside each number. The game doesn't say
-    -- which ability a hit was, so this is a best guess. Off to begin with.
-    icons = false,
+    -- which ability a hit was, so this is a best guess.
+    icons = true,
 
     -- Show "Miss", "Dodge" and the like as small words.
     showMisses = true,
@@ -90,6 +92,11 @@ ns.DEFAULT_SETTINGS = {
     -- Switch Blizzard's own damage numbers off while the lane is showing.
     hideBlizzardNumbers = true,
 
+    -- For rogues and druids in cat form, a row of pips by the target's
+    -- nameplate, lit as combo points build (see UI\ComboPoints.lua). Shown
+    -- in a group too: it's only about the player's own next press.
+    comboPoints = true,
+
     -- The small panel that shows the fight in progress or the last one.
     widget = true,
 
@@ -98,9 +105,13 @@ ns.DEFAULT_SETTINGS = {
     -- along the bottom, a small icon for each kind of buff worth having
     -- up, lit while it's on (see Combat\Readiness.lua).
     widgetBrand = true,
-    widgetRecent = 2,
+    widgetRecent = 3,
     widgetStats = true,
     widgetBuffs = true,
+
+    -- How large that panel and the healing panel are drawn: 1 the normal
+    -- size, 2 large.
+    widgetSize = 1,
 
     -- A short note just above that panel when something's amiss before a
     -- fight: a fishing pole still in hand, a buff of the class's own not
@@ -108,9 +119,9 @@ ns.DEFAULT_SETTINGS = {
     -- fight begun with the fishing pole, which plays the alert sound below.
     readyAlert = true,
 
-    -- A second panel like it, for healing. Off unless asked for: it can be
-    -- popped out from the fight panel's menu or the options.
-    healWidget = false,
+    -- A second panel like it, for healing. It can be put away from the
+    -- fight panel's menu or the options.
+    healWidget = true,
 
     -- A small Record button on the screen. Off unless asked for: the window
     -- and the panel's menu both record, and there's a key binding.

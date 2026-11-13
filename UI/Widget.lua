@@ -13,6 +13,12 @@ local _, ns = ...
 -- on (what's on is Combat\Readiness.lua's to say). The warning box that
 -- sits above the panel is a frame of its own (see ReadyAlert.lua).
 --
+-- The panels come in two sizes, normal and large, one setting for both.
+-- Large is the same panel drawn a quarter bigger with SetScale, rather
+-- than a second layout: the game draws text at the size it ends up on
+-- screen, so it stays sharp, and whatever hangs from the panel (the
+-- warning box, the buff icons) grows with it without being told.
+--
 -- During a fight the game lets an addon show its running damage but not
 -- read it. So the two live figures are passed straight from the game's
 -- tally to the text, and everything we work out ourselves (the timer, the
@@ -24,6 +30,16 @@ local Kit = ns.Kit
 
 local WIDTH = 220
 local LIVE_REFRESH_SECONDS = 0.5
+
+-- Where it starts out: by its left edge, near the left of the screen and
+-- a little below the middle. The healing panel's start is worked out from
+-- this, so the two would need changing together.
+local START_X = 40
+local START_Y = -60
+
+-- How large each choice of the size setting draws the panels.
+local PANEL_SCALES = { 1, 1.25 }
+local SIZE_NAMES = { "Normal", "Large" }
 
 -- The main figures take this much height. Three lines share it: the title
 -- from 8 down to 22, the figures from 26 to 42, the counts from 45 to 55.
@@ -40,15 +56,16 @@ local RECENT_COUNTS = { 0, 3, 5 }
 local MOST_RECENT = 5
 
 -- The buff icons along the bottom: how big, how far apart, how many there
--- can be, and how faint one is while its buff isn't on.
-local BUFF_SIZE = 14
+-- can be, and how faint one is while its buff isn't on. A full row is
+-- 8 x 18 + 7 x 5 = 179 wide, inside the 200 between the panel's margins.
+local BUFF_SIZE = 18
 local BUFF_GAP = 5
 local MOST_BUFFS = 8
 local BUFF_DIM = 0.35
 
--- The last fight is set against the player's average over this many of
--- the counted fights before it, and against nothing if there are fewer
--- than a handful: one or two fights are no yardstick.
+-- The last fight is set against the player's typical DPS over this many
+-- of the fights before it that count, and against nothing if there are
+-- fewer than a handful: one or two fights are no yardstick.
 local REFERENCE_FIGHTS = 10
 local FEWEST_TO_GO_BY = 3
 
@@ -76,8 +93,13 @@ local ticker
 local loggedInAt = 0
 
 -- How the last fight compares with the ones before it, in words for the
--- tooltip; nil when there's no comparison to make.
-local reference
+-- tooltip, and what it was set against; nil when there's no comparison
+-- to make.
+local reference, referenceHow
+
+-- What the session's average went by, in a few words for the tooltip;
+-- nil when it's a plain average or isn't showing.
+local sessionHow
 
 local function LastFight()
     local fights = ns.character.fights
@@ -139,56 +161,115 @@ end
 
 -- Something to read the last fight against ------------------------------------
 
---- How the last fight's DPS compares with the player's own average over
---- the counted fights before it. The average is all their damage over all
---- their seconds, so a long fight weighs more than a short one.
+--- The typical DPS over some fights, by the rule in Record\Summary.lua:
+--- extremes and quick fights against critters left out. It's asked
+--- carefully, being new: if it's missing or goes wrong, the panel falls
+--- back on a plain average rather than going blank.
+---@return table|nil  { dps, counted, left, how }; nil when there's none
+local function TypicalOf(fights)
+    if not ns.Summary.Typical then
+        return nil
+    end
+
+    local ok, typical = pcall(ns.Summary.Typical, fights)
+    if ok and type(typical) == "table" and type(typical.dps) == "number" and typical.dps > 0 then
+        return typical
+    end
+    return nil
+end
+
+--- Whether a fight is better left out of a comparison: one that doesn't
+--- count, being a fluke or over in a moment, or one against critters and
+--- the like, which only flatters the figures. Telling a critter apart is
+--- Record\Foes.lua's to do, and straight after an update it isn't there.
+local function LeftOut(fight)
+    if ns.Progress.WhyNotCounted(fight) then
+        return true
+    end
+
+    local Foes = ns.Foes
+    if not (Foes and Foes.IsTrivial) then
+        return false
+    end
+    local ok, trivial = pcall(Foes.IsTrivial, fight)
+    return ok and trivial == true
+end
+
+--- How the last fight's DPS compares with the player's own over the
+--- counted fights before it: their typical DPS where that can be had,
+--- and otherwise all their damage over all their seconds.
 ---@return number|nil change  0.12 for twelve per cent above; nil when
 ---                           there's too little to go by
----@return number|nil fights  how many earlier fights it was set against
+---@return number|nil fights  how many earlier fights were looked at
+---@return table|nil typical  the typical figure it was set against, from
+---                           TypicalOf; nil when it was the plain average
 local function AgainstEarlierFights()
     local fights = ns.character.fights
     local last = fights[#fights]
 
-    -- A fight that doesn't count, being a fluke or over in a moment, would
-    -- only be flattered by the comparison.
-    if not last or ns.Progress.WhyNotCounted(last) then
+    if not last or LeftOut(last) then
         return nil
     end
 
-    local damage, seconds, counted = 0, 0, 0
+    local earlier = {}
     for index = #fights - 1, 1, -1 do
         local fight = fights[index]
-        if not ns.Progress.WhyNotCounted(fight) then
-            damage = damage + fight.damage
-            seconds = seconds + fight.length
-            counted = counted + 1
-            if counted == REFERENCE_FIGHTS then
+        if not LeftOut(fight) then
+            table.insert(earlier, fight)
+            if #earlier == REFERENCE_FIGHTS then
                 break
             end
         end
     end
+    if #earlier < FEWEST_TO_GO_BY then
+        return nil
+    end
+
+    local lastRate = last.damage / last.length
+    local typical = TypicalOf(earlier)
+    if typical then
+        return ns.Change(typical.dps, lastRate), #earlier, typical
+    end
+
+    local damage, seconds = 0, 0
+    for _, fight in ipairs(earlier) do
+        damage = damage + fight.damage
+        seconds = seconds + fight.length
+    end
 
     -- Fights that count are never without length, but nothing here is
     -- divided by a length of time that hasn't been looked at first.
-    if counted < FEWEST_TO_GO_BY or seconds <= 0 then
+    if seconds <= 0 then
         return nil
     end
-    return ns.Change(damage / seconds, last.damage / last.length), counted
+    return ns.Change(damage / seconds, lastRate), #earlier
 end
 
---- "Its DPS was 12% above your last ten fights."
-local function ReferenceText(change, fights)
-    local howMany = fights == REFERENCE_FIGHTS and "ten" or tostring(fights)
-    local percent = math.floor(math.abs(change) * 100 + 0.5)
-    if percent == 0 then
-        return ("Its DPS was level with your last %s fights."):format(howMany)
+--- "Its DPS was 12% above your recent fights." When the plain average is
+--- all there is to go by, "your last ten fights" instead, since that's
+--- what it is.
+local function ReferenceText(change, fights, typical)
+    local against = "your recent fights"
+    if not typical then
+        local howMany = fights == REFERENCE_FIGHTS and "ten" or tostring(fights)
+        against = ("your last %s fights"):format(howMany)
     end
 
-    return ("Its DPS was %d%% %s your last %s fights."):format(
-        percent,
-        change > 0 and "above" or "below",
-        howMany
-    )
+    local percent = math.floor(math.abs(change) * 100 + 0.5)
+    if percent == 0 then
+        return ("Its DPS was level with %s."):format(against)
+    end
+    return ("Its DPS was %d%% %s %s."):format(percent, change > 0 and "above" or "below", against)
+end
+
+--- The few words a typical figure comes with ("middle 8 of 10 fights"),
+--- or nil when there are none to show.
+local function HowOf(typical)
+    local how = typical and typical.how
+    if type(how) == "string" and how ~= "" then
+        return how
+    end
+    return nil
 end
 
 -- The main figures -----------------------------------------------------------
@@ -237,7 +318,7 @@ local function ShowLive()
     -- The live figures can't be compared with anything, so the arrow
     -- waits for the fight to end.
     widget.arrow:Hide()
-    reference = nil
+    reference, referenceHow = nil, nil
 
     -- With other people about, the hits on the target aren't all ours.
     if IsInGroup() then
@@ -257,19 +338,20 @@ local function ShowLast()
         widget.damage:SetText("-")
         widget.counts:SetText("No fights yet")
         widget.arrow:Hide()
-        reference = nil
+        reference, referenceHow = nil, nil
         return
     end
 
-    widget.title:SetText(fight.target or "Last fight")
+    widget.title:SetText(ns.FightTitle(fight, "Last fight"))
     widget.time:SetText(ns.Duration(fight.length))
     widget.dps:SetText(ns.Rate(fight.damage / fight.length))
     widget.damage:SetText(ns.Number(fight.damage))
     widget.counts:SetText(CountsText(fight.hits or 0, fight.crits or 0, fight.avoided or 0))
 
-    local change, fights = AgainstEarlierFights()
+    local change, fights, typical = AgainstEarlierFights()
     Kit.SetArrow(widget.arrow, change)
-    reference = change and ReferenceText(change, fights) or nil
+    reference = change and ReferenceText(change, fights, typical) or nil
+    referenceHow = change and HowOf(typical) or nil
 end
 
 --- Redraws the part that changes while a fight is going on.
@@ -384,12 +466,13 @@ local function RefreshLower()
         for back = 1, shown do
             local fight = fights[#fights - back]
             Line(
-                Kit.Colored(fight.target or "Fight", MUTED),
+                Kit.Colored(ns.FightTitle(fight, "Fight"), MUTED),
                 ns.Rate(fight.damage / fight.length) .. " DPS"
             )
         end
     end
 
+    sessionHow = nil
     if ns.settings.widgetStats then
         local session, name = ns.SessionSoFar()
         local summary = ns.Summary.Of(session)
@@ -400,8 +483,15 @@ local function RefreshLower()
             summary.fights == 1 and "1 fight" or summary.fights .. " fights"
         )
         if summary.fights > 0 then
+            -- The typical DPS, so a few quick kills of critters don't lift
+            -- it. A session with nothing in it to go by, only critters
+            -- say, shows its plain average: it's still what happened.
+            local typical = TypicalOf(session)
+            local dps = typical and typical.dps or summary.dps
+            sessionHow = HowOf(typical)
+
             local crit = summary.critRate and ns.Percent(summary.critRate) .. " crit" or ""
-            Line(Kit.Colored("Average", MUTED) .. " " .. ns.Rate(summary.dps) .. " DPS", crit)
+            Line(Kit.Colored("Average", MUTED) .. " " .. ns.Rate(dps) .. " DPS", crit)
 
             -- The size of a blow is worked out, not read, hence "about".
             local sizes = summary.sizes
@@ -453,6 +543,69 @@ local function RefreshLower()
     widget:SetHeight(top > MAIN_HEIGHT and top + 6 or MAIN_HEIGHT)
 end
 
+-- The size of the panels --------------------------------------------------------
+
+-- Both panels go by these, so they're shared from here; the healing panel
+-- is made after this one.
+
+--- How large the panels are to be drawn: 1 at the normal size.
+function ns.PanelScale()
+    return PANEL_SCALES[ns.settings.widgetSize] or 1
+end
+
+--- Draws a panel at the size it's to be and puts it where it was left.
+--- A frame's offsets are measured at its own scale, so a place is kept as
+--- it would be at the normal size, which is how places were always kept,
+--- and the scale is divided out here, as the game's Edit Mode does. A
+--- change of size then leaves the corner the panel is held by where the
+--- player put it, and the panel grows or shrinks away from it. Being
+--- clamped to the screen, it's kept on it.
+---@param place table|nil  as saved: { point, relativePoint, x, y }
+---@param default table  the same, for a panel that has never been moved
+function ns.PlacePanel(panel, place, default)
+    if type(place) ~= "table" or not place.point then
+        place = default
+    end
+
+    local scale = ns.PanelScale()
+    panel:SetScale(scale)
+    panel:ClearAllPoints()
+    panel:SetPoint(
+        place.point,
+        UIParent,
+        place.relativePoint or place.point,
+        (place.x or 0) / scale,
+        (place.y or 0) / scale
+    )
+end
+
+--- Where a panel has just been dragged to, kept as it would be at the
+--- normal size (see PlacePanel).
+function ns.PanelPlace(panel)
+    local scale = panel:GetScale()
+    local point, _, relativePoint, x, y = panel:GetPoint(1)
+    return { point = point, relativePoint = relativePoint, x = x * scale, y = y * scale }
+end
+
+--- Adds the choice of size to a panel's menu. The one setting governs
+--- both panels, so they stay a pair.
+function ns.AddPanelSizes(root)
+    root:CreateTitle("Size of the panels")
+    for size, label in ipairs(SIZE_NAMES) do
+        root:CreateRadio(label, function()
+            return ns.settings.widgetSize == size
+        end, function()
+            ns.settings.widgetSize = size
+            ns.Publish("SETTINGS_CHANGED")
+        end)
+    end
+end
+
+--- Where this panel starts out, before it's ever moved.
+local function StartingPlace()
+    return { point = "LEFT", relativePoint = "LEFT", x = START_X, y = START_Y }
+end
+
 --- Shows or hides our mark in the corner, and moves the title to suit.
 local function RefreshBranding()
     local branded = ns.settings.widgetBrand
@@ -470,6 +623,11 @@ end
 local function Refresh()
     if not widget then
         return
+    end
+
+    -- A new size: drawn at it, and put back where it was left.
+    if widget:GetScale() ~= ns.PanelScale() then
+        ns.PlacePanel(widget, ns.db.widget, StartingPlace())
     end
 
     widget:SetShown(ns.settings.widget)
@@ -504,7 +662,7 @@ local function ShowMenu(self)
 
         root:CreateDivider()
         root:CreateTitle("Show on this panel")
-        AddToggle(root, "Recent fights", "widgetRecent", 2, 1)
+        AddToggle(root, "Recent fights", "widgetRecent", 3, 1)
         AddToggle(root, "Session figures", "widgetStats", true, false)
         AddToggle(root, "The Temper icon", "widgetBrand", true, false)
 
@@ -525,6 +683,9 @@ local function ShowMenu(self)
         end
 
         root:CreateDivider()
+        ns.AddPanelSizes(root)
+
+        root:CreateDivider()
         root:CreateButton("Options", function()
             ns.OpenOptions()
         end)
@@ -542,6 +703,12 @@ local function ShowTooltip(self)
     GameTooltip:AddLine(fightStart and "This fight so far." or "Your last fight.", 1, 1, 1, true)
     if reference then
         GameTooltip:AddLine(reference, 1, 1, 1, true)
+        if referenceHow then
+            GameTooltip:AddLine(("Set against: %s."):format(referenceHow), 0.6, 0.6, 0.6, true)
+        end
+    end
+    if sessionHow then
+        GameTooltip:AddLine(("Session average: %s."):format(sessionHow), 0.6, 0.6, 0.6, true)
     end
     GameTooltip:AddLine(
         "Click to open Temper. Right-click for more. Drag to move.",
@@ -647,21 +814,16 @@ local function Create()
     widget:SetFrameStrata("LOW")
     widget:SetClampedToScreen(true)
 
-    -- Back where it was last left, or out of the way on the left.
-    local place = ns.db.widget
-    if type(place) == "table" and place.point then
-        widget:SetPoint(place.point, UIParent, place.relativePoint or place.point, place.x, place.y)
-    else
-        widget:SetPoint("LEFT", UIParent, "LEFT", 40, -60)
-    end
+    -- Back where it was last left, or out of the way on the left, at the
+    -- size chosen.
+    ns.PlacePanel(widget, ns.db.widget, StartingPlace())
 
     widget:SetMovable(true)
     widget:RegisterForDrag("LeftButton")
     widget:SetScript("OnDragStart", widget.StartMoving)
     widget:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
-        local point, _, relativePoint, x, y = self:GetPoint(1)
-        ns.db.widget = { point = point, relativePoint = relativePoint, x = x, y = y }
+        ns.db.widget = ns.PanelPlace(self)
     end)
 
     widget:RegisterForClicks("LeftButtonUp", "RightButtonUp")

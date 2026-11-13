@@ -51,6 +51,26 @@ function ns.Duration(seconds)
     return ("%dm %02ds"):format(math.floor(seconds / 60), seconds % 60)
 end
 
+--- What to call a fight: its boss, its enemy, or its group of enemies,
+--- as the Fights list names it (see Record\Foes.lua), or else what the
+--- player had targeted.
+---@param otherwise string  for a fight with nothing to go by
+function ns.FightTitle(fight, otherwise)
+    if not fight.target and not fight.foes then
+        return otherwise
+    end
+
+    -- Foes loads after this file, and only after a full restart following
+    -- an update, so it's looked up when it's wanted.
+    if ns.Foes then
+        local ok, described = pcall(ns.Foes.Describe, fight)
+        if ok and type(described) == "table" and described.title then
+            return described.title
+        end
+    end
+    return fight.target or otherwise
+end
+
 --- A count with the thing counted.
 ---@param count number  rounded to a whole number
 ---@param thing string  what's counted, as one of them: "cast"

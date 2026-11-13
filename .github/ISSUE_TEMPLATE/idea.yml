@@ -1,0 +1,46 @@
+name: An idea or a request
+description: Something Temper could do, or could do better.
+labels: ["idea"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Temper is about your own fighting and stays in your own game. Ideas
+        that would rank players, measure a group, or share and post what it
+        records don't fit it, however good they are elsewhere.
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like it to do?
+      description: Say it the way you'd say it to a friend. No need to know how it would work.
+      placeholder: Tell me when my weapon skill has caught up with the enemies I'm fighting.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: What would that help you with?
+      description: The problem behind the idea often suggests a better answer than the first one.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: class
+    attributes:
+      label: Which classes do you play?
+      description: Much of what Temper can watch and advise on differs from class to class.
+      multiple: true
+      options:
+        - Druid
+        - Hunter
+        - Mage
+        - Paladin
+        - Priest
+        - Rogue
+        - Shaman
+        - Warlock
+        - Warrior
+    validations:
+      required: false

@@ -6,12 +6,13 @@ local _, ns = ...
 -- file only draws it.
 --
 -- It hangs from the panel, so it moves with it, is the same width and
--- wears the same border, and it hides when the panel does. It grows a line
--- at a time and goes away when there's nothing to say. It never takes a
--- click. It's quiet: the one time it raises its voice is a fight begun
--- with a fishing pole in hand, when that line and the border turn red and
--- the alert sound chosen in the options plays once. A sample shows while
--- Temper's options are open (see Example.lua).
+-- wears the same border, grows with it when the panel is drawn large, and
+-- it hides when the panel does. It grows a line at a time and goes away
+-- when there's nothing to say. It never takes a click. It's quiet: the
+-- one time it raises its voice is a fight begun with a fishing pole in
+-- hand, when that line and the border turn red and the alert sound chosen
+-- in the options plays once. A sample shows while Temper's options are
+-- open (see Example.lua).
 
 local ReadyAlert = {}
 ns.ReadyAlert = ReadyAlert
@@ -128,7 +129,13 @@ end
 local function Place(height)
     local panel = box:GetParent()
     local top, screenTop = panel:GetTop(), UIParent:GetTop()
-    local roomAbove = not (top and screenTop) or top + GAP + height <= screenTop
+
+    -- A panel drawn large measures its edges at its own scale, and so does
+    -- the box hanging from it, so both sides are brought to the screen's
+    -- measure before they're compared.
+    local roomAbove = not (top and screenTop)
+        or (top + GAP + height) * panel:GetEffectiveScale()
+            <= screenTop * UIParent:GetEffectiveScale()
 
     box:ClearAllPoints()
     if roomAbove then
