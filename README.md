@@ -115,8 +115,9 @@ A small panel shows your DPS, damage, hits, crits and misses as the fight
 goes, and the last fight's exact figures in between, with an arrow saying
 how it compares with your typical fight. Under that are your last few
 fights and your figures for the session so far. The stopwatch in its top
-right corner starts and ends a session, and the cog beside it opens the
-options. Right-click it for a short menu of what it shows; drag it
+right corner starts and ends a session, the cog beside it opens the
+options, and the small button at the very corner folds the panel down to
+one line: your DPS and the session's average, nothing else. Right-click it for a short menu of what it shows; drag it
 anywhere.
 
 Small icons along its bottom light up for what you have going for you:

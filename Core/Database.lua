@@ -117,6 +117,10 @@ ns.DEFAULT_SETTINGS = {
     -- size, 2 large.
     widgetSize = 1,
 
+    -- That panel folded down to its top line: the DPS and the session's
+    -- average, with the buttons beside them.
+    widgetFolded = false,
+
     -- A short note just above that panel when something's amiss before a
     -- fight: a fishing pole still in hand, a buff of the class's own not
     -- up, gear about to break (see UI\ReadyAlert.lua). Silent but for a

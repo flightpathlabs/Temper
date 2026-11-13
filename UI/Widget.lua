@@ -13,6 +13,11 @@ local _, ns = ...
 -- Combat\Readiness.lua's to say). The warning box that sits above the
 -- panel is a frame of its own (see ReadyAlert.lua).
 --
+-- It can also be folded down to its top line, for those who want it out of
+-- the way: the DPS, the session's average and the buttons, nothing else.
+-- A button in the corner folds it and opens it out again, and it stays as
+-- it was left.
+--
 -- The panels come in two sizes, normal and large, one setting for both.
 -- Large is the same panel drawn a quarter bigger with SetScale, rather
 -- than a second layout: the game draws text at the size it ends up on
@@ -45,6 +50,17 @@ local SIZE_NAMES = { "Normal", "Large" }
 -- The main figures take this much height. Three lines share it: the title
 -- from 8 down to 22, the figures from 26 to 42, the counts from 45 to 55.
 local MAIN_HEIGHT = 64
+
+-- Folded, the panel is its top line and no more. The line's middle, which
+-- the DPS is lined up on when there's no icon to line it up with.
+local FOLDED_HEIGHT = 30
+local TOP_LINE_MIDDLE = 15
+
+-- The button that folds it, and the game's own plus and minus for folding
+-- a section of the objective tracker.
+local FOLD_SIZE = 12
+local FOLD_ART = "ui-questtrackerbutton-secondary-collapse"
+local UNFOLD_ART = "ui-questtrackerbutton-secondary-expand"
 
 -- The lines under the main figures: how tall each is, and the space
 -- above a block of them, which holds a ruled line.
@@ -86,8 +102,10 @@ local STOPWATCH = "Interface\\Icons\\INV_Misc_PocketWatch_01"
 local STOPWATCH_SIZE = 13
 local STOPWATCH_IDLE = 0.55
 
--- What the bottom line says while an experiment is waiting on the player.
+-- What the bottom line says while an experiment is waiting on the player,
+-- and the shorter words that fit the folded panel.
 local YOUR_TURN = "|cffffd100Make your change, then click here|r"
+local YOUR_MOVE = "|cffffd100Your move|r"
 
 local widget
 
@@ -409,6 +427,25 @@ function ns.SessionSoFar()
     return fights, "This session"
 end
 
+--- The session's average DPS, as the panel shows it: the typical figure,
+--- so a few quick kills of critters don't lift it, or for a session with
+--- nothing in it to go by, only critters say, the plain average. It's
+--- still what happened.
+---@return number|nil dps  nil before the session has a fight
+---@return string name  as ns.SessionSoFar has it
+---@return table|nil typical  the typical figure, when there is one
+---@return table summary  from Summary.Of
+local function SessionAverage()
+    local session, name = ns.SessionSoFar()
+    local summary = ns.Summary.Of(session)
+    if summary.fights == 0 then
+        return nil, name, nil, summary
+    end
+
+    local typical = TypicalOf(session)
+    return typical and typical.dps or summary.dps, name, typical, summary
+end
+
 --- Fills one line of the lower part: text at the left, text at the right.
 local function SetLine(line, top, left, right)
     line.left:ClearAllPoints()
@@ -442,6 +479,39 @@ local function BuffSlots()
         return {}
     end
     return ns.Readiness.Slots()
+end
+
+--- Folded: the session's average at the right of the top line, or word
+--- that an experiment is waiting on the player, and nothing below.
+local function RefreshFolded()
+    for _, line in ipairs(widget.lines) do
+        line.left:Hide()
+        line.right:Hide()
+    end
+    for _, rule in ipairs(widget.rules) do
+        rule:Hide()
+    end
+    for _, icon in ipairs(widget.buffs) do
+        icon:Hide()
+        icon.key = nil
+    end
+    widget:SetHeight(FOLDED_HEIGHT)
+
+    sessionHow = nil
+    if WaitingOnPlayer() then
+        widget.session:SetText(YOUR_MOVE)
+        return
+    end
+
+    -- "avg", not "Session": a figure in the thousands has to fit between
+    -- the DPS and the stopwatch. The tooltip says what it's the average of.
+    local dps, _, typical = SessionAverage()
+    if dps then
+        widget.session:SetText(Kit.Colored("avg", MUTED) .. " " .. ns.Rate(dps))
+        sessionHow = HowOf(typical)
+    else
+        widget.session:SetText("")
+    end
 end
 
 --- Lays out the recent fights, the session's figures and the buffs,
@@ -488,20 +558,14 @@ local function RefreshLower()
 
     sessionHow = nil
     if ns.settings.widgetStats then
-        local session, name = ns.SessionSoFar()
-        local summary = ns.Summary.Of(session)
+        local dps, name, typical, summary = SessionAverage()
 
         Rule()
         Line(
             Kit.Colored(name, Kit.GOLD),
             summary.fights == 1 and "1 fight" or summary.fights .. " fights"
         )
-        if summary.fights > 0 then
-            -- The typical DPS, so a few quick kills of critters don't lift
-            -- it. A session with nothing in it to go by, only critters
-            -- say, shows its plain average: it's still what happened.
-            local typical = TypicalOf(session)
-            local dps = typical and typical.dps or summary.dps
+        if dps then
             sessionHow = HowOf(typical)
 
             local crit = summary.critRate and ns.Percent(summary.critRate) .. " crit" or ""
@@ -634,6 +698,58 @@ local function RefreshBranding()
     widget.title:SetPoint("RIGHT", widget.time, "LEFT", -6, 0)
 end
 
+--- Lays the top of the panel out folded or in full. Folded, the DPS moves
+--- up beside our mark, in smaller figures, and takes the title's place.
+local function ApplyFold()
+    local folded = ns.settings.widgetFolded
+    local art = folded and UNFOLD_ART or FOLD_ART
+    widget.fold.face:SetAtlas(art)
+    widget.fold.glow:SetAtlas(art)
+
+    for _, piece in ipairs(widget.fullOnly) do
+        piece:SetShown(not folded)
+    end
+    widget.session:SetShown(folded)
+
+    -- In a fight the DPS holds the game's running figure, which addons
+    -- can't read. Should the game refuse a new font for it then, the
+    -- figure keeps its old size until the fight is over.
+    pcall(
+        widget.dps.SetFontObject,
+        widget.dps,
+        folded and "GameFontHighlight" or "GameFontHighlightLarge"
+    )
+
+    widget.dps:ClearAllPoints()
+    if not folded then
+        widget.dps:SetPoint("TOPLEFT", 10, -26)
+    elseif ns.settings.widgetBrand then
+        widget.dps:SetPoint("LEFT", widget.mark, "RIGHT", 4, 0)
+    else
+        widget.dps:SetPoint("LEFT", widget, "TOPLEFT", 10, -TOP_LINE_MIDDLE)
+    end
+end
+
+--- Holds the panel by its top left corner, where it stands now. Held by
+--- its left edge, as it starts out, or by whichever point the game picks
+--- when it's dragged, it would grow and shrink about its middle, and
+--- folding it would move the very button just clicked. Held by its top, it
+--- grows and shrinks downwards and its top line stays put. The place is
+--- kept that way from then on, so this is done once.
+local function HoldByTop()
+    if widget:GetPoint(1) == "TOPLEFT" then
+        return
+    end
+
+    local left, top = widget:GetLeft(), widget:GetTop()
+    if not left or not top then
+        return
+    end
+    widget:ClearAllPoints()
+    widget:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+    ns.db.widget = ns.PanelPlace(widget)
+end
+
 --- Redraws the whole panel, or hides it if it's switched off.
 local function Refresh()
     if not widget then
@@ -650,9 +766,15 @@ local function Refresh()
         return
     end
 
+    HoldByTop()
     RefreshBranding()
+    ApplyFold()
     RefreshMain()
-    RefreshLower()
+    if ns.settings.widgetFolded then
+        RefreshFolded()
+    else
+        RefreshLower()
+    end
 end
 
 -- Menu and tooltip ------------------------------------------------------------
@@ -682,6 +804,7 @@ local function ShowMenu(self)
         AddToggle(root, "Recent fights", "widgetRecent", 3, 1)
         AddToggle(root, "Session figures", "widgetStats", true, false)
         AddToggle(root, "The Temper icon", "widgetBrand", true, false)
+        AddToggle(root, "Just one line", "widgetFolded", true, false)
 
         -- The buffs and the warning box come from files the game only
         -- finds when it starts, so straight after an update there's
@@ -789,6 +912,39 @@ local function CreateStopwatch()
     return button
 end
 
+--- The button in the corner that folds the panel to its top line and
+--- opens it out again.
+local function CreateFoldButton()
+    local button = CreateFrame("Button", nil, widget)
+    button:SetSize(FOLD_SIZE, FOLD_SIZE)
+
+    button.face = button:CreateTexture(nil, "ARTWORK")
+    button.face:SetAllPoints()
+
+    button.glow = button:CreateTexture(nil, "HIGHLIGHT")
+    button.glow:SetBlendMode("ADD")
+    button.glow:SetAlpha(0.4)
+    button.glow:SetAllPoints()
+
+    Kit.Tooltip(button, "One line or in full", function()
+        if ns.settings.widgetFolded then
+            return { "Click to show the panel in full." }
+        end
+        return { "Click to fold the panel to one line: your DPS and the session's average." }
+    end)
+
+    button:SetScript("OnClick", function(self)
+        ns.settings.widgetFolded = not ns.settings.widgetFolded
+        ns.Publish("SETTINGS_CHANGED")
+
+        -- The tooltip says what a click does, which has just changed.
+        if GameTooltip:IsOwned(self) then
+            self:GetScript("OnEnter")(self)
+        end
+    end)
+    return button
+end
+
 --- What a buff icon's tooltip says: what it is, and whether it's on.
 local function ShowBuffTooltip(self)
     if not self.key or not ns.Readiness then
@@ -843,6 +999,7 @@ local function Create()
     widget:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
         ns.db.widget = ns.PanelPlace(self)
+        HoldByTop()
     end)
 
     widget:RegisterForClicks("LeftButtonUp", "RightButtonUp")
@@ -865,10 +1022,14 @@ local function Create()
     widget.mark:SetSize(14, 14)
     widget.mark:SetPoint("TOPLEFT", 9, -8)
 
-    -- A small cog in the corner for the options, kept faint so the panel
-    -- stays quiet.
+    -- In the corner, the button that folds the panel, and beside it a
+    -- small cog for the options, both kept faint so the panel stays quiet.
+    widget.fold = CreateFoldButton()
+    widget.fold:SetPoint("TOPRIGHT", -8, -8)
+    widget.fold:SetAlpha(0.7)
+
     local options = Kit.OptionsButton(widget, 12)
-    options:SetPoint("TOPRIGHT", -8, -8)
+    options:SetPoint("RIGHT", widget.fold, "LEFT", -4, 0)
     options:SetAlpha(0.7)
 
     widget.stopwatch = CreateStopwatch()
@@ -913,6 +1074,23 @@ local function Create()
     widget.counts:SetPoint("TOPLEFT", 10, -45)
     widget.counts:SetPoint("RIGHT", widget.recording, "LEFT", -6, 0)
     widget.counts:SetTextColor(unpack(MUTED))
+
+    -- Folded, the session's average sits at the right of the top line, in
+    -- the time's place, and is cut short sooner than run into the DPS.
+    widget.session = Label("GameFontHighlightSmall", "RIGHT")
+    widget.session:SetPoint("RIGHT", widget.stopwatch, "LEFT", -5, 0)
+    widget.session:SetPoint("LEFT", widget.arrow, "RIGHT", 6, 0)
+    widget.session:Hide()
+
+    -- What folding the panel puts away.
+    widget.fullOnly = {
+        widget.title,
+        widget.time,
+        widget.damage,
+        damageLabel,
+        widget.counts,
+        widget.recording,
+    }
 
     -- Lines for the lower part, made once and filled as needed: the most
     -- recent fights there can be, and the session's.

@@ -67,6 +67,9 @@ First version.
   you build them, for rogues and druids in cat form.
 - Numbers on an enemy that dies or goes out of sight go with it, rather
   than moving to the next enemy the game gives its nameplate to.
+- The fight panel folds down to one line, with your DPS, the session's
+  average, the stopwatch and the cog: the small button in its corner, or
+  its right-click menu. It stays as you leave it.
 - Both panels come in a normal and a large size, and the buff icons
   along the bottom are a little larger.
 

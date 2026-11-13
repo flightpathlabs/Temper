@@ -380,6 +380,14 @@ local function AddScreenOptions(layout)
         "Untick for a plainer panel."
     )
 
+    AddCheckbox(
+        category,
+        "widgetFolded",
+        "Fold the panel to one line",
+        "Just your DPS and the session's average, with the stopwatch and the cog beside "
+            .. "them. The button in the panel's corner does the same."
+    )
+
     -- These two are drawn from a file the game only finds when it starts,
     -- so straight after an update they aren't there to offer.
     if ns.Readiness then
