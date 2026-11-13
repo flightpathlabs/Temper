@@ -14,8 +14,11 @@ local _, ns = ...
 --   * Buffs on the player are hidden during a fight, unless the game has
 --     flagged that one buff as never hidden. A hidden buff can't even be
 --     looked up: the call simply comes back empty. So each buff on our
---     list is asked about once, and one the game hides is only looked for
---     outside a fight. Inside one it costs nothing.
+--     list is asked about once. One the game hides isn't looked for at
+--     all: shown only outside a fight, it would vanish at the pull. It's
+--     handed instead to a display of the game's own, which may draw what
+--     an addon can't read (UI\ProcAlert.lua sets that up), so it's still
+--     shown in a fight, only not by us. Inside one it costs us nothing.
 --   * Whether an ability can be pressed is never hidden, and that's the
 --     very thing a reactive ability's window changes. So it's asked about
 --     a few times a second while a fight lasts. If the game turns out to
@@ -366,9 +369,9 @@ end
 
 --- Whether a buff is on, and its timing when that can be read.
 local function ReadAura(entry)
-    -- One the game hides in a fight isn't shown at all. Shown only outside
-    -- one, it would vanish at the pull, just when it matters, and come
-    -- back with a sound when the fight was over.
+    -- One the game hides in a fight is left to the game's own display.
+    -- Shown by us only outside one, it would vanish at the pull, just when
+    -- it matters, and come back with a sound when the fight was over.
     if entry.how ~= "always" then
         return false
     end
@@ -548,7 +551,35 @@ function Procs.Active()
     return active
 end
 
+--- The buffs the game hides in a fight, for the game's own display to
+--- draw instead.
+---@return table  list of { name, ids }, where ids are the spell IDs the
+---               buff can carry
+function Procs.HiddenInFights()
+    local hidden = {}
+    for _, entry in ipairs(entries) do
+        if entry.aura and entry.name and entry.how ~= "always" then
+            table.insert(hidden, { name = entry.name, ids = entry.aura, known = entry.known })
+        end
+    end
+    return hidden
+end
+
 -- For /temper check -------------------------------------------------------------------
+
+-- What's said of a buff the game hides in a fight, by how the game's own
+-- display fares with it (see ProcAlert.GameDrawing).
+local HIDDEN_BUFF_LINES = {
+    ready = "%s: the game keeps it from addons in a fight, so the game draws it itself "
+        .. "in the alert's place, in a fight and out of one. It comes without the "
+        .. "alert's sound, which the game can't be asked to play for it.",
+    waiting = "%s: the game keeps it from addons in a fight. Once this fight is over, "
+        .. "the game will draw it itself in the alert's place.",
+    failed = "%s: the game hides it during a fight and wouldn't draw it for Temper "
+        .. "(see below), so Temper can't alert you to it.",
+    off = "%s: the game keeps it from addons in a fight, so while alerts are on the "
+        .. "game draws it itself in the alert's place.",
+}
 
 local function EntryLine(entry)
     local name = entry.name or entry.english
@@ -558,7 +589,8 @@ local function EntryLine(entry)
         if entry.how == "always" then
             line = "%s: shown in a fight and out of one."
         else
-            line = "%s: the game hides it during a fight, so Temper can't alert you to it."
+            local drawing = ns.ProcAlert and ns.ProcAlert.GameDrawing(entry.name)
+            line = HIDDEN_BUFF_LINES[drawing or "off"]
         end
         line = line:format(name)
         if not entry.known then

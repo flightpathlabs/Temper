@@ -139,6 +139,9 @@ First version.
 - Off to begin with. It shows in a group too, since it's about your own
   next move. Clicks pass through it; it can be dragged while the options
   are open, where a sample shows.
+- Buffs the game keeps from addons in a fight, Clearcasting among them,
+  are drawn by the game's own buff display in the alert's place, so they
+  show in a fight too. These have no sound yet.
 - `/temper check` says which of your class's alerts this client lets
   Temper watch, and how.
 

@@ -15,6 +15,20 @@ local _, ns = ...
 -- of it, and it's kept there. Unlike the damage numbers it stays in a
 -- group, since it's about the player's own next press and records
 -- nothing.
+--
+-- Some buffs the game keeps from addons during a fight, Clearcasting
+-- among them, so Temper can't draw those itself when they matter. The
+-- game offers a way round that in Blizzard_AuraContainer: a container an
+-- addon may set up but never read, which draws a buff by its spell ID,
+-- icon, name, time and all, whether or not the addon could see it. So
+-- for each such buff on the player's list Temper sets up one of those, in
+-- the alert's place and dressed like it, and the game draws the buff
+-- there, in a fight and out of one. Temper's own alerts then sit to its
+-- right. It's set up once, outside a fight, since the game won't let it
+-- be touched while buffs are hidden, and is only shown or hidden after
+-- that. It comes without a sound: the game would play one for it, but
+-- only from a sound file, and the sounds below are the game's sound kits,
+-- which the client gives no way to turn into files.
 
 local ProcAlert = {}
 ns.ProcAlert = ProcAlert
@@ -161,11 +175,31 @@ end
 --- The game's own proc glow, the one its action buttons wear. It's a plain
 --- frame of art and animation, borrowed for a frame of ours: nothing about
 --- the action buttons themselves is touched.
-local function BorrowGlow(slot)
-    local glow = CreateFrame("Frame", nil, slot, "ActionButtonSpellAlertTemplate")
+local function CreateGlowFrame(parent, icon)
+    local glow = CreateFrame("Frame", nil, parent, "ActionButtonSpellAlertTemplate")
     glow:SetSize(ICON_SIZE * GLOW_SCALE, ICON_SIZE * GLOW_SCALE)
-    glow:SetPoint("CENTER", slot.icon)
+    glow:SetPoint("CENTER", icon)
     glow.ProcStartFlipbook:SetSize(BURST_SIZE, BURST_SIZE)
+    return glow
+end
+
+local function CreatePulse(parent, icon)
+    local pulse = parent:CreateTexture(nil, "OVERLAY", nil, 1)
+    pulse:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
+    pulse:SetBlendMode("ADD")
+    pulse:SetAllPoints(icon)
+
+    local throb = pulse:CreateAnimationGroup()
+    throb:SetLooping("BOUNCE")
+    local fade = throb:CreateAnimation("Alpha")
+    fade:SetFromAlpha(0.15)
+    fade:SetToAlpha(0.7)
+    fade:SetDuration(0.6)
+    return pulse, throb
+end
+
+local function BorrowGlow(slot)
+    local glow = CreateGlowFrame(slot, slot.icon)
 
     return {
         Start = function()
@@ -182,18 +216,8 @@ end
 
 --- A soft pulse of our own, for a client without the game's glow.
 local function MakePulse(slot)
-    local pulse = slot:CreateTexture(nil, "OVERLAY", nil, 1)
-    pulse:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
-    pulse:SetBlendMode("ADD")
-    pulse:SetAllPoints(slot.icon)
+    local pulse, throb = CreatePulse(slot, slot.icon)
     pulse:Hide()
-
-    local throb = pulse:CreateAnimationGroup()
-    throb:SetLooping("BOUNCE")
-    local fade = throb:CreateAnimation("Alpha")
-    fade:SetFromAlpha(0.15)
-    fade:SetToAlpha(0.7)
-    fade:SetDuration(0.6)
 
     return {
         Start = function()
@@ -215,11 +239,11 @@ end
 
 -- Slots ------------------------------------------------------------------------
 
-local function CreateSweep(slot)
-    local sweep = CreateFrame("Cooldown", nil, slot, "CooldownFrameTemplate")
+local function CreateSweep(parent, icon)
+    local sweep = CreateFrame("Cooldown", nil, parent, "CooldownFrameTemplate")
     sweep:ClearAllPoints()
-    sweep:SetPoint("TOPLEFT", slot.icon, "TOPLEFT", SWEEP_INSET, -SWEEP_INSET)
-    sweep:SetPoint("BOTTOMRIGHT", slot.icon, "BOTTOMRIGHT", -SWEEP_INSET, SWEEP_INSET)
+    sweep:SetPoint("TOPLEFT", icon, "TOPLEFT", SWEEP_INSET, -SWEEP_INSET)
+    sweep:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -SWEEP_INSET, SWEEP_INSET)
     sweep:SetDrawEdge(false)
     sweep:SetDrawBling(false)
     sweep:SetHideCountdownNumbers(true)
@@ -230,11 +254,28 @@ local function CreateSweep(slot)
     return sweep
 end
 
-local function MaskIcon(slot)
-    local mask = slot:CreateMaskTexture()
+local function MaskIcon(parent, icon)
+    local mask = parent:CreateMaskTexture()
     mask:SetAtlas("UI-HUD-ActionBar-IconFrame-Mask")
-    mask:SetAllPoints(slot.icon)
-    slot.icon:AddMaskTexture(mask)
+    mask:SetAllPoints(icon)
+    icon:AddMaskTexture(mask)
+end
+
+--- The action bar's own round-cornered frame, and the mask that keeps the
+--- icon's corners inside it.
+local function FrameIcon(parent, icon)
+    Attempt("mask", MaskIcon, parent, icon)
+    local frame = parent:CreateTexture(nil, "OVERLAY")
+    frame:SetAtlas("UI-HUD-ActionBar-IconFrame")
+    frame:SetSize(FRAME_WIDTH, ICON_SIZE)
+    frame:SetPoint("TOPLEFT", icon)
+end
+
+local function CreateName(parent, icon)
+    local name = Kit.Text(parent, "GameFontHighlightSmall", "CENTER")
+    name:SetPoint("TOP", icon, "BOTTOM", 0, -NAME_GAP)
+    name:SetWidth(SLOT_WIDTH)
+    return name
 end
 
 local function CreateSlot()
@@ -244,21 +285,12 @@ local function CreateSlot()
     slot.icon = slot:CreateTexture(nil, "ARTWORK")
     slot.icon:SetSize(ICON_SIZE, ICON_SIZE)
     slot.icon:SetPoint("TOP")
+    FrameIcon(slot, slot.icon)
 
-    -- The action bar's own round-cornered frame, and the mask that keeps
-    -- the icon's corners inside it.
-    Attempt("mask", MaskIcon, slot)
-    slot.frame = slot:CreateTexture(nil, "OVERLAY")
-    slot.frame:SetAtlas("UI-HUD-ActionBar-IconFrame")
-    slot.frame:SetSize(FRAME_WIDTH, ICON_SIZE)
-    slot.frame:SetPoint("TOPLEFT", slot.icon)
-
-    local made, sweep = pcall(CreateSweep, slot)
+    local made, sweep = pcall(CreateSweep, slot, slot.icon)
     slot.sweep = made and sweep or nil
 
-    slot.name = Kit.Text(slot, "GameFontHighlightSmall", "CENTER")
-    slot.name:SetPoint("TOP", slot.icon, "BOTTOM", 0, -NAME_GAP)
-    slot.name:SetWidth(SLOT_WIDTH)
+    slot.name = CreateName(slot, slot.icon)
 
     local borrowed, glow = pcall(BorrowGlow, slot)
     slot.glow = borrowed and glow or MakePulse(slot)
@@ -299,6 +331,184 @@ local function Release(key)
     ClearSweep(slot)
     slot:Hide()
     table.insert(spare, slot)
+end
+
+-- The game's own display -------------------------------------------------------
+
+-- The container, once made, and how each buff given to it fared, by name:
+-- "ready" once the game has a slot for it, "failed" if it refused.
+local gameDisplay
+local gameMade = false
+local gameDrawn = {}
+
+-- Set while a change to the container waits for the fight to end, and
+-- whether the container is showing, as last set.
+local gameWaiting = false
+local gameShown = false
+
+--- Whether the game is hiding buffs from addons now. While it is, the
+--- container's slots refuse to be touched.
+local function AurasHidden()
+    if InCombatLockdown() then
+        return true
+    end
+    local ok, hidden = pcall(C_Secrets.ShouldAurasBeSecret)
+    return ok and hidden == true
+end
+
+--- The game's proc glow, played by the game whenever the slot shows its
+--- buff. Only the looping part: the burst before it is started by a
+--- script of its own, and the game runs no addon scripts on its slots.
+local function GlowGameSlot(button, icon)
+    local glow = CreateGlowFrame(button, icon)
+    glow.ProcStartFlipbook:Hide()
+    glow:Show()
+    if pcall(button.AddAuraShownAnimation, button, glow.ProcLoop) then
+        return
+    end
+
+    glow:Hide()
+    local pulse, throb = CreatePulse(button, icon)
+    pulse:SetAlpha(0)
+    button:AddAuraShownAnimation(throb)
+end
+
+--- Dresses a slot the game has made like one of ours: the icon in the
+--- action bar's frame, the sweep, the name under it and the glow. Each
+--- piece is handed to the game, which fills it in from the buff itself.
+local function DressGameSlot(button)
+    button:SetSize(ICON_SIZE, ICON_SIZE)
+    button:ClearAllPoints()
+    button:SetPoint("TOP", gameDisplay, "CENTER", 0, SLOT_HEIGHT / 2)
+
+    -- Clicks pass through it, as through ours. If the game won't have
+    -- that, a click on it does nothing: it can't cancel the buff unless
+    -- asked to.
+    pcall(button.EnableMouse, button, false)
+
+    local icon = button:CreateTexture(nil, "ARTWORK")
+    icon:SetAllPoints()
+    FrameIcon(button, icon)
+    button:SetIcon(icon)
+
+    local made, sweep = pcall(CreateSweep, button, icon)
+    if made then
+        button:SetDurationCooldown(sweep)
+    end
+
+    button:SetSpellName(CreateName(button, icon))
+    Attempt("glow on the game's display", GlowGameSlot, button, icon)
+end
+
+--- Gives the game one buff to draw, by its spell IDs.
+local function AddGameSlot(buff)
+    local include = {}
+    for _, id in ipairs(buff.ids) do
+        include[id] = true
+    end
+
+    local button = gameDisplay:AddAuraSlot(buff.name, "HELPFUL", {
+        candidateFilters = { includeSpellIDs = include },
+    })
+    DressGameSlot(button)
+end
+
+local function CreateGameDisplay(buffs)
+    gameDisplay = CreateFrame("AuraContainer", nil, UIParent, "CustomAuraContainerTemplate")
+    gameDisplay:SetFrameStrata("MEDIUM")
+    gameDisplay:SetPoint("CENTER", holder, "CENTER")
+
+    -- Left alone, it would show Edit Mode's made-up buffs while that's
+    -- open, and so none of the player's. That's no reason to go without.
+    pcall(gameDisplay.SetEditModePreviewEnabled, gameDisplay, false)
+    gameDisplay:SetUnit("player")
+
+    for _, buff in ipairs(buffs) do
+        local what = "use of the game's display for " .. buff.name
+        if Attempt(what, AddGameSlot, buff) then
+            gameDrawn[buff.name] = "ready"
+        else
+            -- Whatever half of it was made is put away.
+            gameDrawn[buff.name] = "failed"
+            pcall(gameDisplay.SetAuraSlotEnabled, gameDisplay, buff.name, false)
+        end
+    end
+end
+
+--- Makes the container the first time the alert is on outside a fight,
+--- if the player has any buff the game hides.
+local function MakeGameDisplay()
+    gameMade = true
+    local buffs = ns.Procs.HiddenInFights()
+    if not buffs[1] then
+        return
+    end
+
+    if not Attempt("use of the game's display", CreateGameDisplay, buffs) then
+        for _, buff in ipairs(buffs) do
+            gameDrawn[buff.name] = "failed"
+        end
+        if gameDisplay then
+            pcall(gameDisplay.Hide, gameDisplay)
+        end
+        gameDisplay = nil
+    end
+end
+
+--- Shows the game's display while the alert is on and hides it while
+--- it's off, once no fight is in the way.
+local function ApplyGameDisplay()
+    local wanted = ns.settings.procAlert and true or false
+    if not wanted and not gameMade then
+        gameWaiting = false
+        return
+    end
+    if AurasHidden() then
+        gameWaiting = true
+        return
+    end
+    gameWaiting = false
+
+    if not gameMade then
+        MakeGameDisplay()
+    end
+    if
+        gameDisplay
+        and Attempt("use of the game's display", gameDisplay.SetShown, gameDisplay, wanted)
+    then
+        gameShown = wanted
+    end
+end
+
+--- Whether the game is drawing a buff in the alert's first place, so that
+--- Temper's own alerts should sit beside it.
+local function GameHasFirstPlace()
+    if not gameDisplay or not gameShown or not ns.settings.procAlert then
+        return false
+    end
+
+    -- Only for a buff the player can get: one whose talent they haven't
+    -- learned would leave the first place empty for good.
+    for _, buff in ipairs(ns.Procs.HiddenInFights()) do
+        if buff.known and gameDrawn[buff.name] == "ready" then
+            return true
+        end
+    end
+    return false
+end
+
+--- How a buff the game hides in a fight fares with the game's display:
+--- "ready", "failed", "waiting" for a fight to end, or nil while the alert
+--- is off and nothing has been tried.
+---@param name string
+function ProcAlert.GameDrawing(name)
+    if not ns.settings.procAlert then
+        return nil
+    end
+    if gameDrawn[name] == "ready" and not gameShown then
+        return gameWaiting and "waiting" or nil
+    end
+    return gameDrawn[name] or (gameWaiting and "waiting" or nil)
 end
 
 -- Drawing ----------------------------------------------------------------------
@@ -347,6 +557,22 @@ local function Redraw()
         end
     end
 
+    -- Each in its place, counted out from the middle. Two alerts sit either
+    -- side of where one sat. While the game draws a buff in the first
+    -- place, ours keep to its right, so that it never moves: it can't be
+    -- touched in a fight. The sample, showing what the game would draw
+    -- there, takes that place itself.
+    local step = SLOT_WIDTH + SLOT_GAP
+    local count = math.max(1, #items)
+    local first = -(count - 1) / 2
+    if GameHasFirstPlace() then
+        first = sampleShowing and 0 or 1
+        count = 1
+    end
+
+    -- Sized to the row about its middle, so that all of it can be dragged.
+    holder:SetWidth(count * SLOT_WIDTH + (count - 1) * SLOT_GAP)
+
     local fresh = {}
     for index, item in ipairs(items) do
         local slot = showing[item.key]
@@ -362,13 +588,9 @@ local function Redraw()
         Fill(slot, item)
 
         slot:ClearAllPoints()
-        slot:SetPoint("TOPLEFT", holder, "TOPLEFT", (index - 1) * (SLOT_WIDTH + SLOT_GAP), 0)
+        slot:SetPoint("TOP", holder, "TOP", (first + index - 1) * step, 0)
     end
 
-    -- Sized to what it holds, about its middle, so that a second alert
-    -- puts the pair either side of where one sat.
-    local count = math.max(1, #items)
-    holder:SetWidth(count * SLOT_WIDTH + (count - 1) * SLOT_GAP)
     holder:SetShown(#items > 0)
 
     if fresh[1] then
@@ -457,6 +679,7 @@ end
 ns.Subscribe("DATABASE_READY", function()
     Create()
     soundChoice = ns.settings.procSound
+    ApplyGameDisplay()
     Redraw()
 end)
 
@@ -468,5 +691,19 @@ ns.Subscribe("SETTINGS_CHANGED", function()
         PlayChosen()
     end
     soundChoice = ns.settings.procSound
+    ApplyGameDisplay()
     Redraw()
 end)
+
+-- The alert switched on or off during a fight reaches the game's display
+-- once the fight is over.
+-- The game can keep buffs hidden for a moment after a fight, or for other
+-- reasons altogether, and says when it stops.
+local function TryAgain()
+    if gameWaiting then
+        ApplyGameDisplay()
+        Redraw()
+    end
+end
+ns.OnEvent("PLAYER_REGEN_ENABLED", TryAgain)
+ns.OnEvent("ADDON_RESTRICTION_STATE_CHANGED", TryAgain)
