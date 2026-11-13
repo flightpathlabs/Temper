@@ -32,16 +32,41 @@ local MAX_NUMBERS = 24
 local STAY_SECONDS = { 1.4, 2.8, 4.5 }
 local CRIT_LINGER = 1.25
 
--- Numbers are drawn in the game's ordinary text font, with an outline so
--- they read over any background, at the size chosen in the options. A
--- line is that tall plus a little air.
-local FONT = GameFontNormal:GetFont() or STANDARD_TEXT_FONT
+-- Numbers are drawn in the font and at the size chosen in the options,
+-- with an outline so they read over any background. A line is that tall
+-- plus a little air.
+--
+-- The fonts are the four the game itself uses, each taken from one of the
+-- game's own named fonts rather than by file. The game picks a different
+-- file for the same font in some languages, and this way gets it right.
+-- A choice's place in the list is its setting value.
+Lane.FONTS = {
+    { label = "Friz Quadrata, the game's usual", font = "GameFontNormal" },
+    { label = "Arial Narrow, as in chat", font = "ChatFontNormal" },
+    { label = "Skurri, as the game's own damage numbers", font = "NumberFont_Outline_Huge" },
+    { label = "Morpheus, as in quest titles", font = "Fancy16Font" },
+}
+
+--- The file of the font chosen in the options.
+local function ChosenFont()
+    local choice = Lane.FONTS[ns.settings.font] or Lane.FONTS[1]
+    local named = _G[choice.font]
+    local file = named and named.GetFont and named:GetFont()
+    return file or STANDARD_TEXT_FONT
+end
+
 local USUAL_FONT_SIZE = 13
 local SMALLEST_FONT_SIZE = 6
 local LINE_SPACE = 3
 
--- An ability's icon, when shown, is this many times the line height.
+-- An ability's icon, when shown, is this many times the line height, and
+-- sits this far from its number.
 local ICON_SIZE = 0.8
+local ICON_GAP = 3
+
+-- A tick's dot is drawn this much smaller than an icon, in the middle of
+-- the icon's place, so it reads as a mark rather than a picture.
+local DOT_SHRINK = 0.5
 
 -- How quickly numbers step up to make room: the share of the remaining
 -- distance covered each second. Higher is snappier.
@@ -50,14 +75,20 @@ local STEP_SPEED = 12
 -- The "distance" setting, in pixels from the nameplate.
 local GAPS = { 4, 22, 46 }
 
--- For each side of the nameplate: the corner of the text that's pinned,
--- the edge of the nameplate it's pinned to, and which way "further" is.
--- Text is always pinned by its bottom edge, because the column is stacked
--- by counting up from the bottom of each line.
+-- For each side of the nameplate: how a number and its icon line up, the
+-- corner of the pair that's pinned, the edge of the nameplate it's pinned
+-- to, and which way "further" is. Always pinned by the bottom edge,
+-- because the column is stacked by counting up from the bottom of each
+-- line.
+--
+-- Above, each number is centred, with its icon to its left and the pair
+-- of them centred together. Beside the nameplate, the icons form a
+-- straight column next to it and the numbers line up against them:
+-- flush left on the right-hand side, flush right on the left.
 local SIDES = {
-    { point = "BOTTOM", plate = "TOP", x = 0, y = 1 },
-    { point = "BOTTOMRIGHT", plate = "LEFT", x = -1, y = 0 },
-    { point = "BOTTOMLEFT", plate = "RIGHT", x = 1, y = 0 },
+    { layout = "centre", point = "BOTTOM", plate = "TOP", x = 0, y = 1 },
+    { layout = "flushRight", point = "BOTTOMRIGHT", plate = "LEFT", x = -1, y = 0 },
+    { layout = "flushLeft", point = "BOTTOMLEFT", plate = "RIGHT", x = 1, y = 0 },
 }
 
 -- Where numbers go when there's no nameplate to pin them to.
@@ -116,12 +147,46 @@ local function Attempt(what, method, ...)
 end
 
 local function UseFixedSpot(number)
-    number.point, number.anchor, number.anchorPoint = "BOTTOM", UIParent, "CENTER"
+    number.anchor, number.anchorPoint = UIParent, "CENTER"
     number.x, number.y = 0, SPARE_HEIGHT
 end
 
+--- Hangs a number and its icon off one another, so that only one of them,
+--- the lead, need be pinned to the nameplate. Which leads depends on how
+--- the side lines numbers up: the number when they're centred, so the icon
+--- can sit off to its left; the icon when they're in a column beside the
+--- nameplate, so every icon is in the same place whatever the number's
+--- width.
+local function Attach(number)
+    local text, icon = number.text, number.icon
+    text:ClearAllPoints()
+    icon:ClearAllPoints()
+
+    if number.layout == "centre" or not number.slot then
+        number.lead = text
+        icon:SetPoint("RIGHT", text, "LEFT", -ICON_GAP, 0)
+    elseif number.layout == "flushLeft" then
+        -- Right of the nameplate: icon, then the number reading away.
+        number.lead = icon
+        text:SetPoint("LEFT", icon, "RIGHT", ICON_GAP, 0)
+    else
+        -- Left of it: the number, then its icon against the nameplate.
+        number.lead = icon
+        text:SetPoint("RIGHT", icon, "LEFT", -ICON_GAP, 0)
+    end
+end
+
+--- How far to move a centred number to the right, so that it and the icon
+--- on its left are centred as a pair.
+local function Shift(number)
+    if number.layout ~= "centre" or not number.hasIcon then
+        return 0
+    end
+    return (number.iconSide + ICON_GAP) / 2
+end
+
 local function Pin(number, x, y)
-    number.text:SetPoint(number.point, number.anchor, number.anchorPoint, x, y)
+    number.lead:SetPoint(number.point, number.anchor, number.anchorPoint, x + Shift(number), y)
 end
 
 --- Moves a number to its place for this frame. If the nameplate won't
@@ -147,9 +212,11 @@ local function Move(number, x, y)
         Lane.refusal = Lane.lastRefusal
     end
 
+    -- At the fixed spot a number is centred, whichever side it was on.
     local dx, dy = x - number.x, y - number.y
-    number.text:ClearAllPoints()
+    number.layout, number.point = "centre", "BOTTOM"
     UseFixedSpot(number)
+    Attach(number)
     pcall(Pin, number, number.x + dx, number.y + dy)
 end
 
@@ -159,7 +226,15 @@ local function DropIcon(number)
 end
 
 local function SizeIcon(number, fontSize)
+    -- In a column beside the nameplate the numbers line up against their
+    -- icons, so every icon there is the same size, whatever the size of
+    -- its number. A crit's larger icon would push it out of line.
+    if number.layout ~= "centre" then
+        fontSize = tonumber(ns.settings.fontSize) or USUAL_FONT_SIZE
+    end
+
     local side = (fontSize + LINE_SPACE) * ICON_SIZE
+    number.iconSide = side
     if not Attempt("icon", number.icon.SetSize, number.icon, side, side) then
         DropIcon(number)
     end
@@ -175,15 +250,16 @@ local function Resize(number, scale)
     end
     number.drawnSize = size
 
-    Attempt("size", number.text.SetFont, number.text, FONT, size, "OUTLINE")
-    if number.hasIcon then
+    Attempt("size", number.text.SetFont, number.text, number.font, size, "OUTLINE")
+    if number.slot and number.layout == "centre" then
         SizeIcon(number, size)
     end
 end
 
 local function Fade(number, alpha)
     Attempt("fade", number.text.SetAlpha, number.text, alpha)
-    if number.hasIcon and not Attempt("icon", number.icon.SetAlpha, number.icon, alpha) then
+    local iconAlpha = alpha * number.iconAlpha
+    if number.hasIcon and not Attempt("icon", number.icon.SetAlpha, number.icon, iconAlpha) then
         DropIcon(number)
     end
 end
@@ -217,6 +293,7 @@ local function Retire(index)
     local number = table.remove(showing, index)
     number.text:Hide()
     number.text:ClearAllPoints()
+    number.icon:ClearAllPoints()
 
     -- Emptied, so it isn't holding an amount we may not read while it
     -- waits to be used again.
@@ -266,30 +343,38 @@ local function NewNumber()
         text = holder:CreateFontString(nil, "OVERLAY"),
         icon = holder:CreateTexture(nil, "OVERLAY"),
     }
-
-    -- The icon rides just to the left of its number.
-    number.icon:SetPoint("RIGHT", number.text, "LEFT", -2, 0)
     number.icon:Hide()
     return number
 end
 
---- Gives a number its icon: an ability's, trimmed a touch as the game
---- does to lose the border drawn into every one, or one of the game's own
---- small pictures, which has no border and is used whole.
+-- A plain white disc, which the game keeps for cutting portraits round.
+-- Tinted, it makes the dot shown for a tick.
+local DISC = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
+
+--- Gives a number its icon. An ability's is trimmed a touch, as the game
+--- does, to lose the border drawn into every one. A dot is the disc above,
+--- tinted, drawn small in the middle of the icon's place.
 ---@param texture table  the number's icon
----@param icon number|string|nil  a spell's texture
----@param atlas string|nil  one of the game's pictures, used instead
-local function SetIcon(texture, icon, atlas)
-    if atlas then
-        -- A picture the game doesn't have isn't an error, but would leave
-        -- whatever icon this number had the last time it was used.
-        if not texture:SetAtlas(atlas) then
-            texture:SetTexture(nil)
+---@param look table  as for Lane.Show: icon, or dot
+local function SetIcon(texture, look)
+    if look.dot then
+        -- Drawn small by asking for more of the picture than there is,
+        -- with nothing round the edge. Should the game not allow that, a
+        -- dot the full size of an icon will do.
+        local margin = DOT_SHRINK / 2 / (1 - DOT_SHRINK)
+        if
+            pcall(texture.SetTexture, texture, DISC, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        then
+            texture:SetTexCoord(-margin, 1 + margin, -margin, 1 + margin)
+        else
+            texture:SetTexture(DISC)
+            texture:SetTexCoord(0, 1, 0, 1)
         end
-        texture:SetTexCoord(0, 1, 0, 1)
+        texture:SetVertexColor(look.dot[1], look.dot[2], look.dot[3])
     else
-        texture:SetTexture(icon)
+        texture:SetTexture(look.icon)
         texture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        texture:SetVertexColor(1, 1, 1)
     end
 end
 
@@ -331,9 +416,13 @@ end
 ---@param value any  what to show. May be an amount the client won't let us
 ---                  read, which is why it goes straight to the text and is
 ---                  never looked at here.
----@param look table  { r, g, b, scale, crit, icon, atlas }; icon is a
----                   texture to show beside the number, if any, and atlas
----                   one of the game's pictures to show instead
+---@param look table  { r, g, b, scale, crit, icon, dot, iconAlpha,
+---                   slot }: icon is a texture to show beside the number,
+---                   dot a colour for a small dot to show instead,
+---                   iconAlpha how solid either is (for the guesses that
+---                   should stay in the background), and slot true to keep
+---                   the icon's place empty when there's neither, so that a
+---                   word lines up with the numbers in a column
 ---@param unit string|nil  whose nameplate to pin it to; the target's if
 ---                        not given
 ---@param stand table|nil  a frame of our own to pin it to instead of a
@@ -349,13 +438,20 @@ function Lane.Show(value, look, unit, stand)
     local gap = GAPS[ns.settings.laneDistance] or GAPS[1]
 
     local plate = stand or PlateFor(unit)
-    local wantsIcon = (look.icon ~= nil or look.atlas ~= nil) and not Lane.complaints.icon
+    local iconsWork = not Lane.complaints.icon
+    local wantsIcon = (look.icon ~= nil or look.dot ~= nil) and iconsWork
+    number.slot = wantsIcon or (look.slot and iconsWork) or false
+    number.point = side.point
     if plate then
-        number.point, number.anchor, number.anchorPoint = side.point, plate, side.plate
+        number.layout = side.layout
+        number.anchor, number.anchorPoint = plate, side.plate
         number.x, number.y = side.x * gap, side.y * gap
     else
+        number.layout = "centre"
+        number.point = "BOTTOM"
         UseFixedSpot(number)
     end
+    Attach(number)
 
     -- A lane beside the nameplate arcs away from it. One above takes turns.
     if side.x ~= 0 then
@@ -378,11 +474,6 @@ function Lane.Show(value, look, unit, stand)
     number.drawnSize = math.max(SMALLEST_FONT_SIZE, math.floor(number.size + 0.5))
     number.height = number.drawnSize + LINE_SPACE
 
-    -- To the right of the nameplate, the icon would sit on top of it.
-    if plate and wantsIcon and side.x > 0 then
-        number.x = number.x + number.height
-    end
-
     number.rise = 0
     number.lift = 0
     number.liftWanted = 0
@@ -393,9 +484,11 @@ function Lane.Show(value, look, unit, stand)
     -- objects to fading.
     number.text:SetAlpha(1)
     number.icon:SetAlpha(1)
+    number.iconAlpha = look.iconAlpha or 1
 
     -- A font has to be set before any text is.
-    number.text:SetFont(FONT, number.drawnSize, "OUTLINE")
+    number.font = ChosenFont()
+    number.text:SetFont(number.font, number.drawnSize, "OUTLINE")
     number.text:SetText(value)
     number.text:SetTextColor(look.r, look.g, look.b)
     number.text:Show()
@@ -405,12 +498,15 @@ function Lane.Show(value, look, unit, stand)
     table.insert(showing, number)
 
     number.hasIcon = wantsIcon
-        and Attempt("icon", SetIcon, number.icon, look.icon, look.atlas)
+        and Attempt("icon", SetIcon, number.icon, look)
         and Attempt("icon", number.icon.Show, number.icon)
-    if number.hasIcon then
-        SizeIcon(number, number.drawnSize)
-    else
+    if not number.hasIcon then
         DropIcon(number)
+    end
+
+    -- Sized even when it isn't shown, when a word keeps its place.
+    if number.slot then
+        SizeIcon(number, number.drawnSize)
     end
 
     Place(number, number.start, 0)

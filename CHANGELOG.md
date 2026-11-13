@@ -13,7 +13,8 @@ First version.
   each with a column of its own.
 - Choose how they move (rising stream, stay and step up, arc away, shrink
   away), how long they stay, which side of the nameplate they sit on, how
-  far off, and their size on a slider.
+  far off, their size on a slider, and their font: any of the four the
+  game uses, including the heavy one it draws its own damage numbers in.
 - Numbers are coloured by kind of damage: weapon swings white, abilities
   yellow, magic in the colour of its school, a pet's blows green. Or
   colour magic only, or nothing.
@@ -21,10 +22,14 @@ First version.
   a slider; gold, red or their own colour; and whether they land with a
   small pop, a big pop, a shake or no fuss.
 - Misses, dodges and parries show as small grey words.
-- Optionally, a best-guess icon of the ability beside each number. A
-  bleed's ticks are told from weapon swings: once Temper has seen an
-  ability tick it shows that ability's icon, and a tick it can't place
-  shows a small clock rather than your weapon.
+- Optionally, an icon beside every number: the ability's own when Temper
+  can tell which it was, a small dot in the school's colour for each tick
+  of a bleed or damage over time, and a faint plain picture of the kind
+  of damage for a hit it can't place. Bleed ticks are told from weapon
+  swings, so they no longer show your weapon.
+- Above the nameplate each number and its icon are centred together.
+  Beside it, the icons form a straight column against the nameplate and
+  the numbers line up flush beside them.
 - While Temper's options are open, an example enemy stands beside the
   window with made-up hits playing on it, so each change shows as it's
   made. Drag it wherever suits. The Options window itself can be dragged
@@ -119,7 +124,9 @@ First version.
   Trance, and abilities that open up, such as Overpower, Revenge,
   Execute, Riposte, Counterattack, Mongoose Bite and Hammer of Wrath.
   The ability's icon appears below the middle of the screen with the
-  game's own proc glow, and a short sound you can pick or switch off.
+  game's own proc glow, and a sound you can pick or switch off: any of
+  the game's own alert sounds, played at your Master Volume so it's heard
+  over a fight.
 - Off to begin with. It shows in a group too, since it's about your own
   next move. Clicks pass through it; it can be dragged while the options
   are open, where a sample shows.

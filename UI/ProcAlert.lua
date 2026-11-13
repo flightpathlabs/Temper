@@ -54,16 +54,49 @@ local SAMPLE_SPELL = 16870
 local SAMPLE_NAME = "Clearcasting"
 local SAMPLE_SECONDS = 15
 
--- The choices of sound, in the order the options list them. Each is one of
--- the game's own short sounds, by its name in the game's list of them, and
--- is played at the game's sound effects volume.
+-- The choices of sound, in the order the options list them. These are a
+-- few of the alert sounds the game itself offers for its cooldown alerts
+-- (see Blizzard_CooldownViewer's CooldownViewerSoundAlertData.lua), made
+-- to be heard over a fight. Each is named by the game's own words for it
+-- where it has them, in the player's language.
 ProcAlert.SOUNDS = {
     { label = "No sound" },
-    { label = "Soft click", kit = "IG_MAINMENU_OPTION_CHECKBOX_ON" },
-    { label = "Ping", kit = "MAP_PING" },
-    { label = "Tick", kit = "UI_BATTLEGROUND_COUNTDOWN_TIMER" },
-    { label = "Chime", kit = "UI_BNET_TOAST" },
+    { label = "Anvil Strike", kit = 316528, words = "CDMSND_IMPACTS_ANVIL_STRIKE" },
+    { label = "Sword Shing", kit = 353421, words = "CDMSND_SHORT_SWORD_SHING" },
+    { label = "Bell Strike", kit = 353392, words = "CDMSND_SHORT_BELL_STRIKE" },
+    { label = "Metal Impact", kit = 353408, words = "CDMSND_SHORT_METAL_IMPACT" },
+    { label = "Blades", kit = 353389, words = "CDMSND_SHORT_BLADES" },
+    { label = "Triangle", kit = 353423, words = "CDMSND_SHORT_TRIANGLE" },
+    { label = "Kalimba", kit = 353405, words = "CDMSND_SHORT_KALIMBA" },
+    { label = "Synth Bleep", kit = 353402, words = "CDMSND_SHORT_SYNTH_BLEEP" },
+    { label = "Chime Ascending", kit = 316447, words = "CDMSND_INSTRUMENTS_CHIME_ASCENDING" },
+    { label = "Bell Ring", kit = 316493, words = "CDMSND_INSTRUMENTS_BELL_RING" },
+    { label = "Low Thud", kit = 316531, words = "CDMSND_IMPACTS_LOW_THUD" },
+    { label = "Warhorn", kit = 316723, words = "CDMSND_INSTRUMENTS_WARHORN" },
 }
+
+for _, sound in ipairs(ProcAlert.SOUNDS) do
+    local words = sound.words and _G[sound.words]
+    if type(words) == "string" and words ~= "" then
+        sound.label = words
+    end
+end
+
+--- Plays one of the sounds above at the game's main volume, so that an
+--- effects volume turned down for spells doesn't bury it. Falls back to
+--- the effects volume if the game won't play it the first way.
+---@param choice number  a place in ProcAlert.SOUNDS
+function ProcAlert.Play(choice)
+    local sound = ProcAlert.SOUNDS[choice]
+    if not sound or not sound.kit then
+        return
+    end
+
+    local ok, willPlay = pcall(PlaySound, sound.kit, "Master")
+    if not ok or not willPlay then
+        pcall(PlaySound, sound.kit, "SFX")
+    end
+end
 
 local holder
 local hint
@@ -102,11 +135,7 @@ end
 -- Sound ------------------------------------------------------------------------
 
 local function PlayChosen()
-    local choice = ProcAlert.SOUNDS[ns.settings.procSound]
-    local kit = choice and choice.kit and SOUNDKIT and SOUNDKIT[choice.kit]
-    if kit then
-        Attempt("sound", PlaySound, kit, "SFX")
-    end
+    ProcAlert.Play(ns.settings.procSound)
 end
 
 --- Sounds for alerts that have just come on, once between them.

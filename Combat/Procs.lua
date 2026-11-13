@@ -73,8 +73,8 @@ end
 
 local WATCH = {
     DRUID = {
-        -- Omen of Clarity, once cast, now and then makes the next ability
-        -- cost nothing. Best spent on the dearest one to hand.
+        -- Omen of Clarity (a passive on Forever) now and then makes the
+        -- next ability cost nothing. Best spent on the dearest one to hand.
         { aura = { 16870 }, from = { 16864 }, english = "Clearcasting" },
     },
 

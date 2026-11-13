@@ -254,6 +254,7 @@ end
 ---                            something, but of what can't be said
 ---@return table|nil cast  the log's entry for the cast it's traced to; nil
 ---                        for a weapon swing or an effect still ticking
+---@return boolean|nil tick  true when it was a tick of something over time
 function Guess.Match(school)
     if not school or not ns.character then
         return nil
@@ -279,7 +280,10 @@ function Guess.Match(school)
         if unknown then
             return Claim(unknown)
         end
-        return StillTicking(school)
+        local ticking = StillTicking(school)
+        -- Only a tick if something was found still ticking. A spell
+        -- nothing explains is just an untraced blow.
+        return ticking, nil, ticking ~= nil
     end
 
     -- A physical blow: a swing of the weapon, unless something else fits
@@ -313,5 +317,5 @@ function Guess.Match(school)
         return nil
     end
 
-    return StillBleeding(now) or Guess.TICK
+    return StillBleeding(now) or Guess.TICK, nil, true
 end

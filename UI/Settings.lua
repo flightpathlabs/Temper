@@ -225,6 +225,15 @@ local function AddNumberOptions(layout)
 
     AddDropdown(
         category,
+        "font",
+        "Font of the numbers",
+        "One of the game's own fonts. Skurri is the heavy one the game draws its own "
+            .. "damage numbers in.",
+        Labels(ns.Lane.FONTS)
+    )
+
+    AddDropdown(
+        category,
         "colorBy",
         "Colour the numbers",
         "By kind of damage: weapon swings in white, abilities in yellow, magic in the "
@@ -404,7 +413,9 @@ local function AddAlertOptions(layout)
         category,
         "procSound",
         "Alert sound",
-        "Played once as an alert appears, at your game's sound effects volume.",
+        "Played once as an alert appears, at your Master Volume, so it's heard even with "
+            .. "sound effects turned down. These are the "
+            .. "game's own alert sounds; each plays as you choose it.",
         Labels(ns.ProcAlert.SOUNDS)
     )
 end

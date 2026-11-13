@@ -54,14 +54,13 @@ local sounded = {}
 
 --- Plays the alert sound chosen in the options, unless that's "No sound".
 local function PlaySoundOnce()
-    local sounds = ns.ProcAlert and ns.ProcAlert.SOUNDS
-    local name = FALLBACK_SOUND
-    if sounds then
-        local choice = sounds[ns.settings.procSound]
-        name = choice and choice.kit
+    if ns.ProcAlert then
+        ns.ProcAlert.Play(ns.settings.procSound)
+        return
     end
 
-    local kit = name and SOUNDKIT and SOUNDKIT[name]
+    -- Only straight after an update, before the game is restarted.
+    local kit = SOUNDKIT and SOUNDKIT[FALLBACK_SOUND]
     if kit then
         pcall(PlaySound, kit, "SFX")
     end

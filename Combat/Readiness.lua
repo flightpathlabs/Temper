@@ -242,12 +242,11 @@ local CLASS_BUFFS = {
     },
 
     DRUID = {
+        -- Thorns is left out: it often isn't wanted, and the warning would
+        -- nag. So is Omen of Clarity, which on Forever is a passive with
+        -- nothing to keep up. What matters is when it procs, and that's
+        -- the alerts' business (see Combat\Procs.lua).
         { ids = { 1126 }, also = { 21849 }, english = "Mark of the Wild" },
-
-        -- Omen of Clarity, for a druid with the talent, is a buff that
-        -- has to be cast and lasts ten minutes. Thorns is left out: it
-        -- often isn't wanted, and the warning would nag.
-        { ids = { 16864 }, english = "Omen of Clarity" },
     },
 
     PALADIN = {

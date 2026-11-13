@@ -110,23 +110,51 @@ local function LookFor(hit)
     return { r = color[1], g = color[2], b = color[3], scale = scale, crit = hit.crit }
 end
 
--- What's shown beside a tick that couldn't be put to any ability: a
--- clock, for damage over time, so it isn't taken for a swing.
-local TICK_ATLAS = "auctionhouse-icon-clock"
+-- Icons ---------------------------------------------------------------------
+--
+-- Every number gets one, when icons are on. A blow traced to an ability
+-- has that ability's icon. A tick of something over time has a small dot
+-- in the colour of its school, which sets ticks apart from blows at a
+-- glance. A blow that couldn't be traced at all has a plain picture for
+-- its school of damage, drawn faint, since it's a guess about a guess.
 
---- The icon of the ability a hit most likely was, if icons are wanted and
---- there's a guess to be had.
----@return number|nil texture
----@return string|nil atlas  one of the game's pictures, in place of an
----                          ability's icon
-local function IconFor(hit)
-    if not ns.settings.icons or not hit.spell then
-        return nil
+-- The game's own pictures for each school of magic, as its character
+-- sheet shows them, by school.
+local SCHOOL_ICON = "Interface\\PaperDollInfoFrame\\SpellSchoolIcon"
+local SCHOOL_ICONS = { [2] = 2, [4] = 3, [8] = 4, [16] = 5, [32] = 6, [64] = 7 }
+
+-- A bleed's dot, and how solid an untraced blow's picture is drawn.
+local BLEED = { 0.85, 0.2, 0.15 }
+local FAINT = 0.6
+
+--- Sets a hit's icon, or its dot, on its look.
+local function GiveIcon(look, hit)
+    if not ns.settings.icons then
+        return
     end
-    if hit.spell == ns.Guess.TICK then
-        return nil, TICK_ATLAS
+
+    if hit.tick then
+        look.dot = SCHOOL_COLORS[hit.school] or (hit.school == 1 and BLEED) or MAGIC
+        return
     end
-    return C_Spell.GetSpellTexture(hit.spell)
+
+    local spell = hit.spell
+    if spell and spell ~= ns.Guess.TICK then
+        look.icon = C_Spell.GetSpellTexture(spell)
+        if look.icon then
+            return
+        end
+    end
+
+    -- Untraced. A spell's school has a picture of its own; a physical blow
+    -- has the plain weapon swing's.
+    local index = SCHOOL_ICONS[hit.school]
+    if index then
+        look.icon = SCHOOL_ICON .. index
+    else
+        look.icon = C_Spell.GetSpellTexture(ns.Guess.MELEE_SWING)
+    end
+    look.iconAlpha = FAINT
 end
 
 --- Puts one hit in the lane.
@@ -137,13 +165,17 @@ local function Draw(hit, stand)
             -- The game's own words for these, in the player's language.
             local word = CombatFeedbackText and CombatFeedbackText[hit.avoided] or hit.avoided
             local look = { r = GREY[1], g = GREY[2], b = GREY[3], scale = WORD_SCALE }
+
+            -- No icon, but its place kept, so that beside a nameplate the
+            -- word lines up with the numbers in the column.
+            look.slot = ns.settings.icons
             ns.Lane.Show(word, look, hit.unit, stand)
         end
         return
     end
 
     local look = LookFor(hit)
-    look.icon, look.atlas = IconFor(hit)
+    GiveIcon(look, hit)
     ns.Lane.Show(hit.amount, look, hit.unit, stand)
 end
 
@@ -163,7 +195,10 @@ local SAMPLES = {
     { amount = 124, kind = "magic", school = 4, spell = 133 },
     { amount = 97, kind = "auto", school = 1, spell = 6603, crit = true },
     { avoided = "DODGE" },
+    { amount = 14, kind = "ability", school = 1, tick = true },
     { amount = 44, kind = "auto", school = 1, spell = 6603 },
+    { amount = 22, kind = "magic", school = 8, tick = true },
+    { amount = 31, kind = "magic", school = 32 },
     { amount = 213, kind = "ability", school = 1, spell = 78, crit = true },
 }
 local nextSample = 0

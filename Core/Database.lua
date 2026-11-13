@@ -37,7 +37,7 @@ local addonName, ns = ...
 -- never assume the table is there, and never replace what did load with
 -- defaults. We only ever fill in what's missing.
 
-local SCHEMA = 4
+local SCHEMA = 5
 
 ns.DEFAULT_SETTINGS = {
     -- Show the player's hits in a lane by the target's nameplate.
@@ -59,8 +59,11 @@ ns.DEFAULT_SETTINGS = {
     -- How far from the nameplate: 1 close, 2 a little off, 3 well clear.
     laneDistance = 1,
 
-    -- The height of an ordinary number, in pixels.
+    -- The height of an ordinary number, in pixels, and its font: 1 the
+    -- game's usual, 2 a narrow one, 3 the game's own damage-number font, 4
+    -- a decorative one (see Text\Lane.lua).
     fontSize = 13,
+    font = 1,
 
     -- What the colour of a number says: 1 its kind (weapon swings white,
     -- abilities yellow, magic by its school), 2 magic only, 3 nothing.
@@ -111,10 +114,11 @@ ns.DEFAULT_SETTINGS = {
 
     -- An ability's icon below the middle of the screen when something has
     -- made it the best next press: Clearcasting, or Overpower after a
-    -- dodge. Off unless asked for. With it, a sound: 1 none, 2 a soft
-    -- click, 3 a ping, 4 a tick, 5 a chime (see UI\ProcAlert.lua).
+    -- dodge. Off unless asked for. With it, a sound: 1 none, otherwise
+    -- one of the game's alert sounds, 2 being an anvil strike (see the
+    -- list in UI\ProcAlert.lua).
     procAlert = false,
-    procSound = 3,
+    procSound = 2,
 }
 
 -- How many fights to keep for each character. The oldest go first.
@@ -209,6 +213,12 @@ ns.OnEvent("ADDON_LOADED", function(name)
             settings.critStyle = nil
         end
     end
+    -- The fifth layout replaced the alert sounds with louder ones, so a
+    -- saved choice no longer means what it did. "No sound" still does.
+    if (db.schema or 1) < 5 and db.settings.procSound ~= 1 then
+        db.settings.procSound = nil
+    end
+
     FillIn(db.settings, ns.DEFAULT_SETTINGS)
 
     ns.db = db

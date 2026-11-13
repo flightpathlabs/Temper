@@ -205,8 +205,9 @@ ns.OnEvent("UNIT_COMBAT", function(unit, action, flag, amount, school)
     -- How it went, in one word, for the cast it's traced to.
     local outcome = hit.avoided or (hit.crit and "CRIT") or (hit.glancing and "GLANCE") or "HIT"
 
-    local spell, cast = ns.Guess.Match(hit.school)
+    local spell, cast, tick = ns.Guess.Match(hit.school)
     hit.spell = spell
+    hit.tick = tick
     if cast then
         cast.result = outcome
     end
