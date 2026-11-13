@@ -207,11 +207,13 @@ ns.OnEvent("UNIT_SPELLCAST_SUCCEEDED", function(unit, _, spellID)
     end
 end)
 
--- The game announces each swing of a melee weapon as it begins. Knowing
--- a swing is on its way is what tells a weapon's blow from an ability's.
+-- The game announces each swing of a weapon as it begins. Knowing a swing
+-- is on its way is what tells a weapon's blow from an ability's, and
+-- knowing that swings are announced at all is what lets a blow with no
+-- swing behind it be put down to a pet.
 ns.OnEvent("PLAYER_SWING", function(_, swingType)
-    if not IsSecret(swingType) and swingType ~= Enum.PlayerSwingType.Ranged then
-        ns.Guess.NoteSwing()
+    if not IsSecret(swingType) then
+        ns.Guess.NoteSwing(swingType == Enum.PlayerSwingType.Ranged)
     end
 end)
 

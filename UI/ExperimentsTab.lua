@@ -60,8 +60,8 @@ local FAIRER = "The same kind of enemy each time makes it fairer."
 -- player is told to look here for it.
 local COUNTED_WITH_PANEL = "You can close this window: fights are counted as you win them, "
     .. "and the panel keeps count."
-local COUNTED_WITHOUT_PANEL = "Fights are counted as you win them. Keep this window open, "
-    .. "or check back, to see when the set is finished."
+local COUNTED_WITHOUT_PANEL = "Fights are counted as you win them. Check back here to see "
+    .. "when the set is done."
 
 -- How far along a step is, for each state an experiment can be in.
 local STEP_STATES = {

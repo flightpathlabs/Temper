@@ -153,6 +153,14 @@ local function NewestTally()
     return newest
 end
 
+--- Notes the number of the newest tally as one that's been dealt with.
+local function NoteLatestTally()
+    local ok, newest = pcall(NewestTally)
+    if ok and newest then
+        lastTally = newest
+    end
+end
+
 --- Reads the fight that just ended out of the game's damage tally.
 --- Run under pcall: on a client or in a place where the tally is withheld,
 --- any line here may fail, and the right response is to keep nothing.
@@ -160,9 +168,7 @@ end
 ---                           when there's no new tally to read
 ---@return table spells
 ---@return table enemies
----@param tallyBefore number|nil  the newest tally there was when the
----                               fight began
-local function ReadTally(tallyBefore)
+local function ReadTally()
     local session = Enum.DamageMeterSessionType.Current
     local dealt = Enum.DamageMeterType.DamageDone
     local taken = Enum.DamageMeterType.EnemyDamageTaken
@@ -170,7 +176,7 @@ local function ReadTally(tallyBefore)
     -- A fight in which the player hurt nothing may leave the game still
     -- showing the one before. That one's already on record.
     local newest = NewestTally()
-    if newest and (newest == lastTally or newest == tallyBefore) then
+    if newest and newest == lastTally then
         return nil
     end
 
@@ -292,7 +298,6 @@ ns.OnEvent("PLAYER_REGEN_DISABLED", function()
         target = target,
         enemyLevel = enemyLevel,
         rest = rest,
-        tallyBefore = select(2, pcall(NewestTally)),
         power = power,
         powerKind = powerKind,
         grouped = IsInGroup(),
@@ -304,6 +309,10 @@ end)
 function Fights.BelongsTo(recording)
     return current ~= nil and current.recording == recording
 end
+
+-- Whatever tallies the game is holding at login are from before; none of
+-- them is a fight still to be saved.
+ns.Subscribe("DATABASE_READY", NoteLatestTally)
 
 -- The game starts its numbering again when its tallies are cleared.
 ns.OnEvent("DAMAGE_METER_RESET", function()
@@ -321,11 +330,14 @@ ns.OnEvent("PLAYER_REGEN_ENABLED", function()
     local tally, casts, timeline, blows = ns.Hits.Finish(began.start)
 
     -- With anyone else around, the hits on the target aren't all ours.
+    -- The game still made a tally for the fight, so note its number: a
+    -- later fight in which nothing is hurt mustn't be mistaken for it.
     if began.grouped or IsInGroup() or not ns.character then
+        NoteLatestTally()
         return
     end
 
-    local ok, damage, spells, enemies = pcall(ReadTally, began.tallyBefore)
+    local ok, damage, spells, enemies = pcall(ReadTally)
     if not ok or not damage or damage <= 0 then
         return
     end

@@ -173,6 +173,7 @@ function Recorder.ForgetEverything()
     end
     character.nextNumber = 1
     character.nextExperiment = 1
+    character.threatRatio = nil
 
     ns.Publish("EXPERIMENTS_CHANGED")
     ns.Publish("FIGHTS_CHANGED")

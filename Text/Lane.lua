@@ -128,7 +128,7 @@ local function Place(number, now, elapsed)
 
     local x, y = number.x + dx, number.y + dy + number.lift
     local ok, problem = pcall(Put, number, x, y, alpha, scale)
-    if ok then
+    if ok and number.anchor ~= UIParent then
         refusals = 0
     end
 

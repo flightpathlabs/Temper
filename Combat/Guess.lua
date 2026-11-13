@@ -100,10 +100,14 @@ function Guess.NoteCast(cast)
     end
 end
 
---- Takes note of a melee swing being announced.
-function Guess.NoteSwing()
+--- Takes note of a weapon swing being announced.
+---@param ranged boolean  a shot, which arrives as a cast of its own and
+---                       needs no place in the queue of swings
+function Guess.NoteSwing(ranged)
     swingsAnnounced = true
-    table.insert(swings, GetTime())
+    if not ranged then
+        table.insert(swings, GetTime())
+    end
 end
 
 --- Uses up the oldest swing that's still waiting for its blow.
@@ -121,7 +125,7 @@ end
 
 --- A cast still waiting for its blow that fits a blow of this school.
 ---@return table|nil known    one of an ability known for the school
----@return table|nil unknown  one of an ability not yet seen doing any
+---@return table|nil unknown  one of an ability we aren't yet sure about
 local function WaitingCasts(school, now)
     local damaging = ns.character.schools
     local known, unknown
@@ -129,10 +133,17 @@ local function WaitingCasts(school, now)
     for _, cast in ipairs(casts) do
         local waiting = not cast.matched and now - cast.time <= FLIGHT_SECONDS
         if waiting and damaging[cast.cast] then
-            local usual = UsualSchool(cast.cast)
+            local usual, times = UsualSchool(cast.cast)
             if usual == school then
-                known = known or cast
-            elseif usual == nil then
+                -- Of two that fit, one used this very moment is likelier
+                -- than one that's been in the air a while.
+                if not known or now - cast.time <= SAME_MOMENT then
+                    known = cast
+                end
+            elseif (times or 0) < SURE_AFTER then
+                -- Seen doing something else, but not often enough to be
+                -- sure of. It stays a candidate, so that one early
+                -- mistake can be outvoted.
                 unknown = unknown or cast
             end
         end
@@ -153,16 +164,15 @@ local function StillTicking(school)
     end
 
     -- Nothing is known for this school. The likeliest culprit is the last
-    -- thing cast that we aren't yet sure about, and this is how an effect
-    -- that only ever ticks gets its school learned.
+    -- thing cast that has never been seen doing damage of any kind, and
+    -- this is how an effect that only ever ticks gets its school learned.
+    -- An ability already seen doing something else is left alone: its
+    -- own blows will settle what it is.
     for index = #casts, 1, -1 do
         local spell = casts[index].cast
-        if damaging[spell] then
-            local _, times = UsualSchool(spell)
-            if (times or 0) < SURE_AFTER then
-                Learn(spell, school)
-                return spell
-            end
+        if damaging[spell] and UsualSchool(spell) == nil then
+            Learn(spell, school)
+            return spell
         end
     end
     return nil

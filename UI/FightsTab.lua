@@ -210,7 +210,8 @@ end
 --- What to call a set of fights in a sentence: "Session 3", or else how
 --- many there are.
 ---@param fights table  list of fights
----@param earlier boolean|nil  true to say "5 earlier fights"
+---@param earlier boolean|nil  true to say "5 earlier", for the older of
+---                             two sets being compared
 local function SetName(fights, earlier)
     local session = WholeSession(fights)
     if session then
@@ -218,7 +219,7 @@ local function SetName(fights, earlier)
     elseif not earlier then
         return FightsText(#fights)
     end
-    return #fights == 1 and "1 earlier fight" or #fights .. " earlier fights"
+    return #fights == 1 and "1 earlier" or #fights .. " earlier"
 end
 
 --- The same with the time of its newest fight, to tell two sets apart:

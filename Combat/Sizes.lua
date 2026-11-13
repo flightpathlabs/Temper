@@ -22,6 +22,8 @@ local _, ns = ...
 --   they do. A blow that can be checked (an ability used once, landing
 --   once, whose damage the game's tally gives exactly) shows the ratio,
 --   which is remembered for the character and used to scale the rest.
+--   It starts at one for one and moves a little with each reading, so a
+--   single wrong one can't throw everything out.
 --
 -- Only the player's target is followed. If the game ever starts hiding
 -- threat, every reading here comes back empty and nothing is sized.
@@ -125,9 +127,11 @@ local function Match(blows)
             blows[first].size = step.gain
         end
 
-        -- A step with no blow to explain it means we missed something, so
-        -- the next step may be carrying more than it seems to.
-        doubtful = explained == 0
+        -- A step that didn't belong to exactly one blow means something
+        -- went unaccounted for (threat with no blow behind it, or two
+        -- blows we couldn't split), so the next step may be carrying more
+        -- than it seems to.
+        doubtful = explained ~= 1
     end
 end
 
@@ -190,16 +194,26 @@ function Sizes.Finish(blows, fight)
     local character = ns.character
     local checked = CheckedRatio(blows, fight.spells)
     if checked then
-        local known = character.threatRatio or checked
+        local known = character.threatRatio or 1
         character.threatRatio = known + (checked - known) * LEARNING_RATE
     end
     local ratio = character.threatRatio or 1
 
+    -- What the game's tally says each ability did in all. No one blow of
+    -- an ability can have done more than that.
+    local totals = {}
+    for _, spell in ipairs(fight.spells) do
+        if spell.kind ~= "pet" then
+            totals[spell.id] = (totals[spell.id] or 0) + spell.damage
+        end
+    end
+
     local sizes = { hits = 0, total = 0, crits = 0, critTotal = 0 }
     for _, blow in ipairs(blows) do
-        if blow.size then
-            local damage = math.floor(blow.size * ratio + 0.5)
+        local damage = blow.size and math.floor(blow.size * ratio + 0.5)
+        local most = blow.spell and totals[blow.spell]
 
+        if damage and not (most and damage > most * 1.05 + 1) then
             if blow.crit then
                 sizes.crits = sizes.crits + 1
                 sizes.critTotal = sizes.critTotal + damage
