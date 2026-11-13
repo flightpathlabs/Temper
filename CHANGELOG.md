@@ -105,6 +105,11 @@ First version.
   the options.
 - Only healing done during a fight is counted. Fights recorded before
   this version have no healing on record.
+- **Who healed you.** The tab shows a bar each for you, your pet and
+  anyone outside your group who healed you, and says how much of your
+  own healing went on you, your pet and others. Healed back now counts
+  the healing that landed on you, yours and theirs. The fight page names
+  who else healed you.
 
 - **How much was stopped.** An estimate of the damage coming at you that
   never landed: how much your armour kept off, what your dodges, parries

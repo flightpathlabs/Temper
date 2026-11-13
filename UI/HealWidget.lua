@@ -160,10 +160,11 @@ local function ShowLast()
     widget.hps:SetText(ns.Rate(summary.hps))
     widget.healed:SetText(ns.Number(summary.healing))
 
-    -- How much of what the enemy did was healed back. It can pass 100%
-    -- when the fight was begun already hurt.
+    -- How much of what the enemy did was healed back: by the healing that
+    -- landed on the player, which leaves out a heal on the pet. It can
+    -- pass 100% when the fight was begun already hurt.
     local healedBack = summary.healedBack
-    widget.note:SetText(healedBack and ns.Percent(healedBack) .. " of damage taken" or "")
+    widget.note:SetText(healedBack and ns.Percent(healedBack) .. " of damage healed back" or "")
 end
 
 --- Redraws the part that changes while a fight is going on.

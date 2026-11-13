@@ -16,9 +16,10 @@ local _, ns = ...
 -- figures runs across the top. Under it, healing and harm stand side by
 -- side, where the healing came from on the left and what did the hurting
 -- on the right, so one can be weighed against the other at a glance. Then
--- comes how much was stopped, by armour, by blows that didn't land and by
--- the shield, a bar for each; then the counts of blows and heals, and the
--- advice.
+-- comes who healed the player, when anyone but they did: themselves, their
+-- pet and anyone else, a bar each. Then how much was stopped, by armour,
+-- by blows that didn't land and by the shield, a bar for each; then the
+-- counts of blows and heals, and the advice.
 --
 -- All the reckoning is in Record\Healing.lua. This file only draws it.
 
@@ -55,6 +56,10 @@ local LINE_GAP = 6
 
 -- The most bars in a column. Anything beyond shares the last one.
 local MAX_BARS = 6
+
+-- The most bars for who healed the player: themselves, their pet, and the
+-- few others a fight keeps. Anyone beyond shares the last one.
+local WHO_BARS = 8
 
 -- Healing in the green the game shows it in, and harm in a red that can't
 -- be taken for it.
@@ -123,6 +128,26 @@ local THIS_IS_AVOIDABLE = "The game marks this as damage that can be avoided."
 
 local ABSORBED = "Damage your own shields soaked up, so it never reached your health."
 local EVERY_HEAL = "Every heal that landed on you is counted, whatever it came from."
+
+-- What healed back weighs, and what's in it when older fights are too.
+local HEALED_BACK = "The healing that landed on you, your own and anyone else's, against the "
+    .. "damage you took."
+local LANDED_UNKNOWN = "Some of these fights don't say where your healing landed, so all of "
+    .. "it is counted for those."
+
+-- Said under the player's own healing bars, of fights that don't say
+-- where it landed.
+local SPENT_SOME_FIGHTS = "Only %s where it landed."
+
+-- For the tooltips of the bars on who healed the player.
+local WHO_NOTES = {
+    you = "Your own heals that landed on you.",
+    pet = "Your pet's heals that landed on you.",
+    other = "Their heals that landed on you. Temper only records fights outside a group, so "
+        .. "this was someone you weren't grouped with.",
+    someone = "The game didn't give this healer's name.",
+    rest = "Everyone the bars above leave out.",
+}
 
 -- What lies behind the estimate of what was stopped, for its tooltips.
 local STOPPED_NOTE = "An estimate: the game counts the damage you took, but not what never "
@@ -248,7 +273,7 @@ local function WhyEmpty(fights, summary)
     end
 
     -- Fights with a record, and not one figure in it above nothing.
-    local healed = summary.healing + summary.heals
+    local healed = summary.healing + summary.healedByOthers + summary.heals
     local harmed = summary.taken + summary.absorbed + summary.struck + summary.avoided
     if healed + harmed + summary.interrupts + summary.dispels == 0 then
         return NOTHING_HAPPENED:format(These(#fights))
@@ -365,6 +390,45 @@ local function DefenceSkillText(summary)
     return text
 end
 
+--- "a, b and c".
+local function AndList(words)
+    if #words < 2 then
+        return words[1] or ""
+    end
+    local last = words[#words]
+    return table.concat(words, ", ", 1, #words - 1) .. " and " .. last
+end
+
+--- How the player's own healing was spent, for under its bars: "Of your
+--- healing, 80% was on you, 15% on your pet and 5% on others." Nil when
+--- where it landed isn't known, or it was all on the player.
+local function SpentText(summary)
+    local spent = summary.spent
+    if not spent or spent.total <= 0 or spent.onSelf >= spent.total then
+        return nil
+    end
+
+    local parts = {}
+    for _, part in ipairs({
+        { spent.onSelf, "you" },
+        { spent.onPet, "your pet" },
+        { spent.onOthers, "others" },
+    }) do
+        if part[1] > 0 then
+            local on = #parts == 0 and " was on " or " on "
+            table.insert(parts, ns.Percent(part[1] / spent.total) .. on .. part[2])
+        end
+    end
+
+    local text = ("Of your healing, %s."):format(AndList(parts))
+    if summary.landedUnknown > 0 then
+        local some = spent.fights == 1 and "1 of these fights says"
+            or ("%d of these fights say"):format(spent.fights)
+        text = text .. " " .. SPENT_SOME_FIGHTS:format(some)
+    end
+    return text
+end
+
 --- The lines of the section on blows and heals. Empty when neither was
 --- counted.
 local function DefenceLines(summary)
@@ -450,7 +514,8 @@ local function StoppedStat(stopped)
     }
 end
 
---- Healing as a share of the damage taken. A dash when none was.
+--- The healing that landed on the player as a share of the damage taken.
+--- A dash when none was taken.
 local function HealedBackStat(summary)
     local stat = {
         label = "Healed back",
@@ -461,10 +526,12 @@ local function HealedBackStat(summary)
 
     if summary.healedBack then
         stat.value = ns.Percent(summary.healedBack)
-        stat.figures = {
-            { "Healing", ns.Number(summary.healing) },
-            { "Damage taken", ns.Number(summary.taken) },
-        }
+        stat.figures = { { "Healing on you", ns.Number(summary.healedOn) } }
+        if summary.healedByOthers > 0 then
+            table.insert(stat.figures, { "From others", ns.Number(summary.healedByOthers) })
+        end
+        table.insert(stat.figures, { "Damage taken", ns.Number(summary.taken) })
+        stat.note = summary.landedUnknown > 0 and LANDED_UNKNOWN or HEALED_BACK
     end
     return stat
 end
@@ -690,6 +757,100 @@ local function ShowStoppedTooltip(bar)
     GameTooltip:Show()
 end
 
+--- A class's colour, as the game colours a name in its own meter. Nil for
+--- a healer the game gave no class for.
+---@param class string|nil  the game's word for it: "PRIEST"
+---@return table|nil  { r, g, b }
+local function ClassColor(class)
+    local color = class and RAID_CLASS_COLORS[class]
+    return color and { color.r, color.g, color.b }
+end
+
+--- The player's own class, in the game's word for it.
+local function PlayerClass()
+    local _, class = UnitClass("player")
+    if issecretvalue and issecretvalue(class) or type(class) ~= "string" then
+        return nil
+    end
+    return class
+end
+
+--- The icon of the pet's biggest heal, to stand for the pet.
+local function PetIcon(summary)
+    for _, ability in ipairs(summary.abilities) do
+        if ability.pet and ability.icon then
+            return ability.icon
+        end
+    end
+end
+
+--- Who healed the player, as rows for the bars: the player themselves,
+--- their pet, then everyone else, biggest first. Each has its share of all
+--- the healing on the player. Empty when no one but the player did.
+local function WhoRows(summary)
+    local healedOn, petOnSelf = summary.healedOn, summary.petOnSelf
+    if healedOn <= 0 or (summary.healedByOthers <= 0 and petOnSelf <= 0) then
+        return {}
+    end
+
+    local rows = {}
+    local function Add(row)
+        row.share = row.amount / healedOn
+        table.insert(rows, row)
+    end
+
+    -- The player has a bar even when they gave themselves nothing: the
+    -- point is to set what they did beside what others did.
+    local own = math.max(summary.healedYourself - petOnSelf, 0)
+    Add({ key = "you", name = "You", class = PlayerClass(), amount = own })
+    if petOnSelf > 0 then
+        Add({ key = "pet", name = "Your pet", icon = PetIcon(summary), amount = petOnSelf })
+    end
+    for _, healer in ipairs(summary.healers) do
+        local key = healer.name == ns.Healing.SOMEONE and "someone" or "other"
+        Add({ key = key, name = healer.name, class = healer.class, amount = healer.amount })
+    end
+    return rows
+end
+
+---@param share number  how full the bar is, 0 to 1
+local function FillWhoBar(bar, row, share)
+    local name = row.name
+    local color = ClassColor(row.class)
+    if color then
+        name = Kit.Colored(name, color)
+    end
+
+    local figures = ("%s  %s"):format(ns.Number(row.amount), ns.Percent(row.share))
+    bar:Set(row.icon, name, figures, share, HEALING_COLOR)
+
+    -- The game's own picture for the class, as its meter shows beside a
+    -- name. One it doesn't have leaves the bar's usual question mark.
+    if row.class then
+        bar.icon:SetAtlas(GetClassAtlas(row.class))
+    end
+end
+
+--- What one healer's bar stands for.
+local function ShowWhoTooltip(bar)
+    local row = bar.about
+    if not row then
+        return
+    end
+
+    GameTooltip:SetOwner(bar, "ANCHOR_RIGHT")
+    GameTooltip:SetText(row.name, 1, 1, 1)
+    Kit.TooltipFigure(
+        "Healing on you",
+        ("%s (%s)"):format(ns.Number(row.amount), ns.Percent(row.share))
+    )
+    AddNote(WHO_NOTES[row.key])
+    if row.key == "you" and bar.landedUnknown then
+        AddNote(LANDED_UNKNOWN)
+    end
+    GameTooltip:Show()
+end
+
 --- Every row of a list from `first` on, added up into one.
 ---@param amount string  the name of the figure the rows are measured by
 local function EverythingElse(rows, first, amount)
@@ -747,6 +908,7 @@ end
 --- has the width of the page to itself.
 local function PlaceColumns(layout, summary)
     tab.healing.rows = summary.abilities
+    tab.healing.footText = SpentText(summary)
     tab.harm.rows = summary.hurtBy
 
     local columns = {}
@@ -770,6 +932,9 @@ local function PlaceColumns(layout, summary)
         }
         column.inside = Kit.Inside(column.layout, column.section)
         PlaceBars(column, column.inside)
+        if column.footText then
+            Kit.PlaceText(column.inside, column.foot, LINE_GAP, column.footText)
+        end
         foot = math.max(foot, column.inside.y)
     end
 
@@ -780,6 +945,45 @@ local function PlaceColumns(layout, summary)
         Kit.PlaceSection(column.layout, column.section, column.inside)
         layout.y = column.layout.y
     end
+end
+
+--- A bar for each of those who healed the player. Left out when no one
+--- but the player did.
+local function PlaceWho(layout, summary)
+    local rows = WhoRows(summary)
+    if #rows == 0 then
+        return
+    end
+
+    local section = tab.whoSection
+    local inside = Kit.Inside(layout, section)
+
+    -- The player comes first whatever they gave, so the first bar isn't
+    -- always the biggest. The biggest gets a full bar.
+    local biggest = 0
+    for _, row in ipairs(rows) do
+        biggest = math.max(biggest, row.amount)
+    end
+
+    local gap = 0
+    for index, bar in ipairs(tab.whoBars) do
+        local row = rows[index]
+
+        -- Anyone beyond the last bar shares it.
+        if index == WHO_BARS and #rows > WHO_BARS then
+            row = EverythingElse(rows, WHO_BARS, "amount")
+            row.key, row.name = "rest", "Everyone else"
+        end
+
+        bar.about, bar.landedUnknown = row, summary.landedUnknown > 0
+        if row then
+            FillWhoBar(bar, row, biggest > 0 and math.min(row.amount / biggest, 1) or 0)
+            Kit.Place(inside, bar, gap)
+            gap = BAR_GAP
+        end
+    end
+
+    Kit.PlaceSection(layout, section, inside)
 end
 
 --- "About 38% of the damage coming at you was stopped: armour 18%, dodges
@@ -1002,6 +1206,18 @@ function HealingTab.Create(parent, window)
         CreateColumn("Where the healing came from", "healing", FillHealingBar, ShowHealingTooltip)
     tab.harm = CreateColumn("What hurt you", "amount", FillHarmBar, ShowHarmTooltip)
 
+    -- Under the player's own healing, a line on who it landed on.
+    tab.healing.foot = Piece(Kit.Paragraph(tab.healing.section, "GameFontHighlightSmall"))
+    tab.healing.foot:SetTextColor(unpack(Kit.MUTED))
+
+    -- Who healed the player: they themselves, their pet and anyone else.
+    local who = Piece(Kit.Section(tab.page, "Who healed you"))
+    tab.whoSection = who
+    tab.whoBars = {}
+    for index = 1, WHO_BARS do
+        tab.whoBars[index] = Piece(CreateBar(who, ShowWhoTooltip))
+    end
+
     -- About how much never reached the player: a sentence, a bar for each
     -- way, and a line on what the bars leave out.
     local stopped = Piece(Kit.Section(tab.page, "How much was stopped"))
@@ -1064,6 +1280,7 @@ local function ShowPage(summary)
     local layout = { frame = tab.page, left = 0, width = width, y = 0 }
 
     PlaceColumns(layout, summary)
+    PlaceWho(layout, summary)
     PlaceStopped(layout, summary)
     PlaceDefence(layout, summary)
     PlaceFindings(layout, summary)

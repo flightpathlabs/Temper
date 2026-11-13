@@ -48,7 +48,8 @@ damage, DPS, length and crit rate. Open one and you get:
 **Healing and defence.** Each fight also keeps how much you healed and
 with what, the damage you took and what it came from, what your shields
 soaked up, and how many casts you interrupted and effects you dispelled.
-The fight page sums it up in a line or two; the Healing and defence tab breaks it
+It notes who healed you, too: you, your pet, or a passer-by outside your
+group. The fight page sums it up in a line or two; the Healing and defence tab breaks it
 down for the last fight, the session or everything on record; and a
 second small panel, off until you want it, shows your healing live.
 

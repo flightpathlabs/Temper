@@ -4,6 +4,13 @@ local _, ns = ...
 -- they took, and what they did about it, including about how much never
 -- reached them (worked out fight by fight in Mitigation.lua).
 --
+-- Healing is counted two ways. What the player healed is everything they
+-- and their pet did, wherever it landed. What healed the player is what
+-- of that landed on them, and what other people gave them; that's what
+-- "healed back" weighs against the damage they took. Fights from before
+-- Temper looked at where healing landed don't say, and in those all of
+-- the player's healing counts towards it, as it always did.
+--
 -- It's to healing and defence what Summary.lua is to damage. Like a
 -- summary, nothing here is saved: it's worked out from the fights each
 -- time it's wanted. The few sentences there are to say about it are here
@@ -25,6 +32,14 @@ local MOST = 3
 -- worth setting side by side, and to this much before that's good news.
 local HEALED_BACK_WORTH_MENTIONING = 0.1
 local MUCH_HEALED_BACK = 0.5
+
+-- Other people's healing has to be this big a share of what healed the
+-- player before it's the thing to say about it.
+local MOSTLY_FROM_OTHERS = 0.5
+
+-- What Tallies.lua calls someone who healed the player when the game
+-- wouldn't say who.
+Healing.SOMEONE = "Someone"
 
 -- How much of the damage taken the game has to mark as avoidable before
 -- it's worth a sentence.
@@ -72,6 +87,7 @@ local TURNED_WORDS = {
 --- True if a fight carries any of the figures added up here.
 local function IsTracked(fight)
     return fight.healing ~= nil
+        or fight.healedBy ~= nil
         or fight.absorbed ~= nil
         or fight.taken ~= nil
         or fight.interrupts ~= nil
@@ -111,6 +127,61 @@ local function AddHealing(summary, byKey, healing)
             ability.castHealing = (ability.castHealing or 0) + spell.amount
         end
     end
+end
+
+--- Adds one fight's healing from other people, healer by healer.
+---@param byKey table  the healers met so far, so each gets one line
+---@return number  what they gave in that fight
+local function AddHealers(summary, byKey, healedBy)
+    local given = 0
+    for _, healer in ipairs(healedBy) do
+        -- By name and class. Everyone the game wouldn't name is "Someone",
+        -- and this way they're at least told apart by class.
+        local key = healer.name .. (healer.class or "")
+        local line = byKey[key]
+        if not line then
+            line = { name = healer.name, class = healer.class, amount = 0 }
+            byKey[key] = line
+            table.insert(summary.healers, line)
+        end
+
+        line.amount = line.amount + healer.amount
+        given = given + healer.amount
+    end
+
+    summary.healedByOthers = summary.healedByOthers + given
+    return given
+end
+
+--- Adds what healed the player in one fight: their own healing that
+--- landed on them, and what others gave them. Notes where the rest of the
+--- player's healing went, when the fight says.
+---@param fromOthers number  what others gave in the fight
+local function AddHealedOn(summary, fight, fromOthers)
+    local healing = fight.healing
+    local onSelf = 0
+
+    if healing and healing.onSelf then
+        onSelf = healing.onSelf
+        summary.petOnSelf = summary.petOnSelf + (healing.petOnSelf or 0)
+
+        local spent = summary.spent
+        if not spent then
+            spent = { fights = 0, onSelf = 0, onPet = 0, onOthers = 0 }
+            summary.spent = spent
+        end
+        spent.fights = spent.fights + 1
+        spent.onSelf = spent.onSelf + healing.onSelf
+        spent.onPet = spent.onPet + healing.onPet
+        spent.onOthers = spent.onOthers + healing.onOthers
+    elseif healing then
+        -- Where it landed isn't known, so all of it counts, as it did
+        -- before Temper looked.
+        onSelf = healing.total or 0
+        summary.landedUnknown = summary.landedUnknown + 1
+    end
+
+    summary.healedOn = summary.healedOn + onSelf + fromOthers
 end
 
 --- Adds one fight's damage taken, enemy ability by enemy ability.
@@ -272,12 +343,28 @@ end
 ---   tracked     how many of them had any of this written down; fights
 ---               saved before Temper recorded it have none
 ---   seconds     how long the tracked fights lasted in all
----   healing, hps   healing done, and healing per second of those fights
+---   healing, hps   healing done by the player and their pet, wherever it
+---               landed, and healing per second of those fights
 ---   absorbed    damage soaked up by the player's own shields
 ---   taken       damage the player took
 ---   avoidable   how much of that the game marks as avoidable; nil if it
 ---               never said
----   healedBack  healing as a share of the damage taken; nil when none was
+---   healedOn    the healing that landed on the player: their own and
+---               their pet's on them, and what others gave them. In a
+---               fight that doesn't say where the player's healing landed,
+---               all of it is counted
+---   landedUnknown  how many fights that was
+---   healedYourself  healedOn less what others gave: the player's own
+---               healing on themselves, their pet's included
+---   petOnSelf   the pet's part of that, in the fights that said
+---   healedByOthers  what other people's healing on the player came to
+---   healers     list, biggest first, of the other people who healed the
+---               player: name ("Someone" when the game wouldn't say),
+---               class (the game's word for it, when it gave one),
+---               amount, and share of healedOn. A fight keeps only its
+---               biggest few
+---   healedBack  healedOn as a share of the damage taken; nil when none
+---               was taken
 ---   abilities   list, biggest first, of:
 ---                 id, name, icon, rank, pet   what it is, and whether
 ---                                             it's the pet's
@@ -308,6 +395,9 @@ end
 ---
 --- and, each only when there's something to say:
 ---
+---   spent       { fights, onSelf, onPet, onOthers, total }: where the
+---               player's and their pet's healing landed, over the fights
+---               that said: on the player, on the pet, on anyone else
 ---   stopped     about how much of the harm coming at the player never
 ---               reached them, over the fights where it could be worked
 ---               out (see Mitigation.Estimate):
@@ -344,6 +434,11 @@ function Healing.Of(fights)
         hps = 0,
         absorbed = 0,
         taken = 0,
+        healedOn = 0,
+        landedUnknown = 0,
+        petOnSelf = 0,
+        healedByOthers = 0,
+        healers = {},
         abilities = {},
         hurtBy = {},
         heals = 0,
@@ -362,7 +457,7 @@ function Healing.Of(fights)
         dispels = 0,
     }
 
-    local abilities, blows = {}, {}
+    local abilities, blows, healers = {}, {}, {}
     local newest
 
     for _, fight in ipairs(fights or {}) do
@@ -381,6 +476,9 @@ function Healing.Of(fights)
             if fight.healing then
                 AddHealing(summary, abilities, fight.healing)
             end
+            local fromOthers = AddHealers(summary, healers, fight.healedBy or {})
+            AddHealedOn(summary, fight, fromOthers)
+
             if fight.taken then
                 AddTaken(summary, blows, fight.taken)
             end
@@ -415,8 +513,22 @@ function Healing.Of(fights)
         summary.hps = summary.healing / summary.seconds
     end
     if summary.taken > 0 then
-        summary.healedBack = summary.healing / summary.taken
+        summary.healedBack = summary.healedOn / summary.taken
     end
+    summary.healedYourself = summary.healedOn - summary.healedByOthers
+
+    local spent = summary.spent
+    if spent then
+        spent.total = spent.onSelf + spent.onPet + spent.onOthers
+    end
+
+    for _, healer in ipairs(summary.healers) do
+        healer.share = summary.healedOn > 0 and healer.amount / summary.healedOn or 0
+    end
+    table.sort(summary.healers, function(a, b)
+        return a.amount > b.amount
+    end)
+
     if summary.heals > 0 then
         summary.critRate = summary.healCrits / summary.heals
     end
@@ -681,6 +793,39 @@ local function ResistanceSentence(summary, school, times, these)
     ):format(most, word, resistance, ns.Percent(share), word, resisting.level, word)
 end
 
+--- The sentence on other people's healing, when it was most of what
+--- healed the player and came to enough of the damage taken to matter.
+--- Nil otherwise.
+local function OthersSentence(summary, these)
+    local others, healedOn = summary.healedByOthers, summary.healedOn
+    local back = summary.healedBack
+    if others <= 0 or others <= healedOn * MOSTLY_FROM_OTHERS then
+        return nil
+    elseif not back or back < HEALED_BACK_WORTH_MENTIONING then
+        return nil
+    end
+
+    local top = summary.healers[1]
+    local named = top.name ~= Healing.SOMEONE
+    local alone = #summary.healers == 1
+
+    local share, figures = "Most", ("%s of %s"):format(ns.Number(others), ns.Number(healedOn))
+    if others >= healedOn then
+        share, figures = "All", ns.Number(others)
+    end
+
+    local text = ("%s of the healing on you in %s came from %s: %s"):format(
+        share,
+        these,
+        (alone and named) and top.name or "others",
+        figures
+    )
+    if named and not alone then
+        text = text .. ", the most from " .. top.name
+    end
+    return text .. "."
+end
+
 --- A few sentences about the healing and defence in a set of fights.
 ---@param summary table  from Healing.Of
 ---@return table  list of { kind = "good", "warning" or "tip", text = the
@@ -707,23 +852,30 @@ function Healing.Findings(summary)
         Say("warning", "%s", DefenceSentence(summary, defence, gap, these))
     end
 
-    -- Then how the healing stood against the damage taken.
+    -- Then how the healing on the player stood against the damage taken.
+    -- When most of it was someone else's, that's what there is to say.
     local back = summary.healedBack
-    if back and back >= 1 then
+    local helped = summary.healedByOthers > 0 and "With others' help, you" or "You"
+    local others = OthersSentence(summary, these)
+    if others then
+        Say("tip", "%s", others)
+    elseif back and back >= 1 then
         Say(
             "good",
-            "You healed as much in %s as the damage you took: %s healed, %s taken.",
+            "%s healed as much in %s as the damage you took: %s healed, %s taken.",
+            helped,
             these,
-            ns.Number(summary.healing),
+            ns.Number(summary.healedOn),
             ns.Number(summary.taken)
         )
     elseif back and back >= HEALED_BACK_WORTH_MENTIONING then
         Say(
             back >= MUCH_HEALED_BACK and "good" or "tip",
-            "You healed back %s of the damage you took in %s: %s of %s.",
+            "%s healed back %s of the damage you took in %s: %s of %s.",
+            helped,
             ns.Percent(back),
             these,
-            ns.Number(summary.healing),
+            ns.Number(summary.healedOn),
             ns.Number(summary.taken)
         )
     end

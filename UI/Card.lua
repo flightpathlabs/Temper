@@ -64,7 +64,10 @@ local BAR_GAP = 3
 local KEY_GAP = 8
 
 -- The most lines the section on healing and defence runs to.
-local HEALING_LINES = 4
+local HEALING_LINES = 5
+
+-- The most other healers named in its line on them. The rest are summed.
+local HEALERS_NAMED = 3
 
 -- More changed slots than this and the list is cut short, with a count.
 local MAX_GEAR_LINES = 5
@@ -226,8 +229,50 @@ local function StoppedLine(healing)
     )
 end
 
+--- "Others healed you for 230 (Tharic 180, someone else 50)." Nil when no
+--- one else healed the player.
+---@param healing table  from Healing.Of
+local function OthersLine(healing)
+    local healers, given = healing.healers, healing.healedByOthers
+    if given <= 0 or #healers == 0 then
+        return nil
+    end
+
+    -- Everyone the game wouldn't name is one "someone else", however many
+    -- classes they were.
+    local named, unnamed = {}, 0
+    for _, healer in ipairs(healers) do
+        if healer.name == ns.Healing.SOMEONE then
+            unnamed = unnamed + healer.amount
+        else
+            table.insert(named, healer)
+        end
+    end
+
+    if #named == 1 and unnamed == 0 then
+        return ("%s healed you for %s."):format(named[1].name, ns.Number(given))
+    elseif #named == 0 then
+        return ("Someone else healed you for %s."):format(ns.Number(given))
+    end
+
+    local parts, rest = {}, unnamed
+    for index, healer in ipairs(named) do
+        if index <= HEALERS_NAMED then
+            table.insert(parts, ("%s %s"):format(healer.name, ns.Number(healer.amount)))
+        else
+            rest = rest + healer.amount
+        end
+    end
+    if rest > 0 then
+        local others = #named > HEALERS_NAMED and "others" or "someone else"
+        table.insert(parts, ("%s %s"):format(others, ns.Number(rest)))
+    end
+
+    return ("Others healed you for %s (%s)."):format(ns.Number(given), table.concat(parts, ", "))
+end
+
 --- What the fights have to say about healing and defence, in a line or
---- four. The Healing and defence tab has the detail.
+--- five. The Healing and defence tab has the detail.
 ---@param healing table  from Healing.Of
 ---@return table  list of lines; empty when there's nothing to say
 local function HealingLines(healing)
@@ -236,13 +281,27 @@ local function HealingLines(healing)
         return lines
     end
 
-    if healing.healing > 0 and healing.healedBack then
+    -- Healed back is the healing that landed on the player. When that's
+    -- just what they healed, one sentence says both.
+    local back = healing.healedBack
+    local allMine = healing.healedOn == healing.healing and healing.healedByOthers == 0
+    if healing.healing > 0 and back and allMine then
         table.insert(
             lines,
             ("Healed %s (%s HPS), which is %s of the %s damage you took."):format(
                 ns.Number(healing.healing),
                 ns.Rate(healing.hps),
-                ns.Percent(healing.healedBack),
+                ns.Percent(back),
+                ns.Number(healing.taken)
+            )
+        )
+    elseif healing.healing > 0 and back then
+        table.insert(
+            lines,
+            ("Healed %s (%s HPS). Healing on you came to %s of the %s damage you took."):format(
+                ns.Number(healing.healing),
+                ns.Rate(healing.hps),
+                ns.Percent(back),
                 ns.Number(healing.taken)
             )
         )
@@ -253,6 +312,11 @@ local function HealingLines(healing)
         )
     elseif healing.taken > 0 then
         table.insert(lines, ("You took %s damage."):format(ns.Number(healing.taken)))
+    end
+
+    local others = OthersLine(healing)
+    if others then
+        table.insert(lines, others)
     end
 
     local stopped = StoppedLine(healing)

@@ -46,7 +46,18 @@ local _, ns = ...
 --   healing   { total, spells }: what the player and their pet healed.
 --             spells is a list of { id, name, amount, casts, icon, rank,
 --             cost, power, pet }, biggest first, with pet set on the
---             pet's own healing
+--             pet's own healing. Since others' healing was first looked
+--             for, it can also hold onSelf, onPet and onOthers: where all
+--             that healing landed, on the player, on their pet and on
+--             anyone else, with petOnSelf the pet's part of onSelf. Only
+--             when the game said where every heal landed
+--   healedBy  list of { name, class, amount }: other people who healed the
+--             player, and how much of their healing landed on them; the
+--             eight biggest, biggest first. name is "Someone" when the
+--             game wouldn't give it, and class is the game's word for
+--             theirs ("PRIEST"), when it has one. Fights in a group aren't
+--             saved, so this is a passer-by, or a friend from outside the
+--             group, healing a player fighting on their own
 --   absorbed  damage soaked up by the player's own shields
 --   taken     { total, avoidable, sources }: the damage the player took.
 --             sources is a list of { id, name, amount, avoidable, from },
@@ -296,6 +307,7 @@ local function AddOtherTallies(fight, casts)
     end
 
     fight.healing = found.healing
+    fight.healedBy = found.healedBy
     fight.absorbed = found.absorbed
     fight.taken = found.taken
     fight.interrupts = found.interrupts
