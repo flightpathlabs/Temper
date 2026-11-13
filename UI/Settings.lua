@@ -326,9 +326,10 @@ local function AddScreenOptions(layout)
     AddCheckbox(
         category,
         "widgetStats",
-        "Session figures on the panel",
+        "Session figures on the panels",
         "How many fights, your average DPS, how often you crit and your biggest hit, for "
-            .. "the session you started or else since you logged in."
+            .. "the session you started or else since you logged in. The healing panel shows "
+            .. "its own: how much you healed and your average HPS."
     )
 
     AddCheckbox(
@@ -336,6 +337,14 @@ local function AddScreenOptions(layout)
         "widgetBrand",
         "The Temper icon on the panel",
         "Untick for a plainer panel."
+    )
+
+    AddCheckbox(
+        category,
+        "healWidget",
+        "Show the healing panel",
+        "A second small panel, the fight panel's twin, with your HPS and what you healed in "
+            .. "the fight you're in or the last one."
     )
 
     AddCheckbox(

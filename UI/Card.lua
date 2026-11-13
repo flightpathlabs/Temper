@@ -5,25 +5,30 @@ local _, ns = ...
 -- The figures come first and are kept small: one row under the title, DPS
 -- at its head, and whatever lies behind a figure waiting in its tooltip.
 -- That leaves the page to the two things worth looking at, where the
--- damage came from and what was used when. The advice follows them, and
--- then (when there are earlier fights to compare with) what else changed.
--- The comparison isn't a separate screen. It shows up as an arrow and a
--- green or red figure under or beside each number it applies to.
+-- damage came from and what was used when. A few lines on healing and
+-- defence come next, with the Healing tab a click away for the rest of
+-- it. The advice follows, and then (when there are earlier fights to
+-- compare with) what else changed. The comparison isn't a separate
+-- screen. It shows up as an arrow and a green or red figure under or
+-- beside each number it applies to.
 --
 -- Each part of the page sits in a box of its own (see Kit.Section), so
 -- it's plain where one stops and the next starts.
 --
 -- Some selections make a longer page than the window has room for, so
--- everything under the row of figures scrolls. A scrolling page can't
--- size itself from its anchors, and text only wraps once it's told how
--- wide it may be. So the page is laid out by hand each time it's filled:
--- every piece is given a width and a place under the piece before it, and
--- the page ends where the last piece does.
+-- everything under the row of figures scrolls, and the page is laid out
+-- by hand each time it's filled. The laying out is the kit's, shared with
+-- the Healing tab (see "Pages" in Kit.lua).
 
 local Card = {}
 ns.Card = Card
 
 local Kit = ns.Kit
+
+local Paragraph = Kit.Paragraph
+local Place, PlaceText = Kit.Place, Kit.PlaceText
+local Inside, PlaceSection = Kit.Inside, Kit.PlaceSection
+local AddFigure = Kit.TooltipFigure
 
 local LOGO = "Interface\\AddOns\\Temper\\Media\\logo"
 local NOTE_PROMPT = "Add a note: what did you change?"
@@ -47,24 +52,9 @@ local NOTE_GAP = 6
 -- the card is filled before the game has worked out its real width.
 local USUAL_WIDTH = 547
 
--- The row of figures: how tall it is, and how tall when each figure has
--- its change since the earlier fights under it. Down a cell go the label,
--- the figure, and the change with its arrow. The figures stand on a line
--- of their own, so that DPS in its larger type lines up with the rest.
-local STATS_HEIGHT = 44
-local STATS_HEIGHT_COMPARING = 56
-local STAT_PADDING = 9
-local STAT_LABEL_TOP = 6
-local STAT_FIGURE_FOOT = 36
-local STAT_CHANGE_TOP = 38
-local STAT_ARROW = 10
-local STAT_ARROW_GAP = 3
-local HERO_FONT = "GameFontNormalLarge"
-local FIGURE_FONT = "GameFontHighlightMedium"
-
 -- Space between one section and the next, and between lines of text in
 -- one.
-local SECTION_GAP = 8
+local SECTION_GAP = Kit.SECTION_GAP
 local LINE_GAP = 6
 
 -- The bars, and the space between them and the line under them that
@@ -73,11 +63,8 @@ local MAX_BARS = 6
 local BAR_GAP = 3
 local KEY_GAP = 8
 
--- A finding is a picture and a sentence, the sentence starting this far
--- in to clear the picture.
-local FINDING_ICON = 16
-local FINDING_INDENT = FINDING_ICON + 8
-local FINDING_GAP = 8
+-- The most lines the section on healing and defence runs to.
+local HEALING_LINES = 3
 
 -- More changed slots than this and the list is cut short, with a count.
 local MAX_GEAR_LINES = 5
@@ -216,18 +203,72 @@ local function DifferenceLines(comparison)
     return lines
 end
 
+--- "2 interrupts", "1 dispel".
+local function Counted(count, what)
+    return count == 1 and ("1 " .. what) or ("%d %ss"):format(count, what)
+end
+
+--- What the fights have to say about healing and defence, in a line or
+--- three. The Healing tab has the detail.
+---@param healing table  from Healing.Of
+---@return table  list of lines; empty when there's nothing to say
+local function HealingLines(healing)
+    local lines = {}
+    if healing.tracked == 0 then
+        return lines
+    end
+
+    if healing.healing > 0 and healing.healedBack then
+        table.insert(
+            lines,
+            ("Healed %s (%s HPS), which is %s of the %s damage you took."):format(
+                ns.Number(healing.healing),
+                ns.Rate(healing.hps),
+                ns.Percent(healing.healedBack),
+                ns.Number(healing.taken)
+            )
+        )
+    elseif healing.healing > 0 then
+        table.insert(
+            lines,
+            ("Healed %s (%s HPS)."):format(ns.Number(healing.healing), ns.Rate(healing.hps))
+        )
+    elseif healing.taken > 0 then
+        table.insert(lines, ("You took %s damage."):format(ns.Number(healing.taken)))
+    end
+
+    if healing.absorbed > 0 then
+        table.insert(
+            lines,
+            ("Your own shields absorbed %s damage."):format(ns.Number(healing.absorbed))
+        )
+    end
+
+    local deeds = {}
+    if healing.interrupts > 0 then
+        table.insert(deeds, Counted(healing.interrupts, "interrupt"))
+    end
+    if healing.dispels > 0 then
+        table.insert(deeds, Counted(healing.dispels, "dispel"))
+    end
+    if #deeds > 0 then
+        table.insert(lines, table.concat(deeds, ", ") .. ".")
+    end
+
+    -- Fights from before healing was recorded are in the set but not in
+    -- these figures, and the reader should know that.
+    if #lines > 0 and healing.tracked < healing.fights then
+        local caveat = "Older fights here have no record of healing."
+        lines[#lines] = lines[#lines] .. "  " .. Kit.Colored(caveat, Kit.MUTED)
+    end
+    return lines
+end
+
 -- The figures --------------------------------------------------------------------
 
--- Each figure in the row is a table:
---   label, value        what it is, and the figure itself
---   title               what its tooltip is headed, when the label is too
---                       short to be one
---   figures             list of { label, figure } for the tooltip: what
---                       lies behind the figure. None, and there's no
---                       tooltip
---   note                a sentence to end the tooltip with, if any
---   changeText, change  when comparing: how it moved since the earlier
---                       fights, in words and as the number behind them
+-- Each figure in the row is a table of the kind Kit.StatRow shows: a
+-- label and a value, what lies behind it for its tooltip, and when
+-- comparing, how it moved since the earlier fights.
 
 --- Adds to a figure how it moved since the earlier fights.
 ---@param changeText string  from Kit.ChangeText or Kit.PointsText
@@ -440,69 +481,11 @@ end
 
 -- Laying out ---------------------------------------------------------------------
 
---- Text that runs on to as many lines as it needs.
-local function Paragraph(parent, font)
-    local text = Kit.Text(parent, font)
-    text:SetWordWrap(true)
-    text:SetJustifyV("TOP")
-    text:SetSpacing(3)
-    return text
-end
-
 --- Notes a piece of the page, so that a fill can start by clearing every
 --- piece away and then show only the ones it places.
 local function Piece(card, piece)
     table.insert(card.pieces, piece)
     return piece
-end
-
---- Puts a piece in its place, under whatever was placed before it.
----@param layout table  { frame, left, width, y }: the frame the pieces
----                     are pinned to (the page, or one section of it),
----                     how far in from its left edge they start, how
----                     wide they are, and how far down it's taken so far
----@param gap number  space to leave above the piece
----@param height number|nil  the piece's own height unless given
-local function Place(layout, piece, gap, height)
-    layout.y = layout.y + gap
-
-    piece:ClearAllPoints()
-    piece:SetPoint("TOPLEFT", layout.frame, "TOPLEFT", layout.left, -layout.y)
-    piece:SetWidth(layout.width)
-    piece:Show()
-
-    layout.y = layout.y + (height or piece:GetHeight())
-end
-
---- Places text that may wrap. It has to be told its width before its
---- words, or there's nothing to wrap to and nothing true to measure.
-local function PlaceText(layout, text, gap, words)
-    text:SetWidth(layout.width)
-    text:SetText(words)
-    Place(layout, text, gap, text:GetStringHeight())
-end
-
---- A layout for what goes inside a section: pinned to the section, not
---- the page, so it doesn't matter that the section has no place yet.
----@param layout table  the page's layout, for its width
-local function Inside(layout, section)
-    return {
-        frame = section,
-        left = Kit.SECTION_PADDING,
-        width = layout.width - 2 * Kit.SECTION_PADDING,
-        y = Kit.SECTION_TOP,
-    }
-end
-
---- Puts a section on the page once everything in it has been placed. It
---- ends where the last thing in it did, plus the padding.
----@param inside table  the layout its contents were placed with
-local function PlaceSection(layout, section, inside)
-    local height = inside.y + Kit.SECTION_PADDING
-    section:SetHeight(height)
-
-    -- Nothing comes before the first section, so it needs no gap.
-    Place(layout, section, layout.y > 0 and SECTION_GAP or 0, height)
 end
 
 --- The width there is for the page.
@@ -597,138 +580,6 @@ local function CreateNoteBox(card)
 
     box:Hide()
     return box
-end
-
--- The row of figures ---------------------------------------------------------------
-
-local function AddFigure(label, figure)
-    GameTooltip:AddDoubleLine(label, figure, Kit.GOLD[1], Kit.GOLD[2], Kit.GOLD[3], 1, 1, 1)
-end
-
---- What lies behind a figure, for those that have something behind them.
-local function ShowStatTooltip(cell)
-    local stat = cell.stat
-    if not stat or not (stat.figures[1] or stat.note) then
-        return
-    end
-
-    GameTooltip:SetOwner(cell, "ANCHOR_RIGHT")
-    GameTooltip:SetText(stat.title or stat.label, 1, 1, 1)
-    for _, figure in ipairs(stat.figures) do
-        AddFigure(figure[1], figure[2])
-    end
-    if stat.note then
-        GameTooltip:AddLine(stat.note, Kit.MUTED[1], Kit.MUTED[2], Kit.MUTED[3], true)
-    end
-    GameTooltip:Show()
-end
-
---- One cell of the row: a small label, the figure under it, and under
---- that, when comparing, how the figure moved.
----@param first boolean  true for the cell at the head of the row, which
----                      holds DPS: the one figure set larger and in gold
-local function CreateStat(strip, first)
-    local cell = CreateFrame("Frame", nil, strip)
-    cell:EnableMouse(true)
-    cell:SetScript("OnEnter", ShowStatTooltip)
-    cell:SetScript("OnLeave", GameTooltip_Hide)
-
-    cell.label = Kit.Text(cell, "GameFontDisableSmall")
-    cell.label:SetPoint("TOPLEFT", STAT_PADDING, -STAT_LABEL_TOP)
-
-    cell.value = Kit.Text(cell, first and HERO_FONT or FIGURE_FONT)
-    cell.value:SetPoint("BOTTOMLEFT", cell, "TOPLEFT", STAT_PADDING, -STAT_FIGURE_FOOT)
-
-    cell.arrow = Kit.Icon(cell, STAT_ARROW)
-    cell.arrow:SetPoint("TOPLEFT", STAT_PADDING, -STAT_CHANGE_TOP)
-    cell.arrow:Hide()
-
-    cell.change = Kit.Text(cell, "GameFontHighlightSmall")
-
-    -- A rule down the left of every cell but the first divides the row.
-    -- It stops short of the strip's own edge, top and bottom.
-    if not first then
-        local rule = Kit.Rule(cell)
-        rule:SetWidth(1)
-        rule:SetPoint("TOPLEFT", 0, -1)
-        rule:SetPoint("BOTTOMLEFT", 0, 1)
-    end
-
-    return cell
-end
-
---- Shows a figure in a cell, and notes how wide the cell has to be for
---- all of it to be read.
-local function FillStat(cell, stat)
-    cell.stat = stat
-    cell.label:SetText(stat.label)
-    cell.value:SetText(stat.value)
-    cell.change:SetText(stat.changeText or "")
-    Kit.SetArrow(cell.arrow, stat.changeText and stat.change or nil)
-
-    -- The words about the change come after the arrow. With no arrow
-    -- ("no change") they start where it would have been.
-    local indent = cell.arrow:IsShown() and STAT_ARROW + STAT_ARROW_GAP or 0
-    cell.change:ClearAllPoints()
-    cell.change:SetPoint(
-        "LEFT",
-        cell,
-        "TOPLEFT",
-        STAT_PADDING + indent,
-        -(STAT_CHANGE_TOP + STAT_ARROW / 2)
-    )
-
-    local widest = math.max(
-        cell.label:GetStringWidth(),
-        cell.value:GetStringWidth(),
-        cell.change:GetStringWidth() + indent
-    )
-    cell.needs = widest + 2 * STAT_PADDING
-
-    -- A fight can end while the mouse is resting on a cell. Its tooltip
-    -- is redrawn then, so it doesn't go on quoting the fight before.
-    if GameTooltip:IsOwned(cell) then
-        GameTooltip:Hide()
-        ShowStatTooltip(cell)
-    end
-end
-
---- Fills the row of figures and shares its width out among them. Each
---- cell gets what its words need and an even share of whatever is left
---- over. Were they ever to need more than there is, the same sum takes
---- the difference back out of their padding.
----@param width number  of the whole row
-local function FillStats(card, summary, comparison, width)
-    local strip = card.stats
-    local stats = StatsFor(summary, comparison)
-
-    local needed = 0
-    for index, stat in ipairs(stats) do
-        local cell = strip.cells[index]
-        if not cell then
-            cell = CreateStat(strip, index == 1)
-            strip.cells[index] = cell
-        end
-
-        FillStat(cell, stat)
-        needed = needed + cell.needs
-    end
-
-    local spare = (width - needed) / #stats
-    local left = 0
-    for index, cell in ipairs(strip.cells) do
-        cell:SetShown(index <= #stats)
-        if index <= #stats then
-            local share = cell.needs + spare
-            cell:ClearAllPoints()
-            cell:SetPoint("TOPLEFT", strip, "TOPLEFT", left, 0)
-            cell:SetPoint("BOTTOMLEFT", strip, "BOTTOMLEFT", left, 0)
-            cell:SetWidth(share)
-            left = left + share
-        end
-    end
-
-    strip:SetHeight(comparison and STATS_HEIGHT_COMPARING or STATS_HEIGHT)
 end
 
 -- The bars ----------------------------------------------------------------------
@@ -834,9 +685,7 @@ function Card.Create(parent)
 
     card.note = CreateNoteBox(card)
 
-    -- Cells are made as a fill first needs them.
-    card.stats = Kit.Box(card)
-    card.stats.cells = {}
+    card.stats = Kit.StatRow(card)
     card.stats:Hide()
 
     -- Shown in place of everything else when there's nothing to analyse.
@@ -878,6 +727,20 @@ function Card.Create(parent)
     card.usedSection = used
     card.timeline = Piece(card, ns.Timeline.Create(used))
     card.used = Piece(card, Paragraph(used, "GameFontHighlight"))
+
+    -- A few lines only. The rest is a click away, by the link at the end
+    -- of the section's title band.
+    local healing = Piece(card, Kit.Section(page, "Healing and defence"))
+    card.healingSection = healing
+    card.healingLines = {}
+    for index = 1, HEALING_LINES do
+        card.healingLines[index] = Piece(card, Paragraph(healing, "GameFontHighlight"))
+    end
+
+    local more = Kit.Link(healing, "Open the Healing tab", function()
+        ns.ShowHealing()
+    end)
+    more:SetPoint("RIGHT", healing.title, "RIGHT", 4, 0)
 
     -- Findings and differences come a few at a time, so their rows are
     -- made as they're first needed.
@@ -973,21 +836,36 @@ local function PlaceUsed(card, layout, summary, fights)
     end
 end
 
-local function CreateFindingRow(card)
-    local row = Piece(card, CreateFrame("Frame", nil, card.findingsSection))
+--- The few lines on healing and defence, when the fights have anything
+--- to say about either. Fights from before healing was recorded don't,
+--- and nor does a fight in which nothing was healed and nothing landed.
+local function PlaceHealing(card, layout, fights)
+    -- Missing only straight after an update, until the game is restarted
+    -- and finds the new file.
+    if not ns.Healing then
+        return
+    end
 
-    row.icon = Kit.Icon(row, FINDING_ICON)
-    row.icon:SetPoint("TOPLEFT")
+    local lines = HealingLines(ns.Healing.Of(fights))
+    if #lines == 0 then
+        return
+    end
 
-    row.text = Paragraph(row, "GameFontHighlight")
-    row.text:SetPoint("TOPLEFT", FINDING_INDENT, -1)
+    local section = card.healingSection
+    local inside = Inside(layout, section)
 
-    return row
+    local gap = 0
+    for index, line in ipairs(lines) do
+        PlaceText(inside, card.healingLines[index], gap, line)
+        gap = LINE_GAP
+    end
+
+    PlaceSection(layout, section, inside)
 end
 
---- One row per finding: a picture for the kind of news it is, then the
---- sentence. With no findings the section says so in a line of its own,
---- so the page keeps its shape from one selection to the next.
+--- One row per finding. With no findings the section says so in a line
+--- of its own, so the page keeps its shape from one selection to the
+--- next.
 local function PlaceFindings(card, layout, findings, summary)
     local section = card.findingsSection
     local inside = Inside(layout, section)
@@ -997,24 +875,7 @@ local function PlaceFindings(card, layout, findings, summary)
         findings = { { kind = "tip", text = NOTHING_STANDS_OUT:format(these) } }
     end
 
-    local gap = 0
-    for index, finding in ipairs(findings) do
-        local row = card.findings[index]
-        if not row then
-            row = CreateFindingRow(card)
-            card.findings[index] = row
-        end
-
-        Kit.SetIcon(row.icon, finding.kind)
-        row.text:SetWidth(inside.width - FINDING_INDENT)
-        row.text:SetText(finding.text)
-
-        local height = math.max(FINDING_ICON, row.text:GetStringHeight() + 1)
-        row:SetHeight(height)
-        Place(inside, row, gap)
-        gap = FINDING_GAP
-    end
-
+    Kit.PlaceFindings(inside, card.findings, findings)
     PlaceSection(layout, section, inside)
 end
 
@@ -1087,7 +948,7 @@ function Card.Fill(card, fights, before, heading)
         top = top + NOTE_HEIGHT + NOTE_GAP
     end
 
-    FillStats(card, summary, comparison, width)
+    card.stats:Fill(StatsFor(summary, comparison), width, comparison ~= nil)
     card.stats:SetPoint("TOPLEFT", MARGIN, -top)
     card.stats:SetPoint("TOPRIGHT", -SCROLL_BAR_ROOM, -top)
     card.stats:Show()
@@ -1103,6 +964,7 @@ function Card.Fill(card, fights, before, heading)
 
     PlaceSources(card, layout, summary, comparison)
     PlaceUsed(card, layout, summary, fights)
+    PlaceHealing(card, layout, fights)
     PlaceFindings(card, layout, ns.Findings.For(summary, comparison), summary)
     if comparison then
         PlaceDifferences(card, layout, comparison)

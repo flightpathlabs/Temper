@@ -277,8 +277,10 @@ end
 
 --- The fights the "session" figures cover, and what to call them: the
 --- session in progress if the player started one, otherwise everything
---- since they logged in.
-local function SessionSoFar()
+--- since they logged in. The healing panel goes by the same rule.
+---@return table fights  list of fights, oldest first
+---@return string name  "Session 3" or "This session"
+function ns.SessionSoFar()
     local recording = ns.Recorder.Open()
     if recording then
         return ns.Recorder.FightsOf(recording), "Session " .. recording.number
@@ -347,7 +349,7 @@ local function RefreshLower()
     end
 
     if ns.settings.widgetStats then
-        local session, name = SessionSoFar()
+        local session, name = ns.SessionSoFar()
         local summary = ns.Summary.Of(session)
 
         Rule()
@@ -436,6 +438,11 @@ local function ShowMenu(self)
         AddToggle(root, "Recent fights", "widgetRecent", 2, 1)
         AddToggle(root, "Session figures", "widgetStats", true, false)
         AddToggle(root, "The Temper icon", "widgetBrand", true, false)
+
+        -- The healing panel is a frame of its own (see HealWidget.lua), so
+        -- it sits apart from what's shown on this one.
+        root:CreateDivider()
+        AddToggle(root, "Healing panel", "healWidget", true, false)
 
         root:CreateDivider()
         root:CreateButton("Options", function()

@@ -20,12 +20,14 @@ Combat\Weapons.lua
 Combat\Guess.lua
 Combat\Hits.lua
 Combat\Sizes.lua
+Combat\Tallies.lua
 Combat\Fights.lua
 
 Record\Recorder.lua
 Record\Summary.lua
 Record\Compare.lua
 Record\Findings.lua
+Record\Healing.lua
 Record\Experiments.lua
 Record\Progress.lua
 
@@ -36,11 +38,13 @@ Text\Feed.lua
 UI\Kit.lua
 UI\RecordButton.lua
 UI\Widget.lua
+UI\HealWidget.lua
 UI\Timeline.lua
 UI\Card.lua
 UI\FightsTab.lua
 UI\ExperimentsTab.lua
 UI\ProgressTab.lua
+UI\HealingTab.lua
 UI\MainWindow.lua
 UI\Example.lua
 UI\Settings.lua

@@ -65,6 +65,27 @@ First version.
   short of mana, or an ability whose cost would do more spent on another.
 - A note can be left on any session.
 
+**Healing and defence**
+
+- Each fight also keeps the healing you did, ability by ability; the
+  damage you took, by the enemy ability that dealt it, with those the
+  game marks avoidable flagged; what your own shields absorbed; and how
+  many casts you interrupted and effects you dispelled. Heals that landed
+  on you, how many were critical, and how many enemy attacks you dodged,
+  parried or blocked are counted too.
+- The fight page has a short "Healing and defence" section, with a link
+  to the Healing tab.
+- A Healing tab breaks it all down for the last fight, the session, the
+  last ten fights or everything on record: healing and HPS, damage taken
+  and how much of it you healed back, a bar for each healing ability and
+  each thing that hurt you, and a few plain sentences on what to work on.
+- A healing panel, a twin of the fight panel, shows your healing and HPS
+  live during a fight and the last fight's figures in between. It's off
+  to begin with: turn it on from the fight panel's right-click menu or
+  the options.
+- Only healing done during a fight is counted. Fights recorded before
+  this version have no healing on record.
+
 **Comparing**
 
 - Select some fights, press Compare with..., and pick any others. Each
@@ -92,7 +113,7 @@ First version.
 
 **Good manners**
 
-- It's about your own damage and nobody else's. Nothing is posted to chat,
+- It's about your own fighting and nobody else's. Nothing is posted to chat,
   sent to other players or shared anywhere; your fights stay in your own
   saved data.
 - Solo only. In a group the column steps aside and nothing is recorded.

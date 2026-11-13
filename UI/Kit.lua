@@ -472,3 +472,325 @@ function Kit.Section(parent, title)
 
     return section
 end
+
+-- Pages -------------------------------------------------------------------------
+
+-- The Fights page and the Healing page are built from the same pieces and
+-- laid out the same way, so the two read as one. A page that scrolls can't
+-- size itself from its anchors, and text only wraps once it's told how
+-- wide it may be. So a page is laid out by hand each time it's filled:
+-- every piece is given a width and a place under the piece before it, and
+-- the page ends where the last piece does.
+--
+-- A layout is a table that keeps track of that: { frame, left, width, y }.
+-- The frame is what the pieces are pinned to (the page, or one section of
+-- it), left is how far in from its left edge they start, width is how wide
+-- they are, and y is how far down it has been taken so far.
+
+-- Space between one section of a page and the next.
+Kit.SECTION_GAP = 8
+
+--- Text that runs on to as many lines as it needs. Give it a width, or
+--- anchor its left and right edges, so it knows where to wrap.
+function Kit.Paragraph(parent, font, justify)
+    local text = Kit.Text(parent, font, justify)
+    text:SetWordWrap(true)
+    text:SetJustifyV("TOP")
+    text:SetSpacing(3)
+    return text
+end
+
+--- Puts a piece in its place, under whatever was placed before it.
+---@param layout table  see above
+---@param gap number  space to leave above the piece
+---@param height number|nil  the piece's own height unless given
+function Kit.Place(layout, piece, gap, height)
+    layout.y = layout.y + gap
+
+    piece:ClearAllPoints()
+    piece:SetPoint("TOPLEFT", layout.frame, "TOPLEFT", layout.left, -layout.y)
+    piece:SetWidth(layout.width)
+    piece:Show()
+
+    layout.y = layout.y + (height or piece:GetHeight())
+end
+
+--- Places text that may wrap. It has to be told its width before its
+--- words, or there's nothing to wrap to and nothing true to measure.
+function Kit.PlaceText(layout, text, gap, words)
+    text:SetWidth(layout.width)
+    text:SetText(words)
+    Kit.Place(layout, text, gap, text:GetStringHeight())
+end
+
+--- A layout for what goes inside a section: pinned to the section, not
+--- the page, so it doesn't matter that the section has no place yet.
+---@param layout table  the layout the section will be placed with, for
+---                     its width
+function Kit.Inside(layout, section)
+    return {
+        frame = section,
+        left = Kit.SECTION_PADDING,
+        width = layout.width - 2 * Kit.SECTION_PADDING,
+        y = Kit.SECTION_TOP,
+    }
+end
+
+--- Puts a section on the page once everything in it has been placed. It
+--- ends where the last thing in it did, plus the padding.
+---@param inside table  the layout its contents were placed with
+function Kit.PlaceSection(layout, section, inside)
+    local height = inside.y + Kit.SECTION_PADDING
+    section:SetHeight(height)
+
+    -- Nothing comes before the first section, so it needs no gap.
+    Kit.Place(layout, section, layout.y > 0 and Kit.SECTION_GAP or 0, height)
+end
+
+-- A row of figures ----------------------------------------------------------------
+
+-- The row across the top of a page: one thin box of cells divided by
+-- rules, each cell a small label with its figure under it and, when the
+-- page is comparing, how the figure moved under that. Whatever lies behind
+-- a figure waits in its tooltip.
+--
+-- Each figure is a table:
+--   label, value        what it is, and the figure itself
+--   title               what its tooltip is headed, when the label is too
+--                       short to be one
+--   figures             list of { label, figure } for the tooltip: what
+--                       lies behind the figure. With none, and no note,
+--                       there's no tooltip
+--   note                a sentence to end the tooltip with, if any
+--   changeText, change  when comparing: how it moved since the earlier
+--                       fights, in words and as the number behind them
+
+-- How tall the row is, and how tall when each figure has its change under
+-- it. Down a cell go the label, the figure, and the change with its arrow.
+-- The figures stand on a line of their own, so that the first, in its
+-- larger type, lines up with the rest.
+local STATS_HEIGHT = 44
+local STATS_HEIGHT_COMPARING = 56
+local STAT_PADDING = 9
+local STAT_LABEL_TOP = 6
+local STAT_FIGURE_FOOT = 36
+local STAT_CHANGE_TOP = 38
+local STAT_ARROW = 10
+local STAT_ARROW_GAP = 3
+local HERO_FONT = "GameFontNormalLarge"
+local FIGURE_FONT = "GameFontHighlightMedium"
+
+--- Adds a line to the tooltip being built: what a figure is on the left,
+--- in gold, and the figure on the right.
+function Kit.TooltipFigure(label, figure)
+    GameTooltip:AddDoubleLine(label, figure, Kit.GOLD[1], Kit.GOLD[2], Kit.GOLD[3], 1, 1, 1)
+end
+
+--- What lies behind a figure, for those that have something behind them.
+local function ShowStatTooltip(cell)
+    local stat = cell.stat
+    if not stat or not (stat.figures[1] or stat.note) then
+        return
+    end
+
+    GameTooltip:SetOwner(cell, "ANCHOR_RIGHT")
+    GameTooltip:SetText(stat.title or stat.label, 1, 1, 1)
+    for _, figure in ipairs(stat.figures) do
+        Kit.TooltipFigure(figure[1], figure[2])
+    end
+    if stat.note then
+        GameTooltip:AddLine(stat.note, Kit.MUTED[1], Kit.MUTED[2], Kit.MUTED[3], true)
+    end
+    GameTooltip:Show()
+end
+
+--- One cell of the row: a small label, the figure under it, and under
+--- that, when comparing, how the figure moved.
+---@param first boolean  true for the cell at the head of the row, which
+---                      holds the one figure set larger and in gold
+local function CreateStat(strip, first)
+    local cell = CreateFrame("Frame", nil, strip)
+    cell:EnableMouse(true)
+    cell:SetScript("OnEnter", ShowStatTooltip)
+    cell:SetScript("OnLeave", GameTooltip_Hide)
+
+    cell.label = Kit.Text(cell, "GameFontDisableSmall")
+    cell.label:SetPoint("TOPLEFT", STAT_PADDING, -STAT_LABEL_TOP)
+
+    cell.value = Kit.Text(cell, first and HERO_FONT or FIGURE_FONT)
+    cell.value:SetPoint("BOTTOMLEFT", cell, "TOPLEFT", STAT_PADDING, -STAT_FIGURE_FOOT)
+
+    cell.arrow = Kit.Icon(cell, STAT_ARROW)
+    cell.arrow:SetPoint("TOPLEFT", STAT_PADDING, -STAT_CHANGE_TOP)
+    cell.arrow:Hide()
+
+    cell.change = Kit.Text(cell, "GameFontHighlightSmall")
+
+    -- A rule down the left of every cell but the first divides the row.
+    -- It stops short of the strip's own edge, top and bottom.
+    if not first then
+        local rule = Kit.Rule(cell)
+        rule:SetWidth(1)
+        rule:SetPoint("TOPLEFT", 0, -1)
+        rule:SetPoint("BOTTOMLEFT", 0, 1)
+    end
+
+    return cell
+end
+
+--- Shows a figure in a cell, and notes how wide the cell has to be for
+--- all of it to be read.
+local function FillStat(cell, stat)
+    cell.stat = stat
+    cell.label:SetText(stat.label)
+    cell.value:SetText(stat.value)
+    cell.change:SetText(stat.changeText or "")
+    Kit.SetArrow(cell.arrow, stat.changeText and stat.change or nil)
+
+    -- The words about the change come after the arrow. With no arrow
+    -- ("no change") they start where it would have been.
+    local indent = cell.arrow:IsShown() and STAT_ARROW + STAT_ARROW_GAP or 0
+    cell.change:ClearAllPoints()
+    cell.change:SetPoint(
+        "LEFT",
+        cell,
+        "TOPLEFT",
+        STAT_PADDING + indent,
+        -(STAT_CHANGE_TOP + STAT_ARROW / 2)
+    )
+
+    local widest = math.max(
+        cell.label:GetStringWidth(),
+        cell.value:GetStringWidth(),
+        cell.change:GetStringWidth() + indent
+    )
+    cell.needs = widest + 2 * STAT_PADDING
+
+    -- A fight can end while the mouse is resting on a cell. Its tooltip
+    -- is redrawn then, so it doesn't go on quoting the fight before.
+    if GameTooltip:IsOwned(cell) then
+        GameTooltip:Hide()
+        ShowStatTooltip(cell)
+    end
+end
+
+--- A row of figures with nothing in it yet.
+---@return table strip  anchor its left and right edges, and call
+---                     strip:Fill(stats, width, comparing)
+function Kit.StatRow(parent)
+    local strip = Kit.Box(parent)
+    strip:SetHeight(STATS_HEIGHT)
+
+    -- Cells are made as a fill first needs them.
+    strip.cells = {}
+
+    --- Fills the row and shares its width out among the figures. Each
+    --- cell gets what its words need and an even share of whatever is
+    --- left over. Were they ever to need more than there is, the same sum
+    --- takes the difference back out of their padding.
+    ---@param stats table  list of figures, left to right; at least one
+    ---@param width number  of the whole row
+    ---@param comparing boolean  true to leave room for each figure's change
+    function strip:Fill(stats, width, comparing)
+        local needed = 0
+        for index, stat in ipairs(stats) do
+            local cell = self.cells[index]
+            if not cell then
+                cell = CreateStat(self, index == 1)
+                self.cells[index] = cell
+            end
+
+            FillStat(cell, stat)
+            needed = needed + cell.needs
+        end
+
+        local spare = (width - needed) / #stats
+        local left = 0
+        for index, cell in ipairs(self.cells) do
+            cell:SetShown(index <= #stats)
+            if index <= #stats then
+                local share = cell.needs + spare
+                cell:ClearAllPoints()
+                cell:SetPoint("TOPLEFT", self, "TOPLEFT", left, 0)
+                cell:SetPoint("BOTTOMLEFT", self, "BOTTOMLEFT", left, 0)
+                cell:SetWidth(share)
+                left = left + share
+            end
+        end
+
+        self:SetHeight(comparing and STATS_HEIGHT_COMPARING or STATS_HEIGHT)
+    end
+
+    return strip
+end
+
+-- Findings ------------------------------------------------------------------------
+
+-- A finding is a picture and a sentence, the sentence starting this far
+-- in to clear the picture.
+local FINDING_ICON = 16
+local FINDING_INDENT = FINDING_ICON + 8
+local FINDING_GAP = 8
+
+local function CreateFindingRow(section)
+    local row = CreateFrame("Frame", nil, section)
+
+    row.icon = Kit.Icon(row, FINDING_ICON)
+    row.icon:SetPoint("TOPLEFT")
+
+    row.text = Kit.Paragraph(row, "GameFontHighlight")
+    row.text:SetPoint("TOPLEFT", FINDING_INDENT, -1)
+
+    return row
+end
+
+--- Places a row for each finding in a section: a picture for the kind of
+--- news it is, then the sentence.
+---@param inside table  the layout for the section's contents
+---@param rows table  the rows made so far, which the page keeps from one
+---                   fill to the next. Findings come a few at a time, so
+---                   their rows are made as they're first needed
+---@param findings table  list of { kind, text }
+function Kit.PlaceFindings(inside, rows, findings)
+    local gap = 0
+    for index, finding in ipairs(findings) do
+        local row = rows[index]
+        if not row then
+            row = CreateFindingRow(inside.frame)
+            rows[index] = row
+        end
+
+        Kit.SetIcon(row.icon, finding.kind)
+        row.text:SetWidth(inside.width - FINDING_INDENT)
+        row.text:SetText(finding.text)
+        row:SetHeight(math.max(FINDING_ICON, row.text:GetStringHeight() + 1))
+
+        Kit.Place(inside, row, gap)
+        gap = FINDING_GAP
+    end
+
+    -- Rows left over from a fill that had more to say are put away.
+    for index = #findings + 1, #rows do
+        rows[index]:Hide()
+    end
+end
+
+-- Links -----------------------------------------------------------------------------
+
+--- A few words that go somewhere when clicked. They're grey until the
+--- mouse is on them, so they don't shout over what they sit beside.
+function Kit.Link(parent, text, onClick)
+    local link = CreateFrame("Button", nil, parent)
+
+    local label = Kit.Text(link, "GameFontDisableSmall")
+    label:SetPoint("CENTER")
+    label:SetText(text)
+
+    link:SetFontString(label)
+    link:SetNormalFontObject("GameFontDisableSmall")
+    link:SetHighlightFontObject("GameFontHighlightSmall")
+    link:SetSize(label:GetStringWidth() + 8, 18)
+    link:SetScript("OnClick", onClick)
+
+    return link
+end

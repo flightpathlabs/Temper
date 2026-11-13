@@ -1,9 +1,11 @@
 local addonName, ns = ...
 
--- The window: a frame in the game's own style with three tabs along the
+-- The window: a frame in the game's own style with four tabs along the
 -- bottom, the way the auction house and the character sheet have them.
 --
 --   Fights       every fight, and the analysis of whichever are selected
+--   Healing      what was healed and what did the hurting, over a set of
+--                fights picked from a menu
 --   Experiments  a question, two sets of fights, and a verdict
 --   Progress     bests and the trend, against nobody but yourself
 --
@@ -12,8 +14,8 @@ local addonName, ns = ...
 --
 -- Our emblem sits in the round corner the game's windows keep for a
 -- portrait. The strip beside it, under the title bar, belongs to the tab
--- that's showing: the Fights tab puts its own line and button there, and
--- the others get a sentence saying what they're for.
+-- that's showing: the Fights and Healing tabs put their own things there,
+-- and the others get a sentence saying what they're for.
 
 local Kit = ns.Kit
 
@@ -29,6 +31,24 @@ local ABOUT = {
     "Your fights are kept on this computer. Nothing is shared or posted.",
 }
 
+-- The game only finds a file that's new to an addon when it starts, so
+-- straight after an update that adds a tab, that tab isn't there yet.
+local RESTART = "This tab is new. Quit the game and start it again to finish installing it."
+
+--- A page that says one thing, standing in for a tab that couldn't be
+--- built, so that the rest of the window still opens.
+local function PlaceHolder(parent, words)
+    local page = CreateFrame("Frame", nil, parent)
+    page:SetAllPoints()
+
+    local text = page:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    text:SetPoint("CENTER")
+    text:SetText(words)
+
+    function page.Refresh() end
+    return page
+end
+
 local TABS = {
     {
         label = "Fights",
@@ -36,6 +56,16 @@ local TABS = {
         -- itself.
         build = function(...)
             return ns.FightsTab.Create(...)
+        end,
+    },
+    {
+        label = "Healing",
+        -- Nor here: its menu of which fights to cover goes in the strip.
+        build = function(parent, ...)
+            if ns.HealingTab and ns.Healing then
+                return ns.HealingTab.Create(parent, ...)
+            end
+            return PlaceHolder(parent, RESTART)
         end,
     },
     {
@@ -54,7 +84,7 @@ local TABS = {
     },
 }
 
-local FIGHTS, EXPERIMENTS = 1, 2
+local FIGHTS, HEALING, EXPERIMENTS = 1, 2, 3
 
 local window
 local currentTab = FIGHTS
@@ -229,6 +259,12 @@ end
 function ns.ShowRecording(recording)
     local earlier = ns.Recorder.Before(recording)
     ns.ShowFights(ns.Recorder.FightsOf(recording), earlier and ns.Recorder.FightsOf(earlier) or nil)
+end
+
+--- Opens the window on the Healing tab. This is what a click on the
+--- healing panel does.
+function ns.ShowHealing()
+    Open(HEALING)
 end
 
 --- Opens the window on the Experiments tab.

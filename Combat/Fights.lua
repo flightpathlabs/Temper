@@ -7,6 +7,9 @@ local _, ns = ...
 -- for each fight, ability by ability, and lets addons read it the instant
 -- the fight is over. That tally is where every damage figure in Temper
 -- comes from. The counts of hits, crits and casts come from Hits.lua.
+-- Healing, damage taken and the like come from the game's other tallies
+-- (see Tallies.lua). They only add to a fight: one is still only saved
+-- when the player dealt damage.
 --
 -- A saved fight looks like this:
 --
@@ -36,6 +39,29 @@ local _, ns = ...
 --             power }, biggest first; cost and power are what one use
 --             cost at the time ("MANA", "ENERGY"...), when it cost anything
 --   enemies   list of { name, damage }, one per enemy that was hurt
+--
+-- and, each only when there was something to record and the game would
+-- say (so never on a fight saved before Temper looked at these):
+--
+--   healing   { total, spells }: what the player and their pet healed.
+--             spells is a list of { id, name, amount, casts, icon, rank,
+--             cost, power, pet }, biggest first, with pet set on the
+--             pet's own healing
+--   absorbed  damage soaked up by the player's own shields
+--   taken     { total, avoidable, sources }: the damage the player took.
+--             sources is a list of { id, name, amount, avoidable, from },
+--             one per enemy ability, the twelve biggest, biggest first;
+--             from is the enemy's name when the game gives one. avoidable
+--             marks what the game says could have been avoided, and is
+--             how much of the total that came to
+--   interrupts  casts the player or their pet interrupted
+--   dispels   effects they dispelled
+--   defence   { heals, healCrits, struck, avoided, avoidedBy }: heals that
+--             landed on the player and how many were critical; enemy
+--             blows that landed, and attacks that didn't, by each way.
+--             Counted as they happened (see Hits.lua). On every fight
+--             saved since healing was first recorded, even when all are
+--             nothing, which is what tells those fights from older ones
 
 local Fights = {}
 ns.Fights = Fights
@@ -76,8 +102,9 @@ end
 
 --- What the game knows about an ability beyond its name: its icon, its
 --- rank, and what one use costs. Noted with the fight, since all three
---- change as the character levels.
-local function Describe(spell)
+--- change as the character levels. Healing abilities are described the
+--- same way (see Tallies.lua).
+function Fights.Describe(spell)
     local id = spell.id
     if id == 0 then
         return
@@ -145,7 +172,7 @@ local function AddSpells(spells, rows, fromPet)
                 damage = damage,
             }
             -- The details are a nicety. A refusal mustn't cost the fight.
-            pcall(Describe, spell)
+            pcall(Fights.Describe, spell)
             table.insert(spells, spell)
         end
     end
@@ -240,6 +267,29 @@ local function PowerSpent(began)
         return nil
     end
     return { kind = kind, start = began.power, finish = finish }
+end
+
+--- Adds to a fight what the game's other tallies say of it: healing,
+--- damage taken and the rest. None of it is certain to be there, and
+--- whatever goes wrong in the reading mustn't cost the fight.
+local function AddOtherTallies(fight, casts)
+    -- The game only picks up a file that's new to an addon when it's
+    -- restarted. After an update and a reload, Tallies.lua isn't there yet.
+    local tallies = ns.Tallies
+    if not tallies then
+        return
+    end
+
+    local ok, found = pcall(tallies.Read, casts)
+    if not ok or type(found) ~= "table" then
+        return
+    end
+
+    fight.healing = found.healing
+    fight.absorbed = found.absorbed
+    fight.taken = found.taken
+    fight.interrupts = found.interrupts
+    fight.dispels = found.dispels
 end
 
 local function Save(fight, recording)
@@ -379,7 +429,12 @@ ns.OnEvent("PLAYER_REGEN_ENABLED", function()
         power = PowerSpent(began),
         spells = spells,
         enemies = enemies,
+        -- Kept even when every count is nothing. Its being there is what
+        -- marks a fight as one in which healing was looked for.
+        defence = tally.defence,
     }
+
+    AddOtherTallies(fight, casts)
 
     -- Sizing the blows is a nicety built on a figure the game might stop
     -- sharing. Whatever goes wrong with it mustn't cost the fight.

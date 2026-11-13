@@ -20,6 +20,7 @@ local addonName, ns = ...
 --                             seen to do (see Text\Guess.lua)
 --                 nextNumber  the number the next recording will carry
 --   widget      where the last-fight panel was dragged to
+--   healWidget  where the healing panel was dragged to
 --   button      where the record button was dragged to
 --   example     where the example enemy in the options was dragged to
 --   toldAboutNameplates  set once the player has been told the numbers
@@ -87,6 +88,10 @@ ns.DEFAULT_SETTINGS = {
     widgetBrand = true,
     widgetRecent = 2,
     widgetStats = true,
+
+    -- A second panel like it, for healing. Off unless asked for: it can be
+    -- popped out from the fight panel's menu or the options.
+    healWidget = false,
 
     -- A small Record button on the screen. Off unless asked for: the window
     -- and the panel's menu both record, and there's a key binding.

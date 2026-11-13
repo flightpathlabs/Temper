@@ -3,13 +3,14 @@
 # Temper
 
 An addon for World of Warcraft: Forever that helps you understand your own
-damage: how much you do, where it comes from, what's holding it back, and
-whether a change you made helped.
+fighting: how much damage you do, where it comes from, what's holding it
+back, how well you keep yourself going, and whether a change you made
+helped.
 
 To temper steel is to test it and make it harder. Same idea.
 
 **It's about you, and it stays with you.** Temper looks only at your own
-damage. It doesn't rank you against anyone, it doesn't measure other
+fighting. It doesn't rank you against anyone, it doesn't measure other
 players, and it has nothing to say about a group. It never posts to chat,
 never sends anything to other players or to any server, and has no way to
 share or export what it records. Your fights are kept in your own saved
@@ -40,6 +41,13 @@ damage, DPS, length and crit rate. Open one and you get:
   parried, time spent with nothing in use;
 - a strip of what you used, in order, with crits and misses marked;
 - the biggest hit and biggest critical hit.
+
+**Healing and defence.** Each fight also keeps how much you healed and
+with what, the damage you took and what it came from, what your shields
+soaked up, and how many casts you interrupted and effects you dispelled.
+The fight page sums it up in a line or two; the Healing tab breaks it
+down for the last fight, the session or everything on record; and a
+second small panel, off until you want it, shows your healing live.
 
 **Comparing.** Select some fights, press Compare with..., pick some
 others, and every figure shows how far it moved, with the gear that
@@ -95,6 +103,7 @@ game still offers. That shapes what it shows.
 | Hits, critical hits, misses, dodges, parries | The game reports each blow on an enemy as it lands |
 | How many times you used each ability, and when | The game reports your own casts |
 | What each ability costs, and so its damage per point of mana or energy | The game says what an ability costs; the rest is division |
+| Healing by ability, damage taken by enemy ability, absorbs, interrupts and dispels, per fight | The game keeps tallies of these alongside its damage tally. Only healing done during a fight is in them; eating or bandaging between fights isn't |
 | Your skill with the weapon in hand, and what a shortfall costs | The game shows it on the character sheet, and its own skills window gives the sums |
 
 | It works out, and says "about" | How |

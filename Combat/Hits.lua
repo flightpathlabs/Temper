@@ -17,6 +17,11 @@ local _, ns = ...
 -- This file passes each blow on for the lane to draw, and keeps a log of
 -- blows and casts from which a finished fight gets its counts and its
 -- timeline.
+--
+-- The same event reports what lands on the player: heals, and enemy
+-- attacks that hit or were avoided. There's no doubt whose those are, so
+-- they go straight into the log. They're only ever counted: never drawn,
+-- never taken for a blow of the player's own.
 
 local Hits = {}
 ns.Hits = Hits
@@ -81,6 +86,28 @@ local function Remember(entry)
     return entry
 end
 
+-- What lands on the player -------------------------------------------------
+
+--- Logs a heal or an enemy's attack on the player, as "HEAL", "WOUND" or
+--- the way the attack was avoided. Anything else reported about the
+--- player (mana and energy gains, mostly) is let go.
+---
+--- Only physical blows count as attacks that landed: they're the ones
+--- that could have been dodged, parried or blocked. A spell, a tick of
+--- damage over time or a Life Tap couldn't, and counting them would make
+--- the share avoided look worse than the player's defence really is.
+local function NoteOnPlayer(action, flag, school)
+    if action == "HEAL" then
+        Remember({ onPlayer = "HEAL", crit = flag == "CRITICAL" })
+    elseif action == "WOUND" and school ~= nil and school ~= 1 then
+        return
+    elseif action == "WOUND" then
+        Remember({ onPlayer = SOAKED[flag] and flag or "WOUND" })
+    elseif AVOIDED[action] then
+        Remember({ onPlayer = action })
+    end
+end
+
 -- Whose blow is it? --------------------------------------------------------
 
 --- An answer from the game that may be withheld: the value, or `otherwise`.
@@ -133,6 +160,13 @@ ns.OnEvent("UNIT_COMBAT", function(unit, action, flag, amount, school)
     if IsSecret(unit) or IsSecret(action) or IsSecret(flag) then
         return
     end
+
+    -- What lands on the player is counted and nothing more.
+    if unit == "player" then
+        NoteOnPlayer(action, flag, not IsSecret(school) and school or nil)
+        return
+    end
+
     if not ns.settings or not IsOurs(unit) then
         return
     end
@@ -243,19 +277,50 @@ local function Earliest(startTime)
     return math.max(startTime - LEAD_SECONDS, lastFinish + STRAGGLER_SECONDS)
 end
 
+--- Adds one thing that landed on the player to the count of them.
+---@param began number  when the fight was announced
+local function CountOnPlayer(defence, entry, began)
+    local what = entry.onPlayer
+
+    if what == "HEAL" then
+        -- The blow that starts a fight comes before the fight is
+        -- announced. A heal that does was topping up between fights, and
+        -- the game's own tally of healing leaves it out as well.
+        if entry.time >= began then
+            defence.heals = defence.heals + 1
+            if entry.crit then
+                defence.healCrits = defence.healCrits + 1
+            end
+        end
+    elseif what == "WOUND" then
+        defence.struck = defence.struck + 1
+    else
+        defence.avoided = defence.avoided + 1
+        defence.avoidedBy[what] = (defence.avoidedBy[what] or 0) + 1
+    end
+end
+
 --- Counts everything in the log from `earliest` on. Casts are counted
 --- from `earliestCast`, which can be sooner: a last tick of damage from
 --- the fight before mustn't be counted twice, but a cast made the moment
 --- that fight ended belongs to this one.
+---@param began number  when the fight was announced, on GetTime's clock
 ---@return table tally  { hits, crits, glancing, avoided, avoidedBy,
----                     starved }, where avoidedBy counts each way of
----                     missing by the game's word for it (MISS, DODGE,
+---                     starved, defence }, where avoidedBy counts each way
+---                     of missing by the game's word for it (MISS, DODGE,
 ---                     PARRY and so on) and starved is how often a skill
----                     was pressed without the mana or energy for it
+---                     was pressed without the mana or energy for it.
+---                     defence is the other side of the fight: { heals,
+---                     healCrits, struck, avoided, avoidedBy }, the heals
+---                     that landed on the player and how many were
+---                     critical, and the enemy attacks that landed and
+---                     that didn't
 ---@return table casts  times each spell was cast, by spell ID
-local function Count(earliest, earliestCast)
+local function Count(earliest, earliestCast, began)
     local tally = { hits = 0, crits = 0, glancing = 0, avoided = 0, avoidedBy = {}, starved = 0 }
+    local defence = { heals = 0, healCrits = 0, struck = 0, avoided = 0, avoidedBy = {} }
     local casts = {}
+    tally.defence = defence
 
     for _, entry in ipairs(log) do
         if entry.cast and entry.time >= earliestCast then
@@ -264,7 +329,9 @@ local function Count(earliest, earliestCast)
 
         -- A pet's blow is in the log but isn't the player's to count.
         if entry.time >= earliest then
-            if entry.starved then
+            if entry.onPlayer then
+                CountOnPlayer(defence, entry, began)
+            elseif entry.starved then
                 tally.starved = tally.starved + 1
             elseif entry.avoided then
                 tally.avoided = tally.avoided + 1
@@ -326,7 +393,7 @@ end
 --- The count so far for a fight that's still going on.
 ---@param startTime number  when the fight began, on GetTime's clock
 function Hits.Live(startTime)
-    return Count(Earliest(startTime), startTime - LEAD_SECONDS)
+    return Count(Earliest(startTime), startTime - LEAD_SECONDS, startTime)
 end
 
 --- Counts up a fight and clears the log for the next one.
@@ -336,7 +403,7 @@ end
 ---@return table blows  as from Blows
 function Hits.Finish(startTime)
     local earliest = Earliest(startTime)
-    local tally, casts = Count(earliest, startTime - LEAD_SECONDS)
+    local tally, casts = Count(earliest, startTime - LEAD_SECONDS, startTime)
     local timeline = Timeline(earliest, startTime)
     local blows = Blows(earliest)
 
