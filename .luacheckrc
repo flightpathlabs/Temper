@@ -54,6 +54,7 @@ read_globals = {
     "CreateColor",
     "CreateDataProvider",
     "CreateScrollBoxListLinearView",
+    "CreateSettingsButtonInitializer",
     "CreateSettingsListSectionHeaderInitializer",
     "GameRulesUtil",
     "GameTooltip_Hide",

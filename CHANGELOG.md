@@ -199,7 +199,8 @@ First version.
   where much of the damage came from an item or some other effect, are
   left out automatically.
 - A column for each day you've played, with your level marked.
-- "Forget everything" wipes what's been recorded for the character.
+- "Forget everything" wipes what's been recorded for the character, from the
+  Progress tab or from the bottom of the Options page.
 
 **Good manners**
 

@@ -454,6 +454,26 @@ local function AddAlertOptions(layout)
     )
 end
 
+--- A way to start again from nothing, asked about first in the game's own
+--- dialog. The same as the button on the Progress tab.
+local function AddDataOptions(layout)
+    AddHeader(layout, "Your fights")
+
+    layout:AddInitializer(
+        CreateSettingsButtonInitializer(
+            "Start again from nothing",
+            "Forget all fights",
+            function()
+                ns.AskToForget()
+            end,
+            "Deletes every fight, session and experiment kept for this character, so the "
+                .. "numbers start afresh. Your options and where you've put things stay as "
+                .. "they are. It asks first, and cannot be undone.",
+            true
+        )
+    )
+end
+
 -- Registered at login rather than when the addon loads, so the Options
 -- window has finished setting itself up.
 ns.OnEvent("PLAYER_LOGIN", function()
@@ -470,6 +490,7 @@ ns.OnEvent("PLAYER_LOGIN", function()
     if ns.ProcAlert then
         AddAlertOptions(layout)
     end
+    AddDataOptions(layout)
 
     Settings.RegisterAddOnCategory(category)
     WatchOptionsWindow()

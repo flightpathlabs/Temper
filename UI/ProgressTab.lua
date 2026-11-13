@@ -585,6 +585,9 @@ local function AskToForget()
     Kit.Confirm(FORGET_QUESTION:format(name), ns.Recorder.ForgetEverything)
 end
 
+-- The Options page offers the same, in the same words.
+ns.AskToForget = AskToForget
+
 --- A quiet word at the right-hand end of a section's title band, saying
 --- what the section is or what can be done with it.
 local function AddCaption(section, words)
