@@ -316,6 +316,32 @@ function Kit.Button(parent, text, width, onClick)
     return button
 end
 
+--- A small cog that opens Temper's options, the one the game uses for
+--- settings on its own panels.
+---@param size number  how many pixels across
+function Kit.OptionsButton(parent, size)
+    local button = CreateFrame("Button", nil, parent)
+    button:SetSize(size, size)
+
+    local cog = button:CreateTexture(nil, "ARTWORK")
+    cog:SetAtlas("questlog-icon-setting")
+    cog:SetAllPoints()
+
+    local glow = button:CreateTexture(nil, "HIGHLIGHT")
+    glow:SetAtlas("questlog-icon-setting")
+    glow:SetBlendMode("ADD")
+    glow:SetAlpha(0.4)
+    glow:SetAllPoints()
+
+    button:SetScript("OnClick", function()
+        ns.OpenOptions()
+    end)
+    Kit.Tooltip(button, "Options", function()
+        return { "How your damage numbers look, and what Temper shows on screen." }
+    end)
+    return button
+end
+
 --- Gives a frame a tooltip: a title and any number of lines under it.
 ---@param lines fun(): table|nil  called each time, so the words can change;
 ---                               returns a list of strings
@@ -354,4 +380,95 @@ StaticPopupDialogs[CONFIRM] = {
 ---@param onAccept fun()  called if they say yes
 function Kit.Confirm(question, onAccept)
     StaticPopup_Show(CONFIRM, question, nil, onAccept)
+end
+
+-- Boxes ------------------------------------------------------------------------
+
+-- A box sets one part of a page apart without shouting about it: a shade
+-- darker than what's round it, with a hairline for an edge. A page of
+-- them already sits inside a window's own frame, so anything heavier (the
+-- game's tooltip border, say) would be frames within frames.
+local BOX_FILL = { 0, 0, 0, 0.25 }
+local BOX_EDGE = { 1, 1, 1, 0.14 }
+
+-- The band a section's title sits in: a touch lighter than the box, and
+-- this tall with the rule under it.
+local BAND_FILL = { 1, 1, 1, 0.04 }
+local BAND_HEIGHT = 24
+
+-- The space between a section's edge and what's in it, and how far down
+-- a section its contents start: under the band, and padded.
+Kit.SECTION_PADDING = 10
+Kit.SECTION_TOP = BAND_HEIGHT + Kit.SECTION_PADDING
+
+--- A hairline in the colour boxes are edged with, for dividing up what's
+--- inside one. Give it a place, and a width or a height of 1.
+function Kit.Rule(parent)
+    local rule = parent:CreateTexture(nil, "BORDER")
+    rule:SetColorTexture(unpack(BOX_EDGE))
+    return rule
+end
+
+--- A plain box: the fill and the edge, with nothing in it.
+---@return table box  give it a place and a size
+function Kit.Box(parent)
+    local box = CreateFrame("Frame", nil, parent)
+
+    local fill = box:CreateTexture(nil, "BACKGROUND")
+    fill:SetColorTexture(unpack(BOX_FILL))
+    fill:SetAllPoints()
+
+    local top = Kit.Rule(box)
+    top:SetHeight(1)
+    top:SetPoint("TOPLEFT")
+    top:SetPoint("TOPRIGHT")
+
+    local bottom = Kit.Rule(box)
+    bottom:SetHeight(1)
+    bottom:SetPoint("BOTTOMLEFT")
+    bottom:SetPoint("BOTTOMRIGHT")
+
+    -- The sides run between the other two, not over them. The edge is
+    -- see-through, so where two lines crossed, the corner would show
+    -- brighter than the rest.
+    local left = Kit.Rule(box)
+    left:SetWidth(1)
+    left:SetPoint("TOPLEFT", top, "BOTTOMLEFT")
+    left:SetPoint("BOTTOMLEFT", bottom, "TOPLEFT")
+
+    local right = Kit.Rule(box)
+    right:SetWidth(1)
+    right:SetPoint("TOPRIGHT", top, "BOTTOMRIGHT")
+    right:SetPoint("BOTTOMRIGHT", bottom, "TOPRIGHT")
+
+    return box
+end
+
+--- One part of a page: a box with its title in a band along the top, in
+--- the gold the game heads its own panels with.
+---@return table section  give it a place, a width and a height. What goes
+---                       in it starts Kit.SECTION_TOP down, and keeps
+---                       Kit.SECTION_PADDING in from either side
+function Kit.Section(parent, title)
+    local section = Kit.Box(parent)
+
+    -- The band and its rule stay inside the box's edge, for the same
+    -- reason the sides of the box stop short of its corners.
+    local band = section:CreateTexture(nil, "BORDER")
+    band:SetColorTexture(unpack(BAND_FILL))
+    band:SetPoint("TOPLEFT", 1, -1)
+    band:SetPoint("TOPRIGHT", -1, -1)
+    band:SetHeight(BAND_HEIGHT - 2)
+
+    local rule = Kit.Rule(section)
+    rule:SetHeight(1)
+    rule:SetPoint("TOPLEFT", band, "BOTTOMLEFT")
+    rule:SetPoint("TOPRIGHT", band, "BOTTOMRIGHT")
+
+    section.title = Kit.Text(section, "GameFontNormal")
+    section.title:SetPoint("LEFT", band, "LEFT", Kit.SECTION_PADDING - 1, 0)
+    section.title:SetPoint("RIGHT", band, "RIGHT", 1 - Kit.SECTION_PADDING, 0)
+    section.title:SetText(title)
+
+    return section
 end

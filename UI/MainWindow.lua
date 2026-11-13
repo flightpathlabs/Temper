@@ -1,4 +1,4 @@
-local _, ns = ...
+local addonName, ns = ...
 
 -- The window: a frame in the game's own style with three tabs along the
 -- bottom, the way the auction house and the character sheet have them.
@@ -9,25 +9,45 @@ local _, ns = ...
 --
 -- Each tab is built by its own file and knows how to redraw itself. This
 -- file only owns the frame and decides which tab is showing.
+--
+-- Our emblem sits in the round corner the game's windows keep for a
+-- portrait. The strip beside it, under the title bar, belongs to the tab
+-- that's showing: the Fights tab puts its own line and button there, and
+-- the others get a sentence saying what they're for.
+
+local Kit = ns.Kit
 
 local WIDTH = 900
-local HEIGHT = 680
+local HEIGHT = 720
+
+local PORTRAIT = "Interface\\AddOns\\Temper\\Media\\portrait"
+
+-- What the emblem says when the mouse is over it.
+local ABOUT = {
+    "Understand your own damage: where it comes from, what's holding it back, and whether "
+        .. "a change helped.",
+    "Your fights are kept on this computer. Nothing is shared or posted.",
+}
 
 local TABS = {
     {
         label = "Fights",
+        -- No sentence here: the tab fills the strip under the title bar
+        -- itself.
         build = function(...)
             return ns.FightsTab.Create(...)
         end,
     },
     {
         label = "Experiments",
+        blurb = "Change one thing, fight a few times each way, and see whether it helped.",
         build = function(...)
             return ns.ExperimentsTab.Create(...)
         end,
     },
     {
         label = "Progress",
+        blurb = "Your own bests and your trend, measured against nobody but you.",
         build = function(...)
             return ns.ProgressTab.Create(...)
         end,
@@ -48,6 +68,7 @@ end
 local function ShowTab(index)
     currentTab = index
     PanelTemplates_SetTab(window, index)
+    window.blurb:SetText(TABS[index].blurb or "")
 
     for place, page in ipairs(window.pages) do
         page:SetShown(place == index)
@@ -75,6 +96,33 @@ local function CreateTabs(frame)
     PanelTemplates_SetNumTabs(frame, #TABS)
 end
 
+--- Tells anyone who points at the emblem what Temper is.
+local function CreateEmblemTooltip(frame)
+    local hover = CreateFrame("Frame", nil, frame)
+    hover:SetAllPoints(frame:GetPortrait())
+    hover:SetFrameLevel(frame.CloseButton:GetFrameLevel())
+
+    -- It only wants to know the mouse is there. Clicks go through to the
+    -- window, so it can still be dragged by this corner.
+    hover:SetMouseClickEnabled(false)
+    hover:SetMouseMotionEnabled(true)
+
+    hover:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(ns.TITLE)
+        for _, line in ipairs(ABOUT) do
+            GameTooltip:AddLine(line, 1, 1, 1, true)
+        end
+
+        local version = C_AddOns.GetAddOnMetadata(addonName, "Version")
+        if version then
+            GameTooltip:AddLine("Version " .. version, 0.6, 0.6, 0.6)
+        end
+        GameTooltip:Show()
+    end)
+    hover:SetScript("OnLeave", GameTooltip_Hide)
+end
+
 local function Create()
     local frame = CreateFrame("Frame", "TemperWindow", UIParent, "ButtonFrameTemplate")
     frame:SetSize(WIDTH, HEIGHT)
@@ -82,11 +130,9 @@ local function Create()
     frame:SetFrameStrata("HIGH")
     frame:Hide()
 
-    ButtonFrameTemplate_HidePortrait(frame)
-
-    -- Without a portrait the strip under the title bar holds nothing.
-    ButtonFrameTemplate_HideAttic(frame)
     frame:SetTitle(ns.TITLE)
+    frame:SetPortraitTextureRaw(PORTRAIT)
+    CreateEmblemTooltip(frame)
 
     frame:SetMovable(true)
     frame:EnableMouse(true)
@@ -94,6 +140,21 @@ local function Create()
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
     frame:SetClampedToScreen(true)
+
+    -- The tabs hang below the frame's own edge. Count them as part of it,
+    -- or the window can be dragged until they're off the screen.
+    frame:SetClampRectInsets(0, 0, 0, -30)
+
+    -- The cog, in the title bar beside the close button and level with
+    -- it, so the window's border doesn't draw over it.
+    local options = Kit.OptionsButton(frame, 16)
+    options:SetPoint("RIGHT", frame.CloseButton, "LEFT", -2, 0)
+    options:SetFrameLevel(frame.CloseButton:GetFrameLevel())
+
+    -- The strip under the title bar, clear of the emblem.
+    frame.blurb = Kit.Text(frame, "GameFontHighlight")
+    frame.blurb:SetPoint("TOPLEFT", 66, -34)
+    frame.blurb:SetPoint("RIGHT", -16, 0)
 
     -- Lets Escape close it like any other panel.
     table.insert(UISpecialFrames, frame:GetName())
@@ -185,13 +246,29 @@ local function PrintCheck()
     local recordings = ns.character and #ns.character.recordings or 0
     ns.Print("%d fights on record, %d recordings.", fights, recordings)
 
-    if ns.Lane.refusal then
-        ns.Print("The game wouldn't pin numbers to a nameplate: %s", ns.Lane.refusal)
-    else
-        ns.Print("Numbers are pinning to nameplates without complaint.")
+    -- Where the numbers have been going, and anything the game objected
+    -- to along the way.
+    local lane = ns.Lane
+    ns.Print(
+        "%d numbers followed a nameplate this session; %d had none and went mid-screen.",
+        lane.pinned,
+        lane.loose
+    )
+    if not GetCVarBool("nameplateShowEnemies") then
+        ns.Print("Enemy nameplates are switched off, so numbers have nothing to follow.")
     end
-    if ns.Lane.iconRefusal then
-        ns.Print("The game wouldn't draw icons beside them: %s", ns.Lane.iconRefusal)
+    if lane.knockedOff > 0 then
+        ns.Print(
+            "%d more found a nameplate but the game wouldn't pin them to it: %s",
+            lane.knockedOff,
+            lane.lastRefusal
+        )
+    end
+    if lane.refusal then
+        ns.Print("That happened often enough that nameplates are being left alone for now.")
+    end
+    for what, problem in pairs(lane.complaints) do
+        ns.Print("The game objected to a number's %s: %s", what, problem)
     end
 end
 
@@ -203,6 +280,8 @@ SlashCmdList.TEMPER = function(message)
         ns.ToggleRecording()
     elseif message == "options" then
         ns.OpenOptions()
+    elseif message == "example" then
+        ns.Example.Toggle()
     elseif message == "check" then
         PrintCheck()
     else

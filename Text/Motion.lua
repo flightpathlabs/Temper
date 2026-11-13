@@ -17,11 +17,6 @@ ns.Motions = Motions
 -- read, quick enough that a line has cleared before the next arrives.
 local RISE_SPEED = 26
 
--- A critical hit lands slightly oversized and settles within this many
--- seconds.
-local POP_SECONDS = 0.14
-local POP_SIZE = 0.25
-
 --- Full strength until `from`, then a steady fade to nothing.
 local function Fade(progress, from)
     if progress <= from then
@@ -69,12 +64,48 @@ Motions[4] = {
     end,
 }
 
---- The extra size a critical hit carries just after it lands.
----@param age number  seconds since the number appeared
----@return number  a multiplier, 1 once the pop is over
-function Motions.Pop(age)
-    if age >= POP_SECONDS then
-        return 1
+-- How a critical hit lands ------------------------------------------------------
+--
+-- On top of whichever motion is chosen, a critical hit can make an
+-- entrance. Each of these is a function of how long ago the number
+-- appeared. It answers with how much larger than normal the number
+-- should be drawn and how far sideways it's been knocked, and settles
+-- to 1 and 0 within a fraction of a second.
+
+--- Swells to `extra` over its size and settles within `seconds`.
+local function Pop(extra, seconds)
+    return function(age)
+        if age >= seconds then
+            return 1, 0
+        end
+        return 1 + extra * (1 - age / seconds), 0
     end
-    return 1 + POP_SIZE * (1 - age / POP_SECONDS)
 end
+
+local SHAKE_SECONDS = 0.35
+local SHAKE_WIDTH = 5
+local SHAKE_SPEED = 55
+
+-- As with the motions, a landing's place in this list is its setting
+-- value.
+Motions.Landings = {
+    {
+        label = "Nothing",
+        land = function()
+            return 1, 0
+        end,
+    },
+    { label = "A small pop", land = Pop(0.25, 0.14) },
+    { label = "A big pop", land = Pop(0.7, 0.22) },
+    {
+        label = "A shake",
+        -- Side to side, quickly, and less each time.
+        land = function(age)
+            if age >= SHAKE_SECONDS then
+                return 1, 0
+            end
+            local strength = 1 - age / SHAKE_SECONDS
+            return 1, math.sin(age * SHAKE_SPEED) * SHAKE_WIDTH * strength
+        end,
+    },
+}

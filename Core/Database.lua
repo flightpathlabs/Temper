@@ -21,6 +21,9 @@ local addonName, ns = ...
 --                 nextNumber  the number the next recording will carry
 --   widget      where the last-fight panel was dragged to
 --   button      where the record button was dragged to
+--   example     where the example enemy in the options was dragged to
+--   toldAboutNameplates  set once the player has been told the numbers
+--               need enemy nameplates (see Text\Lane.lua)
 --   blizzardDamageText  the player's own setting for Blizzard's damage
 --               numbers, as last seen before we switched them off (see
 --               Text\Feed.lua)
@@ -30,7 +33,7 @@ local addonName, ns = ...
 -- never assume the table is there, and never replace what did load with
 -- defaults. We only ever fill in what's missing.
 
-local SCHEMA = 3
+local SCHEMA = 4
 
 ns.DEFAULT_SETTINGS = {
     -- Show the player's hits in a lane by the target's nameplate.
@@ -52,14 +55,19 @@ ns.DEFAULT_SETTINGS = {
     -- How far from the nameplate: 1 close, 2 a little off, 3 well clear.
     laneDistance = 1,
 
-    -- 1 small, 2 medium, 3 large.
-    textSize = 2,
+    -- The height of an ordinary number, in pixels.
+    fontSize = 13,
 
-    -- How a critical hit stands out: 1 gold, 2 red, 3 by size alone.
-    critStyle = 1,
+    -- What the colour of a number says: 1 its kind (weapon swings white,
+    -- abilities yellow, magic by its school), 2 magic only, 3 nothing.
+    colorBy = 1,
 
-    -- Tint spell damage by its school; physical damage stays white.
-    schoolColors = true,
+    -- A critical hit: how large it's drawn, as a percentage of an
+    -- ordinary hit; its colour (1 gold, 2 red, 3 the hit's own); and how
+    -- it lands (1 no fuss, 2 a small pop, 3 a big pop, 4 a shake).
+    critSize = 140,
+    critStyle = 3,
+    critLanding = 2,
 
     -- Put the icon of the ability beside each number. The game doesn't say
     -- which ability a hit was, so this is a best guess. Off to begin with.
@@ -153,6 +161,29 @@ ns.OnEvent("ADDON_LOADED", function(name)
     if (db.schema or 1) < 3 then
         db.settings.motion = nil
         db.settings.textSize = nil
+    end
+
+    -- The fourth layout sets the size of the numbers in pixels where
+    -- there were three sizes, and colours them by kind where there was a
+    -- tick box for tinting magic. Critical hits used to be gold whatever
+    -- they were; among coloured numbers that default no longer suits, so
+    -- anyone still on it starts again from the new one.
+    if (db.schema or 1) < 4 then
+        local settings = db.settings
+        local sizes = { 11, 13, 16 }
+        if settings.textSize ~= nil then
+            settings.fontSize = sizes[settings.textSize]
+            settings.textSize = nil
+        end
+        if settings.schoolColors == false then
+            settings.colorBy = 3
+        end
+        settings.schoolColors = nil
+
+        -- Red was somebody's choice. Gold was only ever the default.
+        if settings.critStyle == 1 then
+            settings.critStyle = nil
+        end
     end
     FillIn(db.settings, ns.DEFAULT_SETTINGS)
 

@@ -7,7 +7,7 @@ local _, ns = ...
 -- Ctrl-click adds one, and the analysis covers whatever is selected.
 --
 -- Comparing is a step the player is walked through, not a mode to
--- remember. "Compare with..." on the strip above the analysis asks them
+-- remember. "Compare with..." on the strip under the title bar asks them
 -- to click the other fights. The page compares as soon as there's one,
 -- and "Done" goes back to ordinary reading with the comparison still
 -- showing, until "Stop comparing". The strip always says which of those
@@ -34,9 +34,11 @@ local PANEL_WIDTH = LIST_EDGE + LIST_WIDTH + SCROLL_BAR_GAP + SCROLL_BAR_WIDTH +
 local FIGHT_HEIGHT = 40
 local HEADER_HEIGHT = 26
 
--- The strip above the analysis, and the buttons on its right: one wide
--- one as a rule, two narrow ones while fights are being picked.
-local STRIP_HEIGHT = 44
+-- The strip under the window's title bar, which starts clear of the
+-- emblem in the corner, and the buttons on its right: one wide one as a
+-- rule, two narrow ones while fights are being picked.
+local STRIP_HEIGHT = 34
+local STRIP_LEFT = 66
 local STRIP_EDGE = 10
 local WIDE_BUTTON = 120
 local NARROW_BUTTON = 64
@@ -542,7 +544,7 @@ local function BuildRows()
     return rows
 end
 
--- The strip above the analysis --------------------------------------------------
+-- The strip under the title bar -------------------------------------------------
 
 --- Says where the player is in reading or comparing, and what to do next.
 ---@param selected table  the fights being read, as a list
@@ -643,17 +645,15 @@ function FightsTab.Create(parent, window)
     ScrollUtil.InitScrollBoxListWithScrollBar(scrollBox, scrollBar, view)
     tab.scrollBox = scrollBox
 
-    -- Right, top: where things stand and what to do next in two lines,
-    -- and the button that takes the next step.
+    -- In the window's own strip under the title bar, clear of the emblem
+    -- in its corner: where things stand and what to do next in two lines,
+    -- and the button that takes the next step. It belongs to this tab and
+    -- goes when the tab does.
     local strip = CreateFrame("Frame", nil, tab)
-    strip:SetPoint("TOPLEFT", panel, "TOPRIGHT", 8, -6)
-    strip:SetPoint("RIGHT", -6, 0)
+    strip:SetPoint("TOPLEFT", window, "TOPLEFT", STRIP_LEFT, -24)
+    strip:SetPoint("RIGHT", window, "RIGHT", -6, 0)
     strip:SetHeight(STRIP_HEIGHT)
     tab.strip = strip
-
-    local backing = strip:CreateTexture(nil, "BACKGROUND")
-    backing:SetAllPoints()
-    backing:SetColorTexture(1, 1, 1, 0.04)
 
     tab.compare = Kit.Button(strip, "Compare with...", WIDE_BUTTON, OnCompareClick)
     tab.compare:SetPoint("RIGHT", -STRIP_EDGE, 0)
@@ -664,15 +664,15 @@ function FightsTab.Create(parent, window)
 
     -- Both lines stop short of the buttons; ShowStripButtons says where.
     strip.status = Kit.Text(strip, "GameFontNormal")
-    strip.status:SetPoint("TOPLEFT", STRIP_EDGE, -7)
+    strip.status:SetPoint("TOPLEFT", 0, -3)
 
     strip.next = Kit.Text(strip, "GameFontHighlightSmall")
-    strip.next:SetPoint("TOPLEFT", strip.status, "BOTTOMLEFT", 0, -4)
+    strip.next:SetPoint("TOPLEFT", strip.status, "BOTTOMLEFT", 0, -3)
     strip.next:SetTextColor(0.75, 0.75, 0.75)
 
-    -- Right, below: the analysis.
+    -- Right of the list: the analysis.
     tab.card = ns.Card.Create(tab)
-    tab.card:SetPoint("TOPLEFT", strip, "BOTTOMLEFT", 0, -4)
+    tab.card:SetPoint("TOPLEFT", panel, "TOPRIGHT", 8, -4)
     tab.card:SetPoint("BOTTOMRIGHT", -4, 4)
 
     -- Along the bottom of the window, where the game's own windows keep

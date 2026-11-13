@@ -48,14 +48,13 @@ read_globals = {
     -- Blizzard's shared Lua helpers
     "AbbreviateNumbers",
     "BreakUpLargeNumbers",
-    "ButtonFrameTemplate_HideAttic",
-    "ButtonFrameTemplate_HidePortrait",
     "CombatFeedbackText",
     "CreateColor",
     "CreateDataProvider",
     "CreateScrollBoxListLinearView",
     "CreateSettingsListSectionHeaderInitializer",
     "GameTooltip_Hide",
+    "MinimalSliderWithSteppersMixin",
     "MenuUtil",
     "PanelTemplates_SetNumTabs",
     "PanelTemplates_SetTab",
@@ -71,8 +70,10 @@ read_globals = {
     "GameFontNormal",
     "STANDARD_TEXT_FONT",
     "Settings",
+    "SettingsPanel",
 
     -- Namespaced API
+    "C_AddOns",
     "C_DamageMeter",
     "C_Item",
     "C_SkillInfo",
@@ -83,7 +84,10 @@ read_globals = {
     "C_Timer",
 
     -- Loose API functions
+    "GetBindingKey",
+    "GetBindingText",
     "GetCVar",
+    "GetCVarBool",
     "SetCVar",
     "GetInventoryItemID",
     "GetInventoryItemLink",

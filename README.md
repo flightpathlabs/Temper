@@ -20,8 +20,10 @@ game data and nowhere else.
 **Tidy damage numbers.** Your hits appear in a column by each enemy's
 nameplate and follow it around, in place of numbers flying all over the
 screen. By default they're a rising stream: small numbers climbing
-straight up at a steady pace, like a scrolling log. Critical hits are a
-little larger and a different colour.
+straight up at a steady pace, like a scrolling log. Weapon swings are
+white, abilities yellow and magic the colour of its school; critical hits
+are larger and land with a pop. All of it can be changed, and an example
+plays beside the options while you do.
 
 **A panel for the fight you're in.** A small panel shows your DPS, damage,
 hits, crits and misses as the fight goes, and the last fight's exact
@@ -68,15 +70,18 @@ There is nothing to set up.
   Options > Keybindings > Temper) marks a run of fights as a session,
   which then selects with one click. Fights are kept either way.
 - **To compare,** select some fights, press **Compare with...**, click the
-  fights to set them against, and press **Done**. The strip above the page
-  says which step you're at. Whichever set is older is treated as the
+  fights to set them against, and press **Done**. The strip under the title
+  bar says which step you're at. Whichever set is older is treated as the
   "before", so green always means you improved.
 - **Experiments tab.** Press New experiment, say what you're trying, and
   follow the three steps. The panel tells you when it's your move.
 - **Progress tab.** Click a best to open the fight it came from.
 - Options are in the game's own Options window, under AddOns > Temper.
-  The panel, the numbers and a small on-screen Start session button can
-  each be switched on or off there.
+  The cog on the panel or in the window's title bar takes you there. The
+  panel, the numbers and a small on-screen Start session button can each
+  be switched on or off, and while the page is open an example enemy
+  shows what your numbers will look like. Drag it, or the Options window
+  by its title bar, wherever you can see it best.
 
 ## What it can and can't know
 
@@ -104,7 +109,9 @@ game still offers. That shapes what it shows.
 | Whose hit it was, in a group | The game doesn't say, which is why Temper keeps to solo play |
 
 Numbers are drawn above your target and any other enemy that is fighting
-you. A stranger's fight nearby is left alone.
+you. A stranger's fight nearby is left alone. They follow each enemy's
+nameplate, so enemy nameplates need to be on; with them off, the numbers
+appear in the middle of the screen.
 
 ## Blizzard's damage numbers
 

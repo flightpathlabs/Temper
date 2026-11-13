@@ -42,4 +42,5 @@ UI\FightsTab.lua
 UI\ExperimentsTab.lua
 UI\ProgressTab.lua
 UI\MainWindow.lua
+UI\Example.lua
 UI\Settings.lua

@@ -17,7 +17,7 @@ ns.ProgressTab = ProgressTab
 
 local Kit = ns.Kit
 
--- The page is the window's inset, about 885 wide and 594 high. Down the
+-- The page is the window's inset, about 890 wide and 634 high. Down the
 -- page, with all four bests showing, it's spent like this:
 --
 --   margin 10, the bests' header 24, gap 8        42

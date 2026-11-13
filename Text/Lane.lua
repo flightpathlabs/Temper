@@ -13,8 +13,14 @@ local _, ns = ...
 -- the column reads like a short scrolling log of recent hits. Two that
 -- arrive together are kept a line apart.
 --
--- When the target has no nameplate, numbers appear at a fixed spot above
--- the middle of the screen instead.
+-- An enemy with no nameplate gives us nothing to pin to, and its numbers
+-- appear at a fixed spot above the middle of the screen instead.
+--
+-- The client is touchy about text that's pinned to a nameplate, so each
+-- thing done to a number (pinning it, fading it, resizing it, giving it
+-- an icon) is tried on its own. Only a refusal to pin sends a number to
+-- the fixed spot. Anything else the client objects to is dropped for the
+-- session and the numbers carry on without it.
 
 local Lane = {}
 ns.Lane = Lane
@@ -26,12 +32,13 @@ local MAX_NUMBERS = 24
 local STAY_SECONDS = { 1.4, 2.8, 4.5 }
 local CRIT_LINGER = 1.25
 
--- The size of a number at normal size, in the game's ordinary text font
--- with an outline so it reads over any background, and the room to leave
--- between one number and the next.
-local FONT_SIZE = 13
-local LINE_HEIGHT = FONT_SIZE + 3
+-- Numbers are drawn in the game's ordinary text font, with an outline so
+-- they read over any background, at the size chosen in the options. A
+-- line is that tall plus a little air.
 local FONT = GameFontNormal:GetFont() or STANDARD_TEXT_FONT
+local USUAL_FONT_SIZE = 13
+local SMALLEST_FONT_SIZE = 6
+local LINE_SPACE = 3
 
 -- An ability's icon, when shown, is this many times the line height.
 local ICON_SIZE = 0.8
@@ -40,16 +47,17 @@ local ICON_SIZE = 0.8
 -- distance covered each second. Higher is snappier.
 local STEP_SPEED = 12
 
--- Setting values to sizes and distances.
-local SIZES = { 0.85, 1, 1.25 }
+-- The "distance" setting, in pixels from the nameplate.
 local GAPS = { 4, 22, 46 }
 
--- For each side of the nameplate: the edge of the text that's pinned, the
--- edge of the nameplate it's pinned to, and which way "further" is.
+-- For each side of the nameplate: the corner of the text that's pinned,
+-- the edge of the nameplate it's pinned to, and which way "further" is.
+-- Text is always pinned by its bottom edge, because the column is stacked
+-- by counting up from the bottom of each line.
 local SIDES = {
     { point = "BOTTOM", plate = "TOP", x = 0, y = 1 },
-    { point = "RIGHT", plate = "LEFT", x = -1, y = 0 },
-    { point = "LEFT", plate = "RIGHT", x = 1, y = 0 },
+    { point = "BOTTOMRIGHT", plate = "LEFT", x = -1, y = 0 },
+    { point = "BOTTOMLEFT", plate = "RIGHT", x = 1, y = 0 },
 }
 
 -- Where numbers go when there's no nameplate to pin them to.
@@ -73,117 +81,165 @@ local spare = {}
 -- Arcing numbers take turns going left and right.
 local nextLean = 1
 
--- How long the sample numbers from the options page stay in front of the
--- game's windows, and how many times they've been asked for.
-local PREVIEW_SECONDS = 4
-local previews = 0
-
 -- Set once the client has refused to pin text to a nameplate too often,
 -- after which the fixed spot is used for the rest of the session.
 Lane.refusal = nil
-
--- Set if the client refuses to draw an icon beside a pinned number, after
--- which icons are left off for the rest of the session.
-Lane.iconRefusal = nil
 local refusals = 0
 
+-- Anything else the client has objected to, in its own words, by what
+-- was being tried: "fade", "size" or "icon". Each is tried once and then
+-- left alone. `/temper check` reads these out.
+Lane.complaints = {}
+
+-- For `/temper check`: how many numbers this session followed a
+-- nameplate, how many had none to follow, and how many found one only
+-- for the game to refuse the pin, with what it said the last time.
+Lane.pinned = 0
+Lane.loose = 0
+Lane.knockedOff = 0
+Lane.lastRefusal = nil
+
+--- Tries something the client might object to. Once it has objected,
+--- that thing isn't tried again this session.
+---@param what string  a key for Lane.complaints
+---@return boolean  true if it went through
+local function Attempt(what, method, ...)
+    if Lane.complaints[what] then
+        return false
+    end
+
+    local ok, problem = pcall(method, ...)
+    if not ok then
+        Lane.complaints[what] = tostring(problem)
+    end
+    return ok
+end
+
 local function UseFixedSpot(number)
-    number.point, number.anchor, number.anchorPoint = "CENTER", UIParent, "CENTER"
+    number.point, number.anchor, number.anchorPoint = "BOTTOM", UIParent, "CENTER"
     number.x, number.y = 0, SPARE_HEIGHT
 end
 
-local function Put(number, x, y, alpha, scale)
-    local text = number.text
-    text:SetPoint(number.point, number.anchor, number.anchorPoint, x, y)
-    text:SetAlpha(alpha)
-
-    -- The size proper is in the font (see Lane.Show). This is only for
-    -- the brief swell of a critical hit and for the motion that shrinks.
-    text:SetTextScale(scale)
+local function Pin(number, x, y)
+    number.text:SetPoint(number.point, number.anchor, number.anchorPoint, x, y)
 end
 
-local function ShowIcon(number, texture)
-    number.icon:SetTexture(texture)
-    number.icon:Show()
+--- Moves a number to its place for this frame. If the nameplate won't
+--- have it, the number carries on at the fixed spot.
+local function Move(number, x, y)
+    local pinned, problem = pcall(Pin, number, x, y)
+    if number.anchor == UIParent then
+        return
+    end
+
+    if pinned then
+        refusals = 0
+        return
+    end
+
+    Lane.pinned = Lane.pinned - 1
+    Lane.knockedOff = Lane.knockedOff + 1
+    Lane.lastRefusal = tostring(problem)
+
+    -- If this keeps happening, stop trying nameplates until next session.
+    refusals = refusals + 1
+    if refusals >= REFUSALS_ALLOWED then
+        Lane.refusal = Lane.lastRefusal
+    end
+
+    local dx, dy = x - number.x, y - number.y
+    number.text:ClearAllPoints()
+    UseFixedSpot(number)
+    pcall(Pin, number, number.x + dx, number.y + dy)
 end
 
-local function PutIcon(number, alpha, scale)
-    local size = LINE_HEIGHT * ICON_SIZE * scale * number.scale
-    number.icon:SetSize(size, size)
-    number.icon:SetAlpha(alpha)
+local function DropIcon(number)
+    number.hasIcon = false
+    pcall(number.icon.Hide, number.icon)
 end
 
---- Moves a number to where its motion says it should be by now.
+local function SizeIcon(number, fontSize)
+    local side = (fontSize + LINE_SPACE) * ICON_SIZE
+    if not Attempt("icon", number.icon.SetSize, number.icon, side, side) then
+        DropIcon(number)
+    end
+end
+
+--- Draws a number at `scale` times its own size. The font is only set
+--- again when that comes to a different whole size, which outside a
+--- critical hit's landing and the motion that shrinks is never.
+local function Resize(number, scale)
+    local size = math.max(SMALLEST_FONT_SIZE, math.floor(number.size * scale + 0.5))
+    if size == number.drawnSize then
+        return
+    end
+    number.drawnSize = size
+
+    Attempt("size", number.text.SetFont, number.text, FONT, size, "OUTLINE")
+    if number.hasIcon then
+        SizeIcon(number, size)
+    end
+end
+
+local function Fade(number, alpha)
+    Attempt("fade", number.text.SetAlpha, number.text, alpha)
+    if number.hasIcon and not Attempt("icon", number.icon.SetAlpha, number.icon, alpha) then
+        DropIcon(number)
+    end
+end
+
+--- Puts a number where its motion says it should be by now.
 local function Place(number, now, elapsed)
-    local progress = (now - number.start) / number.life
+    local age = now - number.start
     local motion = ns.Motions[ns.settings.motion] or ns.Motions[1]
-    local dx, dy, alpha, scale = motion.move(progress, number.lean, number.life)
+    local dx, dy, alpha, scale = motion.move(age / number.life, number.lean, number.life)
 
     -- Step up toward the height the newer numbers have asked for, quickly
     -- but not in one jump.
     local remaining = number.liftWanted - number.lift
     number.lift = number.lift + remaining * math.min(1, elapsed * STEP_SPEED)
-
     number.rise = dy
+
     if number.crit then
-        scale = scale * ns.Motions.Pop(now - number.start)
+        local landings = ns.Motions.Landings
+        local landing = landings[ns.settings.critLanding] or landings[1]
+        local swell, knock = landing.land(age)
+        scale = scale * swell
+        dx = dx + knock
     end
 
-    local x, y = number.x + dx, number.y + dy + number.lift
-    local ok, problem = pcall(Put, number, x, y, alpha, scale)
-    if ok and number.anchor ~= UIParent then
-        refusals = 0
-    end
-
-    -- The icon is handled apart from the number, so that if the client
-    -- objects to it the numbers themselves carry on as before.
-    if number.hasIcon then
-        local drawn, objection = pcall(PutIcon, number, alpha, scale)
-        if not drawn then
-            Lane.iconRefusal = tostring(objection)
-            number.hasIcon = false
-            number.icon:Hide()
-        end
-    end
-
-    if ok or number.anchor == UIParent then
-        return
-    end
-
-    -- The nameplate wouldn't have it. Carry on at the fixed spot, and if
-    -- this keeps happening stop trying nameplates until the next session.
-    refusals = refusals + 1
-    if refusals >= REFUSALS_ALLOWED then
-        Lane.refusal = tostring(problem)
-    end
-    number.text:ClearAllPoints()
-    UseFixedSpot(number)
-    pcall(Put, number, number.x + dx, number.y + dy + number.lift, alpha, scale)
+    Move(number, number.x + dx, number.y + dy + number.lift)
+    Fade(number, alpha)
+    Resize(number, scale)
 end
 
 local function Retire(index)
     local number = table.remove(showing, index)
     number.text:Hide()
     number.text:ClearAllPoints()
+
+    -- Emptied, so it isn't holding an amount we may not read while it
+    -- waits to be used again.
+    pcall(number.text.ClearText, number.text)
     number.icon:Hide()
     table.insert(spare, number)
 end
 
---- Asks the numbers already showing to step up, so the new one has room.
--- Only numbers pinned to the same thing share a column; ones still fading
--- over the last target are left alone.
-local function MakeRoom(anchor, newScale)
-    local floor = LINE_HEIGHT * newScale
+--- Asks the numbers already showing to step up, so a new one of the
+--- given height has room. Only numbers pinned to the same thing share a
+--- column; ones still fading over another enemy are left alone.
+local function MakeRoom(anchor, height)
+    local floor = height
 
     for index = #showing, 1, -1 do
         local number = showing[index]
         if number.anchor == anchor then
-            local height = number.rise + number.liftWanted
-            if height < floor then
-                number.liftWanted = number.liftWanted + (floor - height)
-                height = floor
+            local bottom = number.rise + number.liftWanted
+            if bottom < floor then
+                number.liftWanted = number.liftWanted + (floor - bottom)
+                bottom = floor
             end
-            floor = height + LINE_HEIGHT * number.scale
+            floor = bottom + number.height
         end
     end
 end
@@ -219,6 +275,40 @@ local function NewNumber()
     return number
 end
 
+--- Says, once ever, why the numbers aren't following the enemy: with
+--- enemy nameplates switched off there's nothing to pin them to.
+local function MentionNameplates()
+    if ns.db.toldAboutNameplates or GetCVarBool("nameplateShowEnemies") then
+        return
+    end
+    ns.db.toldAboutNameplates = true
+
+    local key = GetBindingKey("NAMEPLATES")
+    ns.Print(
+        "Your damage numbers follow each enemy's nameplate, and enemy nameplates are "
+            .. "switched off, so they're showing mid-screen instead. Turn nameplates on%s "
+            .. "and each enemy gets its own.",
+        key and (" (%s)"):format(GetBindingText(key)) or ""
+    )
+end
+
+--- The nameplate to pin a number to, if there is one.
+local function PlateFor(unit)
+    if Lane.refusal then
+        return nil
+    end
+
+    local found, plate = pcall(C_NamePlate.GetNamePlateForUnit, unit or "target")
+    if found and plate then
+        Lane.pinned = Lane.pinned + 1
+        return plate
+    end
+
+    Lane.loose = Lane.loose + 1
+    MentionNameplates()
+    return nil
+end
+
 --- Adds a number, or a word such as "Dodge", to the lane.
 ---@param value any  what to show. May be an amount the client won't let us
 ---                  read, which is why it goes straight to the text and is
@@ -227,7 +317,9 @@ end
 ---                   show beside the number, if any
 ---@param unit string|nil  whose nameplate to pin it to; the target's if
 ---                        not given
-function Lane.Show(value, look, unit)
+---@param stand table|nil  a frame of our own to pin it to instead of a
+---                        nameplate, for the example in the options
+function Lane.Show(value, look, unit, stand)
     if #showing >= MAX_NUMBERS then
         Retire(1)
     end
@@ -237,19 +329,11 @@ function Lane.Show(value, look, unit)
     local side = SIDES[ns.settings.laneSide] or SIDES[1]
     local gap = GAPS[ns.settings.laneDistance] or GAPS[1]
 
-    local found, plate
-    if not Lane.refusal then
-        found, plate = pcall(C_NamePlate.GetNamePlateForUnit, unit or "target")
-    end
-    local wantsIcon = look.icon ~= nil and not Lane.iconRefusal
-    if found and plate then
+    local plate = stand or PlateFor(unit)
+    local wantsIcon = look.icon ~= nil and not Lane.complaints.icon
+    if plate then
         number.point, number.anchor, number.anchorPoint = side.point, plate, side.plate
         number.x, number.y = side.x * gap, side.y * gap
-
-        -- To the right of the nameplate, the icon would sit on top of it.
-        if wantsIcon and side.x > 0 then
-            number.x = number.x + LINE_HEIGHT
-        end
     else
         UseFixedSpot(number)
     end
@@ -267,18 +351,32 @@ function Lane.Show(value, look, unit)
     if look.crit then
         number.life = number.life * CRIT_LINGER
     end
-    number.scale = look.scale * (SIZES[ns.settings.textSize] or 1)
     number.crit = look.crit
 
-    -- A font has to be set before any text is, and this is where the
-    -- number gets its size.
-    number.text:SetFont(FONT, math.floor(FONT_SIZE * number.scale + 0.5), "OUTLINE")
+    -- Its own size, before any swelling or shrinking, and the height of
+    -- the line it takes up in the column.
+    number.size = (tonumber(ns.settings.fontSize) or USUAL_FONT_SIZE) * look.scale
+    number.drawnSize = math.max(SMALLEST_FONT_SIZE, math.floor(number.size + 0.5))
+    number.height = number.drawnSize + LINE_SPACE
+
+    -- To the right of the nameplate, the icon would sit on top of it.
+    if plate and wantsIcon and side.x > 0 then
+        number.x = number.x + number.height
+    end
+
     number.rise = 0
     number.lift = 0
     number.liftWanted = 0
+    MakeRoom(number.anchor, number.height)
 
-    MakeRoom(number.anchor, number.scale)
+    -- A spent number was last seen faded to nothing. Made solid here,
+    -- while it's pinned to nothing, so it shows even if the client later
+    -- objects to fading.
+    number.text:SetAlpha(1)
+    number.icon:SetAlpha(1)
 
+    -- A font has to be set before any text is.
+    number.text:SetFont(FONT, number.drawnSize, "OUTLINE")
     number.text:SetText(value)
     number.text:SetTextColor(look.r, look.g, look.b)
     number.text:Show()
@@ -287,33 +385,32 @@ function Lane.Show(value, look, unit)
     -- happens the number is taken down again when its time is up.
     table.insert(showing, number)
 
-    number.hasIcon = wantsIcon and pcall(ShowIcon, number, look.icon)
-    if not number.hasIcon then
-        pcall(number.icon.Hide, number.icon)
+    number.hasIcon = wantsIcon
+        and Attempt("icon", number.icon.SetTexture, number.icon, look.icon)
+        and Attempt("icon", number.icon.Show, number.icon)
+    if number.hasIcon then
+        SizeIcon(number, number.drawnSize)
+    else
+        DropIcon(number)
     end
 
     Place(number, number.start, 0)
     holder:Show()
 end
 
---- A handful of sample numbers, so a change in the options can be seen at
---- once without finding something to hit.
-function Lane.Preview()
-    -- The options window would otherwise be in the way.
-    previews = previews + 1
-    local thisPreview = previews
-    holder:SetFrameStrata("TOOLTIP")
-    C_Timer.After(PREVIEW_SECONDS + (STAY_SECONDS[ns.settings.stay] or 0), function()
-        if thisPreview == previews then
-            holder:SetFrameStrata("LOW")
-        end
-    end)
+--- Draws the numbers in front of the game's windows, or back under them.
+--- In front is for the example in the options, which would otherwise be
+--- hidden behind the Options window.
+function Lane.BringForward(forward)
+    holder:SetFrameStrata(forward and "DIALOG" or "LOW")
+end
 
-    for index = 0, 4 do
-        C_Timer.After(index * 0.45, function()
-            if thisPreview == previews then
-                ns.Feed.ShowSample(index == 3)
-            end
-        end)
+--- Takes down at once every number pinned to a frame of our own.
+---@param stand table  the frame, as given to Lane.Show
+function Lane.Clear(stand)
+    for index = #showing, 1, -1 do
+        if showing[index].anchor == stand then
+            Retire(index)
+        end
     end
 end

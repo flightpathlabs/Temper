@@ -167,6 +167,7 @@ ns.OnEvent("UNIT_COMBAT", function(unit, action, flag, amount, school)
     -- pet's. It's still drawn, but it isn't the player's to count: a pet
     -- that crits a lot shouldn't flatter its owner's crit rate.
     local fromPet = not spell and hit.school == 1
+    hit.pet = fromPet
 
     if fromPet then
         Remember({ pet = true })

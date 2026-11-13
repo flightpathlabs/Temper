@@ -4,10 +4,10 @@ local _, ns = ...
 -- fight in progress or, between fights, the last one.
 --
 -- Click it for the full window, right-click for a short menu, drag it
--- anywhere. It's on to begin with and can be turned off. Under the main
--- figures it can carry two more things, each of which can be switched off
--- from its menu or the options: the last few fights, and a few figures for
--- the session so far.
+-- anywhere. The cog in its corner opens the options. It's on to begin
+-- with and can be turned off. Under the main figures it can carry two
+-- more things, each of which can be switched off from its menu or the
+-- options: the last few fights, and a few figures for the session so far.
 --
 -- During a fight the game lets an addon show its running damage but not
 -- read it. So the two live figures are passed straight from the game's
@@ -519,8 +519,14 @@ local function Create()
     widget.mark:SetSize(14, 14)
     widget.mark:SetPoint("TOPLEFT", 9, -8)
 
+    -- A small cog in the corner for the options, kept faint so the panel
+    -- stays quiet.
+    local options = Kit.OptionsButton(widget, 12)
+    options:SetPoint("TOPRIGHT", -8, -8)
+    options:SetAlpha(0.7)
+
     widget.time = Label("GameFontHighlightSmall", "RIGHT")
-    widget.time:SetPoint("TOPRIGHT", -10, -9)
+    widget.time:SetPoint("RIGHT", options, "LEFT", -5, 0)
     widget.time:SetTextColor(unpack(MUTED))
 
     widget.title = Label("GameFontNormalSmall")

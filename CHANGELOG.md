@@ -13,11 +13,21 @@ First version.
   each with a column of its own.
 - Choose how they move (rising stream, stay and step up, arc away, shrink
   away), how long they stay, which side of the nameplate they sit on, how
-  far off, and how large.
-- Critical hits are larger, land with a small pop, and can be gold, red or
-  left in their own colour. Spell damage can be tinted by school. Misses,
-  dodges and parries show as small grey words.
+  far off, and their size on a slider.
+- Numbers are coloured by kind of damage: weapon swings white, abilities
+  yellow, magic in the colour of its school, a pet's blows green. Or
+  colour magic only, or nothing.
+- Critical hits have settings of their own: how much larger they are, on
+  a slider; gold, red or their own colour; and whether they land with a
+  small pop, a big pop, a shake or no fuss.
+- Misses, dodges and parries show as small grey words.
 - Optionally, a best-guess icon of the ability beside each number.
+- While Temper's options are open, an example enemy stands beside the
+  window with made-up hits playing on it, so each change shows as it's
+  made. Drag it wherever suits. The Options window itself can be dragged
+  aside by its title bar. `/temper example` shows the example at any time.
+- The numbers need enemy nameplates to follow. With nameplates off they
+  appear mid-screen, and Temper says so once.
 
 **The panel**
 
@@ -28,6 +38,8 @@ First version.
 - Under those it can list your last few fights and a few figures for the
   session: fights, average DPS, crit rate and biggest hit. Each of these,
   and the Temper icon, can be switched off from the panel's menu.
+- A cog on the panel, and one in the window's title bar, opens the
+  options.
 
 **Fights**
 
@@ -36,9 +48,12 @@ First version.
 - Click a fight to read it. Shift-click and Ctrl-click select several, and
   the page covers them all. Start session marks a run of fights so it
   selects with one click.
-- The page shows DPS, damage per fight and how often you crit, then what
-  to work on, then a bar for each ability with its icon, rank and share.
-  Hover a bar for its damage per use and per point of mana or energy.
+- The page opens with one compact row of figures: DPS, damage, time, crit
+  rate, hits, attacks avoided and the biggest hit. Point at any of them
+  for the detail behind it. Under the row, in boxed sections, come a bar
+  for each ability with its icon, rank and share, the timeline of what
+  you used, and what to work on. Hover a bar for its damage per use and
+  per point of mana or energy.
 - Misses, dodges, parries, blocks and resists are counted separately.
 - A strip shows what you used, in order and to scale, with critical hits
   and failures marked.

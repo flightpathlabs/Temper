@@ -11,17 +11,33 @@ ns.Feed = Feed
 
 local BLIZZARD_DAMAGE_TEXT = "floatingCombatTextCombatDamage_v2"
 
-local CRIT_SCALE = 1.25
 local GLANCING_SCALE = 0.85
 local WORD_SCALE = 0.85
+
+-- How much larger than an ordinary hit a critical one is drawn when the
+-- setting for it is missing, as a percentage.
+local USUAL_CRIT_SIZE = 140
 
 local WHITE = { 1, 1, 1 }
 local GREY = { 0.72, 0.72, 0.72 }
 
--- Spell damage by school, in colours close to the ones the game uses for
--- them elsewhere. Physical damage isn't listed and stays white.
+-- The colorBy setting.
+local BY_KIND, MAGIC_ONLY = 1, 2
+
+-- By kind of damage, the way the game itself once told them apart: a
+-- swing of the weapon in white, an ability in yellow. A pet's blows are
+-- the green its bars have in the analysis.
+local KIND_COLORS = {
+    auto = WHITE,
+    ability = { 1, 0.88, 0.2 },
+    pet = { 0.62, 0.9, 0.62 },
+}
+
+-- Magic by school, in colours close to the ones the game uses for them
+-- elsewhere. Damage of two schools at once gets the general one.
+local MAGIC = { 0.6, 0.78, 1 }
 local SCHOOL_COLORS = {
-    [2] = { 1, 0.9, 0.5 }, -- holy
+    [2] = { 1, 0.96, 0.72 }, -- holy
     [4] = { 1, 0.5, 0.2 }, -- fire
     [8] = { 0.55, 1, 0.45 }, -- nature
     [16] = { 0.5, 0.85, 1 }, -- frost
@@ -29,8 +45,8 @@ local SCHOOL_COLORS = {
     [64] = { 1, 0.6, 1 }, -- arcane
 }
 
--- Critical hits, by the critStyle setting. The third style keeps the
--- hit's own colour and relies on size alone.
+-- Critical hits, by the critStyle setting. The third style isn't listed:
+-- it keeps the hit's own colour and relies on size and the landing.
 local CRIT_COLORS = {
     { 1, 0.82, 0 },
     { 1, 0.27, 0.2 },
@@ -42,16 +58,47 @@ local function Showing()
     return ns.settings.lane and not IsInGroup()
 end
 
-local function LookFor(hit)
-    local color = WHITE
-    if ns.settings.schoolColors and SCHOOL_COLORS[hit.school] then
-        color = SCHOOL_COLORS[hit.school]
+--- What kind of damage a hit was: "magic", "ability", "auto" or "pet".
+local function KindOf(hit)
+    if hit.kind then
+        return hit.kind
     end
+    if hit.pet then
+        return "pet"
+    end
+    if hit.school and hit.school ~= 1 then
+        return "magic"
+    end
+
+    -- Physical. A weapon's swing unless it was traced to something the
+    -- player pressed, and shots and wands count as swings.
+    local spell = hit.spell
+    if spell and spell ~= ns.Guess.MELEE_SWING and ns.Sources.Kind(spell) ~= "auto" then
+        return "ability"
+    end
+    return "auto"
+end
+
+local function ColorFor(hit)
+    local scheme = ns.settings.colorBy
+    if scheme ~= BY_KIND and scheme ~= MAGIC_ONLY then
+        return WHITE
+    end
+
+    local kind = KindOf(hit)
+    if kind == "magic" then
+        return SCHOOL_COLORS[hit.school] or MAGIC
+    end
+    return scheme == BY_KIND and KIND_COLORS[kind] or WHITE
+end
+
+local function LookFor(hit)
+    local color = ColorFor(hit)
 
     local scale = 1
     if hit.crit then
         color = CRIT_COLORS[ns.settings.critStyle] or color
-        scale = CRIT_SCALE
+        scale = (tonumber(ns.settings.critSize) or USUAL_CRIT_SIZE) / 100
     elseif hit.glancing then
         scale = GLANCING_SCALE
     end
@@ -69,41 +116,50 @@ local function IconFor(hit)
     return hit.spell and C_Spell.GetSpellTexture(hit.spell)
 end
 
-ns.Subscribe("TARGET_HIT", function(hit)
-    if not Showing() then
-        return
-    end
-
+--- Puts one hit in the lane.
+---@param stand table|nil  a frame to pin it to instead of a nameplate
+local function Draw(hit, stand)
     if hit.avoided then
         if ns.settings.showMisses then
             -- The game's own words for these, in the player's language.
             local word = CombatFeedbackText and CombatFeedbackText[hit.avoided] or hit.avoided
             local look = { r = GREY[1], g = GREY[2], b = GREY[3], scale = WORD_SCALE }
-            ns.Lane.Show(word, look, hit.unit)
+            ns.Lane.Show(word, look, hit.unit, stand)
         end
         return
     end
 
     local look = LookFor(hit)
     look.icon = IconFor(hit)
-    ns.Lane.Show(hit.amount, look, hit.unit)
+    ns.Lane.Show(hit.amount, look, hit.unit, stand)
+end
+
+ns.Subscribe("TARGET_HIT", function(hit)
+    if Showing() then
+        Draw(hit)
+    end
 end)
 
--- Made-up hits for the options preview: plausible amounts, and the
--- auto-attack icon when icons are switched on.
-local SAMPLES = { 41, 38, 12, 97, 44 }
+-- Made-up hits for the example in the options: a plausible run of a
+-- fight with one of everything in it. The spells are only there for
+-- their icons, and one the client doesn't know simply has none.
+local SAMPLES = {
+    { amount = 41, kind = "auto", school = 1, spell = 6603 },
+    { amount = 88, kind = "ability", school = 1, spell = 78 },
+    { amount = 38, kind = "auto", school = 1, spell = 6603 },
+    { amount = 124, kind = "magic", school = 4, spell = 133 },
+    { amount = 97, kind = "auto", school = 1, spell = 6603, crit = true },
+    { avoided = "DODGE" },
+    { amount = 44, kind = "auto", school = 1, spell = 6603 },
+    { amount = 213, kind = "ability", school = 1, spell = 78, crit = true },
+}
 local nextSample = 0
 
---- Shows one made-up hit.
----@param crit boolean  make this one a critical hit
-function Feed.ShowSample(crit)
+--- Shows the next made-up hit.
+---@param stand table  the frame to pin it to
+function Feed.ShowSample(stand)
     nextSample = nextSample % #SAMPLES + 1
-
-    local look = LookFor({ crit = crit, school = 1 })
-    if ns.settings.icons then
-        look.icon = C_Spell.GetSpellTexture(6603)
-    end
-    ns.Lane.Show(crit and 97 or SAMPLES[nextSample], look)
+    Draw(SAMPLES[nextSample], stand)
 end
 
 -- Blizzard's numbers ---------------------------------------------------------
