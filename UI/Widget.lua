@@ -4,7 +4,8 @@ local _, ns = ...
 -- fight in progress or, between fights, the last one.
 --
 -- Click it for the full window, right-click for a short menu, drag it
--- anywhere. The cog in its corner opens the options. It's on to begin
+-- anywhere. In its top corner, a stopwatch starts and ends a session and
+-- a cog opens the options. It's on to begin
 -- with and can be turned off. Under the main figures it can carry two
 -- more things, each of which can be switched off from its menu or the
 -- options: the last few fights, and a few figures for the session so far.
@@ -43,6 +44,13 @@ local FEWEST_TO_GO_BY = 3
 
 local MUTED = { 0.65, 0.65, 0.65 }
 local ICON = "Interface\\AddOns\\Temper\\Media\\icon"
+
+-- The stopwatch the game's own clock offers for timing things, which is
+-- what a session is. Drawn faint and grey while no session is running,
+-- and in full colour while one is.
+local STOPWATCH = "Interface\\Icons\\INV_Misc_PocketWatch_01"
+local STOPWATCH_SIZE = 13
+local STOPWATCH_IDLE = 0.55
 
 -- What the bottom line says while an experiment is waiting on the player.
 local YOUR_TURN = "|cffffd100Make your change, then click here|r"
@@ -271,6 +279,10 @@ local function RefreshMain()
     else
         widget.recording:SetText(RecordingText())
     end
+
+    local running = ns.Recorder.Open() ~= nil
+    widget.stopwatch.face:SetDesaturated(not running)
+    widget.stopwatch:SetAlpha(running and 1 or STOPWATCH_IDLE)
 end
 
 -- Under the main figures -------------------------------------------------------
@@ -482,6 +494,48 @@ local function Label(font, justify)
     return label
 end
 
+--- What the stopwatch says when the mouse is over it.
+local function StopwatchTooltip()
+    local recording = ns.Recorder.Open()
+    if not recording then
+        return {
+            "Click to start a session. Your fights from now on are kept together, "
+                .. "so they can be read and compared as one.",
+        }
+    end
+
+    local fights = #ns.Recorder.FightsOf(recording)
+    return {
+        ("Session %d is running: %s so far."):format(recording.number, ns.Count(fights, "fight")),
+        "Click to end it and read it.",
+    }
+end
+
+--- The stopwatch in the corner, which starts and ends a session.
+local function CreateStopwatch()
+    local button = CreateFrame("Button", nil, widget)
+    button:SetSize(STOPWATCH_SIZE, STOPWATCH_SIZE)
+
+    -- Trimmed a touch, as the game does, to lose the icon's own border.
+    button.face = button:CreateTexture(nil, "ARTWORK")
+    button.face:SetTexture(STOPWATCH)
+    button.face:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    button.face:SetAllPoints()
+
+    local glow = button:CreateTexture(nil, "HIGHLIGHT")
+    glow:SetTexture(STOPWATCH)
+    glow:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    glow:SetBlendMode("ADD")
+    glow:SetAlpha(0.4)
+    glow:SetAllPoints()
+
+    button:SetScript("OnClick", function()
+        ns.ToggleRecording()
+    end)
+    Kit.Tooltip(button, "Session", StopwatchTooltip)
+    return button
+end
+
 local function Create()
     -- The game's own tooltip border, so it looks like it belongs.
     widget = CreateFrame("Button", "TemperWidget", UIParent, "TooltipBackdropTemplate")
@@ -532,8 +586,11 @@ local function Create()
     options:SetPoint("TOPRIGHT", -8, -8)
     options:SetAlpha(0.7)
 
+    widget.stopwatch = CreateStopwatch()
+    widget.stopwatch:SetPoint("RIGHT", options, "LEFT", -4, 0)
+
     widget.time = Label("GameFontHighlightSmall", "RIGHT")
-    widget.time:SetPoint("RIGHT", options, "LEFT", -5, 0)
+    widget.time:SetPoint("RIGHT", widget.stopwatch, "LEFT", -5, 0)
     widget.time:SetTextColor(unpack(MUTED))
 
     widget.title = Label("GameFontNormalSmall")

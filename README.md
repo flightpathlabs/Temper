@@ -74,8 +74,9 @@ There is nothing to set up.
   fights and Ctrl-click adds one; the page covers whatever is selected.
   Right-click for more. Type a note on a session to remember what you
   changed.
-- **Start session** (bottom left, or `/temper session`, or a key under
-  Options > Keybindings > Temper) marks a run of fights as a session,
+- **Start session** (the stopwatch on the panel, the button at the bottom
+  left of the window, `/temper session`, or a key under Options >
+  Keybindings > Temper) marks a run of fights as a session,
   which then selects with one click. Fights are kept either way.
 - **To compare,** select some fights, press **Compare with...**, click the
   fights to set them against, and press **Done**. The strip under the title

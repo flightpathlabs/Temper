@@ -42,7 +42,8 @@ First version.
   session: fights, average DPS, crit rate and biggest hit. Each of these,
   and the Temper icon, can be switched off from the panel's menu.
 - A cog on the panel, and one in the window's title bar, opens the
-  options.
+  options. Beside the panel's cog, a stopwatch starts and ends a session:
+  grey while none is running, in colour while one is.
 
 **Fights**
 
