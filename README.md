@@ -45,7 +45,7 @@ damage, DPS, length and crit rate. Open one and you get:
 **Healing and defence.** Each fight also keeps how much you healed and
 with what, the damage you took and what it came from, what your shields
 soaked up, and how many casts you interrupted and effects you dispelled.
-The fight page sums it up in a line or two; the Healing tab breaks it
+The fight page sums it up in a line or two; the Healing and defence tab breaks it
 down for the last fight, the session or everything on record; and a
 second small panel, off until you want it, shows your healing live.
 
@@ -110,6 +110,7 @@ game still offers. That shapes what it shows.
 |---|---|
 | How hard each blow landed, and so your biggest hit and biggest crit | An enemy's threat towards you rises by the damage of each blow, and the game lets addons read that. Blows that land close together can't be told apart, so not every blow is sized |
 | Which ability a blow was, and whether each use landed | From what you had just used and the kind of damage |
+| How much of the damage coming at you was stopped: by armour, by blows dodged, parried or missed, by your shield | The character sheet says what your armour takes off a blow and what your shield blocks, and every enemy blow that missed is counted. A blow that didn't land is valued at an average one that did. Resisted spells are counted but not valued: the game doesn't say by how much |
 
 | It can't know | Because |
 |---|---|

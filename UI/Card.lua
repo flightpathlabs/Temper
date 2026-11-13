@@ -6,7 +6,7 @@ local _, ns = ...
 -- at its head, and whatever lies behind a figure waiting in its tooltip.
 -- That leaves the page to the two things worth looking at, where the
 -- damage came from and what was used when. A few lines on healing and
--- defence come next, with the Healing tab a click away for the rest of
+-- defence come next, with their own tab a click away for the rest of
 -- it. The advice follows, and then (when there are earlier fights to
 -- compare with) what else changed. The comparison isn't a separate
 -- screen. It shows up as an arrow and a green or red figure under or
@@ -18,7 +18,7 @@ local _, ns = ...
 -- Some selections make a longer page than the window has room for, so
 -- everything under the row of figures scrolls, and the page is laid out
 -- by hand each time it's filled. The laying out is the kit's, shared with
--- the Healing tab (see "Pages" in Kit.lua).
+-- the Healing and defence tab (see "Pages" in Kit.lua).
 
 local Card = {}
 ns.Card = Card
@@ -64,7 +64,7 @@ local BAR_GAP = 3
 local KEY_GAP = 8
 
 -- The most lines the section on healing and defence runs to.
-local HEALING_LINES = 3
+local HEALING_LINES = 4
 
 -- More changed slots than this and the list is cut short, with a count.
 local MAX_GEAR_LINES = 5
@@ -203,8 +203,31 @@ local function DifferenceLines(comparison)
     return lines
 end
 
+--- "About 38% of the damage coming at you was stopped (armour 18%, dodges
+--- and misses 14%)." Nil when none of it could be worked out.
+---@param healing table  from Healing.Of
+local function StoppedLine(healing)
+    local stopped = healing.stopped
+    if not stopped then
+        return nil
+    end
+
+    local ways = {}
+    for _, way in ipairs(ns.Healing.StoppedWays(stopped)) do
+        table.insert(ways, ("%s %s"):format(way.words, ns.Percent(way.share)))
+    end
+    if #ways == 0 then
+        return nil
+    end
+
+    return ("About %s of the damage coming at you was stopped (%s)."):format(
+        ns.Percent(stopped.share),
+        table.concat(ways, ", ")
+    )
+end
+
 --- What the fights have to say about healing and defence, in a line or
---- three. The Healing tab has the detail.
+--- four. The Healing and defence tab has the detail.
 ---@param healing table  from Healing.Of
 ---@return table  list of lines; empty when there's nothing to say
 local function HealingLines(healing)
@@ -230,6 +253,11 @@ local function HealingLines(healing)
         )
     elseif healing.taken > 0 then
         table.insert(lines, ("You took %s damage."):format(ns.Number(healing.taken)))
+    end
+
+    local stopped = StoppedLine(healing)
+    if stopped then
+        table.insert(lines, stopped)
     end
 
     if healing.absorbed > 0 then
@@ -732,8 +760,8 @@ function Card.Create(parent)
         card.healingLines[index] = Piece(card, Paragraph(healing, "GameFontHighlight"))
     end
 
-    -- The Healing tab, on the same fights as this page.
-    local more = Kit.Link(healing, "More on the Healing tab", function()
+    -- The Healing and defence tab, on the same fights as this page.
+    local more = Kit.Link(healing, "More on the Healing and defence tab", function()
         ns.ShowHealing(card.fights)
     end)
     more:SetPoint("RIGHT", healing.title, "RIGHT", 4, 0)

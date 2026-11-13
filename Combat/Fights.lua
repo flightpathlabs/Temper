@@ -61,7 +61,19 @@ local _, ns = ...
 --             blows that landed, and attacks that didn't, by each way.
 --             Counted as they happened (see Hits.lua). On every fight
 --             saved since healing was first recorded, even when all are
---             nothing, which is what tells those fights from older ones
+--             nothing, which is what tells those fights from older ones.
+--             Since mitigation was first worked out it also holds crits,
+--             crushing and partBlocked (of the blows that landed), and
+--             magic, schools and resisted (spells that hit the player,
+--             by school). magic being there marks those fights
+--   mitigation  { armour, armourCut, blockValue, defence, defenceBase,
+--             resistances }: what the player fought with, read as the
+--             fight ended: their armour and the share of a blow from the
+--             fight's enemy it takes off, what their shield blocks, their
+--             Defence skill with and without bonuses, and their resistance
+--             to each school of magic that hit them. Each only when the
+--             game would say (see Mitigation.lua, which also does the
+--             sums: nothing worked out from these is saved)
 
 local Fights = {}
 ns.Fights = Fights
@@ -290,6 +302,22 @@ local function AddOtherTallies(fight, casts)
     fight.dispels = found.dispels
 end
 
+--- Notes what the player fought with: armour, shield, Defence skill and
+--- resistances. The game may hide any of them, and like the tallies
+--- above, none of it is worth losing the fight over.
+local function AddMitigation(fight)
+    -- Missing straight after an update, until the game is restarted.
+    local mitigation = ns.Mitigation
+    if not mitigation then
+        return
+    end
+
+    local ok, found = pcall(mitigation.Read, fight)
+    if ok and type(found) == "table" then
+        fight.mitigation = found
+    end
+end
+
 local function Save(fight, recording)
     if recording and ns.Recorder.StillKept(recording) then
         fight.recording = recording.number
@@ -437,6 +465,7 @@ ns.OnEvent("PLAYER_REGEN_ENABLED", function()
     }
 
     AddOtherTallies(fight, casts)
+    AddMitigation(fight)
 
     -- Sizing the blows is a nicety built on a figure the game might stop
     -- sharing. Whatever goes wrong with it mustn't cost the fight.

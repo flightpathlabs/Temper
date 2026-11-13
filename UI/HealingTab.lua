@@ -1,7 +1,7 @@
 local _, ns = ...
 
--- The Healing tab: what the player healed, what hurt them, and how the
--- two compare.
+-- The Healing and defence tab: what the player healed, what hurt them, how
+-- the two compare, and about how much harm never reached them at all.
 --
 -- It has no list of its own. Picking fights out one by one is what the
 -- Fights tab is for. The question here is a broader one, "how am I holding
@@ -16,7 +16,9 @@ local _, ns = ...
 -- figures runs across the top. Under it, healing and harm stand side by
 -- side, where the healing came from on the left and what did the hurting
 -- on the right, so one can be weighed against the other at a glance. Then
--- come the counts of blows and heals, and the advice.
+-- comes how much was stopped, by armour, by blows that didn't land and by
+-- the shield, a bar for each; then the counts of blows and heals, and the
+-- advice.
 --
 -- All the reckoning is in Record\Healing.lua. This file only draws it.
 
@@ -58,6 +60,26 @@ local MAX_BARS = 6
 -- be taken for it.
 local HEALING_COLOR = { 0.3, 0.78, 0.5 }
 local HARM_COLOR = { 0.82, 0.36, 0.3 }
+
+-- What was stopped, in the steel of armour and shields.
+local STOPPED_COLOR = { 0.5, 0.62, 0.78 }
+
+-- A picture for each way harm is stopped. These are the game's own icons
+-- for armour, parrying, a shield and a shield spell. They're files, which
+-- the interface code can't vouch for; one that's missing leaves its bar
+-- without a picture and nothing worse.
+local WAY_ICONS = {
+    armour = "Interface\\Icons\\INV_Chest_Plate01",
+    avoided = "Interface\\Icons\\Ability_Parry",
+    blocked = "Interface\\Icons\\INV_Shield_06",
+    absorbed = "Interface\\Icons\\Spell_Holy_PowerWordShield",
+}
+
+-- There are only ever these four ways, so a bar for each is all it needs.
+local STOPPED_BARS = 4
+
+-- The most sentences in the section on blows and heals.
+local DEFENCE_LINES = 4
 
 -- The sets of fights the menu offers, and how many "the last few" is.
 local SCOPES = {
@@ -101,6 +123,27 @@ local THIS_IS_AVOIDABLE = "The game marks this as damage that can be avoided."
 
 local ABSORBED = "Damage your own shields soaked up, so it never reached your health."
 local EVERY_HEAL = "Every heal that landed on you is counted, whatever it came from."
+
+-- What lies behind the estimate of what was stopped, for its tooltips.
+local STOPPED_NOTE = "An estimate: the game counts the damage you took, but not what never "
+    .. "reached you. It's worked out from your armour, the blows that didn't land and your "
+    .. "shield. The section below shows each."
+local ARMOUR_NOTE = "Worked out from what the character sheet says your armour takes off a "
+    .. "physical blow from an enemy of the level you fought, put to the physical damage you took."
+local SWINGS_ONLY = "Spells hit you too, and the game doesn't say which damage was which, so "
+    .. "only enemies' plain attacks are counted as physical. It may have stopped more."
+local AVOIDED_NOTE = "Each blow that didn't land is counted as an average blow that did."
+local BLOCKED_NOTE = "Each blow your shield blocked is counted as the shield's block, or as an "
+    .. "average blow if that's less."
+local ABSORBED_EXACT = "Damage your own shields soaked up. The game counts this one exactly."
+local ESTIMATE = "This is an estimate."
+
+-- Said under the bars, when they don't cover everything.
+local SOME_FIGHTS = "Worked out for %d of these fights. For the others there wasn't enough "
+    .. "to go on, or they're from before Temper worked it out."
+local NO_ARMOUR = "The game didn't say what your armour was, so it's left out."
+local RESISTS = "%s resisted in full or in part. The game doesn't say by how much, so %s "
+    .. "counted here."
 
 -- The game's words for the ways an attack can fail, as we'd say them of
 -- an enemy's.
@@ -273,11 +316,60 @@ local function HealsText(summary)
     return ("%s, and %d %s critical."):format(landed, crits, crits == 1 and "was" or "were")
 end
 
+--- "4 were critical", "1 was crushing", "none were crushing".
+local function Were(count, what)
+    if count == 0 then
+        return "none were " .. what
+    end
+    return ("%d %s %s"):format(count, count == 1 and "was" or "were", what)
+end
+
+--- How many of the blows that landed were critical or crushing, in a
+--- sentence. Nil for fights from before those were counted.
+local function HardBlowsText(summary)
+    local blows, crits, crushing = summary.critBlows, summary.crits, summary.crushing
+    if blows == 0 then
+        return nil
+    elseif crits + crushing == 0 then
+        return "No blow that landed on you was critical or crushing."
+    end
+    return ("Of %s that landed, %s, and %s."):format(
+        ns.Count(blows, "blow"),
+        Were(crits, "critical"),
+        Were(crushing, "crushing")
+    )
+end
+
+--- The player's Defence skill, against what their level allows and what
+--- the enemy called for, in a sentence. Nil when it wasn't noted.
+local function DefenceSkillText(summary)
+    local skill = summary.defenceSkill
+    if not skill then
+        return nil
+    end
+
+    local text
+    if skill.base >= skill.cap then
+        text = ("Your Defence skill was %d, trained as high as your level allows."):format(
+            skill.rank
+        )
+    else
+        text = ("Your Defence skill was %d, of the %d your level allows."):format(
+            skill.rank,
+            skill.cap
+        )
+    end
+    if skill.wanted then
+        text = text .. (" Level %d enemies call for %d."):format(skill.enemyLevel, skill.wanted)
+    end
+    return text
+end
+
 --- The lines of the section on blows and heals. Empty when neither was
 --- counted.
 local function DefenceLines(summary)
     local lines = {}
-    for _, Sentence in ipairs({ AttacksText, HealsText }) do
+    for _, Sentence in ipairs({ AttacksText, HardBlowsText, DefenceSkillText, HealsText }) do
         local line = Sentence(summary)
         if line then
             table.insert(lines, line)
@@ -342,6 +434,22 @@ local function TakenStat(summary)
     return stat
 end
 
+--- About how much of the harm coming at the player was stopped. Only in
+--- the row when it could be worked out.
+local function StoppedStat(stopped)
+    return {
+        label = "Stopped, about",
+        value = ns.Percent(stopped.share),
+        title = "Damage stopped",
+        figures = {
+            { "Coming at you", "about " .. ns.Number(stopped.coming) },
+            { "Stopped", "about " .. ns.Number(stopped.coming * stopped.share) },
+            { "Taken", ns.Number(stopped.taken) },
+        },
+        note = STOPPED_NOTE,
+    }
+end
+
 --- Healing as a share of the damage taken. A dash when none was.
 local function HealedBackStat(summary)
     local stat = {
@@ -387,15 +495,19 @@ local function AddCount(stats, label, count, note)
 end
 
 --- The figures for the row, left to right. Healing always comes first.
---- The last three are only there when they're above nothing.
+--- What was stopped is only there when it could be worked out, and the
+--- last three when they're above nothing.
 local function StatsFor(summary)
     local stats = {
         HealingStat(summary),
         RateStat(summary),
         TakenStat(summary),
-        HealedBackStat(summary),
-        CritStat(summary),
     }
+    if summary.stopped then
+        table.insert(stats, StoppedStat(summary.stopped))
+    end
+    table.insert(stats, HealedBackStat(summary))
+    table.insert(stats, CritStat(summary))
 
     AddCount(stats, "Absorbed", summary.absorbed, ABSORBED)
     AddCount(stats, "Interrupts", summary.interrupts)
@@ -512,6 +624,72 @@ local function FillHarmBar(bar, source, share)
     bar:Set(IconOf(source.id), name, figures, share, HARM_COLOR)
 end
 
+--- A way of stopping harm as a bar's name: "Dodges and misses".
+local function Capitalised(words)
+    return words:sub(1, 1):upper() .. words:sub(2)
+end
+
+--- Adds a line of muted words to the tooltip being built.
+local function AddNote(words)
+    GameTooltip:AddLine(words, Kit.MUTED[1], Kit.MUTED[2], Kit.MUTED[3], true)
+end
+
+--- What one way of stopping harm came to, and how that was worked out.
+local function ShowStoppedTooltip(bar)
+    local way, stopped = bar.about, bar.stopped
+    if not way or not stopped then
+        return
+    end
+
+    GameTooltip:SetOwner(bar, "ANCHOR_RIGHT")
+    GameTooltip:SetText(Capitalised(way.words), 1, 1, 1)
+
+    local exact = way.key == "absorbed"
+    local amount = ns.Number(way.amount)
+    Kit.TooltipFigure(
+        "Stopped",
+        ("%s%s (%s)"):format(exact and "" or "about ", amount, ns.Percent(way.share))
+    )
+
+    -- Spells hit the player too when not all that got through is known
+    -- to be physical, and then the estimates built on it lean low.
+    local spellsToo = stopped.physical < stopped.taken
+
+    if way.key == "armour" then
+        if stopped.armourValue then
+            Kit.TooltipFigure("Your armour", ns.Number(stopped.armourValue))
+        end
+        Kit.TooltipFigure("Off each physical blow", "about " .. ns.Percent(stopped.armourCut))
+        AddNote(ARMOUR_NOTE)
+    elseif way.key == "avoided" then
+        local turned = 0
+        for _, times in pairs(stopped.ways) do
+            turned = turned + times
+        end
+        Kit.TooltipFigure("Blows", ns.Number(turned))
+        if turned > 0 then
+            Kit.TooltipFigure("An average blow", "about " .. ns.Number(way.amount / turned))
+        end
+        AddNote(AVOIDED_NOTE)
+    elseif way.key == "blocked" then
+        Kit.TooltipFigure("Blows blocked", ns.Number(stopped.blocks))
+        if stopped.blockValue then
+            Kit.TooltipFigure("Your shield blocks", ns.Number(stopped.blockValue))
+        end
+        AddNote(BLOCKED_NOTE)
+    else
+        AddNote(ABSORBED_EXACT)
+    end
+
+    if (way.key == "armour" or way.key == "avoided") and spellsToo then
+        AddNote(SWINGS_ONLY)
+    end
+    if not exact then
+        GameTooltip:AddLine(ESTIMATE, Kit.GOLD[1], Kit.GOLD[2], Kit.GOLD[3], true)
+    end
+    GameTooltip:Show()
+end
+
 --- Every row of a list from `first` on, added up into one.
 ---@param amount string  the name of the figure the rows are measured by
 local function EverythingElse(rows, first, amount)
@@ -602,6 +780,82 @@ local function PlaceColumns(layout, summary)
         Kit.PlaceSection(column.layout, column.section, column.inside)
         layout.y = column.layout.y
     end
+end
+
+--- "About 38% of the damage coming at you was stopped: armour 18%, dodges
+--- and misses 14%, your shield 6%."
+local function StoppedText(stopped, ways)
+    local parts = {}
+    for _, way in ipairs(ways) do
+        table.insert(parts, ("%s %s"):format(way.words, ns.Percent(way.share)))
+    end
+    return ("About %s of the damage coming at you was stopped: %s."):format(
+        ns.Percent(stopped.share),
+        table.concat(parts, ", ")
+    )
+end
+
+--- What the bars leave out, in a sentence or two. Empty when they leave
+--- out nothing.
+local function StoppedCaveats(summary)
+    local stopped = summary.stopped
+    local caveats = {}
+
+    if stopped.fights < summary.tracked then
+        table.insert(caveats, SOME_FIGHTS:format(stopped.fights))
+    end
+    if not stopped.armourCut and stopped.physical > 0 then
+        table.insert(caveats, NO_ARMOUR)
+    end
+
+    local resisted = summary.resisted + (summary.avoidedBy.RESIST or 0)
+    if resisted == 1 then
+        table.insert(caveats, RESISTS:format("1 spell was", "it isn't"))
+    elseif resisted > 1 then
+        table.insert(caveats, RESISTS:format(resisted .. " spells were", "they aren't"))
+    end
+    return table.concat(caveats, " ")
+end
+
+--- About how much was stopped, and a bar for each way it was. Left out
+--- when none of it could be worked out.
+local function PlaceStopped(layout, summary)
+    local stopped = summary.stopped
+    local ways = stopped and ns.Healing.StoppedWays(stopped) or {}
+    if #ways == 0 then
+        return
+    end
+
+    local section = tab.stoppedSection
+    local inside = Kit.Inside(layout, section)
+    Kit.PlaceText(inside, tab.stoppedText, 0, StoppedText(stopped, ways))
+
+    local biggest = ways[1].amount
+    local gap = LINE_GAP
+    for index, bar in ipairs(tab.stoppedBars) do
+        local way = ways[index]
+        bar.about, bar.stopped = way, stopped
+        if way then
+            local about = way.key == "absorbed" and "" or "about "
+            local figures = ("%s%s  %s"):format(about, ns.Number(way.amount), ns.Percent(way.share))
+            bar:Set(
+                WAY_ICONS[way.key],
+                Capitalised(way.words),
+                figures,
+                way.amount / biggest,
+                STOPPED_COLOR
+            )
+            Kit.Place(inside, bar, gap)
+            gap = BAR_GAP
+        end
+    end
+
+    local caveats = StoppedCaveats(summary)
+    if caveats ~= "" then
+        Kit.PlaceText(inside, tab.stoppedNote, LINE_GAP, caveats)
+    end
+
+    Kit.PlaceSection(layout, section, inside)
 end
 
 --- The blows and heals that were counted, a sentence for each. Left out
@@ -748,13 +1002,26 @@ function HealingTab.Create(parent, window)
         CreateColumn("Where the healing came from", "healing", FillHealingBar, ShowHealingTooltip)
     tab.harm = CreateColumn("What hurt you", "amount", FillHarmBar, ShowHarmTooltip)
 
-    -- A sentence on the enemy's attacks and one on the heals.
+    -- About how much never reached the player: a sentence, a bar for each
+    -- way, and a line on what the bars leave out.
+    local stopped = Piece(Kit.Section(tab.page, "How much was stopped"))
+    tab.stoppedSection = stopped
+    tab.stoppedText = Piece(Kit.Paragraph(stopped, "GameFontHighlight"))
+    tab.stoppedBars = {}
+    for index = 1, STOPPED_BARS do
+        tab.stoppedBars[index] = Piece(CreateBar(stopped, ShowStoppedTooltip))
+    end
+    tab.stoppedNote = Piece(Kit.Paragraph(stopped, "GameFontHighlightSmall"))
+    tab.stoppedNote:SetTextColor(unpack(Kit.MUTED))
+
+    -- A sentence each on the enemy's attacks, the hard blows among them,
+    -- the Defence skill that meets them, and the heals.
     local defence = Piece(Kit.Section(tab.page, "Holding your ground"))
     tab.defenceSection = defence
-    tab.defenceLines = {
-        Piece(Kit.Paragraph(defence, "GameFontHighlight")),
-        Piece(Kit.Paragraph(defence, "GameFontHighlight")),
-    }
+    tab.defenceLines = {}
+    for index = 1, DEFENCE_LINES do
+        tab.defenceLines[index] = Piece(Kit.Paragraph(defence, "GameFontHighlight"))
+    end
 
     -- Findings come a few at a time, so their rows are made as they're
     -- first needed.
@@ -797,6 +1064,7 @@ local function ShowPage(summary)
     local layout = { frame = tab.page, left = 0, width = width, y = 0 }
 
     PlaceColumns(layout, summary)
+    PlaceStopped(layout, summary)
     PlaceDefence(layout, summary)
     PlaceFindings(layout, summary)
     Kit.PlaceText(layout, tab.footnote, Kit.SECTION_GAP, FOOTNOTE)

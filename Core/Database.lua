@@ -17,11 +17,14 @@ local addonName, ns = ...
 --                 gearSets    each different set of gear a fight was
 --                             fought in (see Combat\Gear.lua)
 --                 schools     which school of damage each ability has been
---                             seen to do (see Text\Guess.lua)
+--                             seen to do (see Combat\Guess.lua)
+--                 ticking     how often each ability has been seen ticking
+--                             after its cast, like a bleed (also Guess.lua)
 --                 nextNumber  the number the next recording will carry
 --   widget      where the last-fight panel was dragged to
 --   healWidget  where the healing panel was dragged to
 --   button      where the record button was dragged to
+--   procAlert   where the ability alert was dragged to, by its middle
 --   example     where the example enemy in the options was dragged to
 --   toldAboutNameplates  set once the player has been told the numbers
 --               need enemy nameplates (see Text\Lane.lua)
@@ -96,6 +99,13 @@ ns.DEFAULT_SETTINGS = {
     -- A small Record button on the screen. Off unless asked for: the window
     -- and the panel's menu both record, and there's a key binding.
     recordButton = false,
+
+    -- An ability's icon below the middle of the screen when something has
+    -- made it the best next press: Clearcasting, or Overpower after a
+    -- dodge. Off unless asked for. With it, a sound: 1 none, 2 a soft
+    -- click, 3 a ping, 4 a tick, 5 a chime (see UI\ProcAlert.lua).
+    procAlert = false,
+    procSound = 3,
 }
 
 -- How many fights to keep for each character. The oldest go first.

@@ -7,10 +7,11 @@ local _, ns = ...
 -- puts on the screen.
 --
 -- While the page is open an example enemy stands beside the window with
--- made-up hits playing on it (see Example.lua), so every change can be
--- judged as it's made. The Options window sits in the middle of the
--- screen, where the fighting happens, so this file also lets it be
--- dragged aside by its title bar.
+-- made-up hits playing on it (see Example.lua), and a sample of the
+-- ability alert shows if that's on, so every change can be judged as it's
+-- made. The Options window sits in the middle of the screen, where the
+-- fighting happens, so this file also lets it be dragged aside by its
+-- title bar.
 
 local PREFIX = "Temper_"
 
@@ -357,6 +358,30 @@ local function AddScreenOptions(layout)
     )
 end
 
+local function AddAlertOptions(layout)
+    AddHeader(layout, "Alerts")
+
+    AddCheckbox(
+        category,
+        "procAlert",
+        "Show an alert when an ability is worth pressing now",
+        "The ability's icon appears below the middle of the screen when something has made "
+            .. "it your best next press: Clearcasting, say, or Overpower after an enemy dodges. "
+            .. "It goes once it's used or the moment passes. It shows in a group too, since "
+            .. "it's only about your own next press. Drag it where you like while this page "
+            .. "is open; the rest of the time clicks pass straight through it. /temper check "
+            .. "says which of yours the game lets it see in a fight."
+    )
+
+    AddDropdown(
+        category,
+        "procSound",
+        "Alert sound",
+        "Played once as an alert appears, at your game's sound effects volume.",
+        Labels(ns.ProcAlert.SOUNDS)
+    )
+end
+
 -- Registered at login rather than when the addon loads, so the Options
 -- window has finished setting itself up.
 ns.OnEvent("PLAYER_LOGIN", function()
@@ -367,6 +392,12 @@ ns.OnEvent("PLAYER_LOGIN", function()
 
     AddNumberOptions(layout)
     AddScreenOptions(layout)
+
+    -- The alerts live in a file the game only finds when it starts, so
+    -- straight after an update they aren't there to offer.
+    if ns.ProcAlert then
+        AddAlertOptions(layout)
+    end
 
     Settings.RegisterAddOnCategory(category)
     WatchOptionsWindow()

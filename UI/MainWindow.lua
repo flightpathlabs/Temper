@@ -4,8 +4,8 @@ local addonName, ns = ...
 -- bottom, the way the auction house and the character sheet have them.
 --
 --   Fights       every fight, and the analysis of whichever are selected
---   Healing      what was healed and what did the hurting, over a set of
---                fights picked from a menu
+--   Healing and defence   what was healed, what did the hurting and what
+--                was stopped, over a set of fights picked from a menu
 --   Experiments  a question, two sets of fights, and a verdict
 --   Progress     bests and the trend, against nobody but yourself
 --
@@ -59,7 +59,9 @@ local TABS = {
         end,
     },
     {
-        label = "Healing",
+        -- The tab sizes itself to its label, and there's room for the
+        -- longer name along the window's foot.
+        label = "Healing and defence",
         -- Nor here: its menu of which fights to cover goes in the strip.
         build = function(parent, ...)
             if ns.HealingTab and ns.Healing then
@@ -310,6 +312,14 @@ local function PrintCheck()
     end
     for what, problem in pairs(lane.complaints) do
         ns.Print("The game objected to a number's %s: %s", what, problem)
+    end
+
+    -- What the alerts can watch for this character, and how. Missing
+    -- straight after an update, until the game is restarted.
+    if ns.Procs then
+        for _, line in ipairs(ns.Procs.CheckLines()) do
+            ns.Print(line)
+        end
     end
 end
 

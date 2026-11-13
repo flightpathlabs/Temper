@@ -71,3 +71,5 @@ end
 --                                recording started or stopped
 --   EXPERIMENTS_CHANGED          an experiment began, moved on a step or
 --                                was deleted
+--   PROCS_CHANGED                something worth pressing now came up, or
+--                                went (see Combat\Procs.lua)

@@ -17,6 +17,14 @@ local _, ns = ...
 -- swing. That does mean a brand new ability can't be traced until the
 -- fight it's first used in is over.
 --
+-- Effects that tick (a bleed, a damage-over-time spell) are the hardest.
+-- A tick arrives long after its cast with nothing to mark it out. A spell's
+-- tick has its school to go on. A bleed is physical, like a swing, so it's
+-- told from one by there being no swing on its way when it lands. An
+-- ability seen ticking like that is remembered as one that ticks. A tick
+-- that can't be put to any ability is still known for a tick, and is
+-- shown as one rather than passed off as a swing.
+--
 -- It stays a guess. Two things landing at once can be told apart only by
 -- their school, so anything built on this says "about" and "probably".
 -- It's used for the icon beside a number, for saying whether each cast in
@@ -47,6 +55,10 @@ local PHYSICAL = 1
 
 -- The spell behind an ordinary melee swing.
 Guess.MELEE_SWING = 6603
+
+-- What a blow is put down to when it was plainly a tick of something, but
+-- of what can't be told. Not a spell: nothing should look it up as one.
+Guess.TICK = "TICK"
 
 -- The player's recent casts, oldest first. These are the same tables the
 -- fight's log holds (see Hits.lua): { cast = spellID, time = ... }.
@@ -79,6 +91,29 @@ local function Learn(spell, school)
     local seen = ns.character.schools[spell]
     seen[school] = (seen[school] or 0) + 1
 end
+
+--- The abilities seen ticking, by spell, as how many ticks were put down
+--- to each. Kept with the character, since it doesn't change.
+local function Ticking()
+    local character = ns.character
+    if type(character.ticking) ~= "table" then
+        character.ticking = {}
+    end
+    return character.ticking
+end
+
+-- An ability is taken to tick once it's been seen doing so this often.
+-- Once could be a mistake, and would stick: from then on it isn't allowed
+-- to claim a blow that comes a little after its cast.
+local TICKS_AFTER = 2
+
+local function Ticks(spell)
+    return (Ticking()[spell] or 0) >= TICKS_AFTER
+end
+
+-- The last blow traced to a cast, so that the other enemies caught by
+-- the same strike (Cleave, Whirlwind, Swipe) can be put down to it too.
+local lastClaim = { time = 0 }
 
 --- Takes note of the abilities a finished fight showed doing damage.
 ---@param spells table  the fight's spell rows
@@ -131,8 +166,11 @@ local function WaitingCasts(school, now)
     local known, unknown
 
     for _, cast in ipairs(casts) do
-        local waiting = not cast.matched and now - cast.time <= FLIGHT_SECONDS
-        if waiting and damaging[cast.cast] then
+        -- An ability that only ticks has no blow of its own on the way.
+        -- Left in, its cast would claim the next swing that came along.
+        local age = now - cast.time
+        local flying = age <= (Ticks(cast.cast) and SAME_MOMENT or FLIGHT_SECONDS)
+        if not cast.matched and flying and damaging[cast.cast] then
             local usual, times = UsualSchool(cast.cast)
             if usual == school then
                 -- Of two that fit, one used this very moment is likelier
@@ -178,10 +216,42 @@ local function StillTicking(school)
     return nil
 end
 
+--- The physical ability most likely still ticking, for a blow that came
+--- with no swing and no cast to explain it. One already seen ticking is
+--- the first choice. Failing that, the last physical ability cast that
+--- hasn't been seen to land a blow of its own yet, which is how a bleed
+--- gets found out the first time.
+local function StillBleeding(now)
+    local ticking = Ticking()
+
+    for index = #casts, 1, -1 do
+        local spell = casts[index].cast
+        if Ticks(spell) and now - casts[index].time <= TICKING_SECONDS then
+            ticking[spell] = ticking[spell] + 1
+            return spell
+        end
+    end
+
+    for index = #casts, 1, -1 do
+        local cast = casts[index]
+        local usual = UsualSchool(cast.cast)
+        local physical = usual == nil or usual == PHYSICAL
+        local recent = now - cast.time <= TICKING_SECONDS
+        if recent and not cast.matched and physical and ns.character.schools[cast.cast] then
+            ticking[cast.cast] = (ticking[cast.cast] or 0) + 1
+            Learn(cast.cast, PHYSICAL)
+            return cast.cast
+        end
+    end
+    return nil
+end
+
 --- The ability a blow of this school most likely was.
 ---@param school number|nil  the blow's school of damage
----@return number|nil spellID  nil when there's no telling; with a pet
----                            out, that may well have been the pet
+---@return number|string|nil spellID  nil when there's no telling; with a
+---                            pet out, that may well have been the pet.
+---                            Guess.TICK when it was plainly a tick of
+---                            something, but of what can't be said
 ---@return table|nil cast  the log's entry for the cast it's traced to; nil
 ---                        for a weapon swing or an effect still ticking
 function Guess.Match(school)
@@ -195,6 +265,7 @@ function Guess.Match(school)
     local function Claim(cast)
         cast.matched = true
         Learn(cast.cast, school)
+        lastClaim.spell, lastClaim.time = cast.cast, now
         return cast.cast, cast
     end
 
@@ -221,13 +292,26 @@ function Guess.Match(school)
     end
 
     -- No swing was announced for it. If swings are being announced, it
-    -- wasn't one, so an untried ability gets the credit. Failing that it
-    -- was most likely a pet.
+    -- wasn't one, so an untried ability gets the credit. Failing that, a
+    -- bleed still running, and failing that, a pet.
     if unknown then
         return Claim(unknown)
     end
-    if swingsAnnounced and UnitExists("pet") then
+    if not swingsAnnounced then
+        return Guess.MELEE_SWING
+    end
+
+    -- Another enemy caught by the strike that's just landed.
+    if now - lastClaim.time <= SAME_MOMENT then
+        return lastClaim.spell
+    end
+
+    -- With a pet out, a blow nothing explains is far likelier to be the
+    -- pet's than a bleed's. Taking it for a bleed would also teach a
+    -- spell that's yet to tick (a Serpent Sting, say) that it bleeds.
+    if UnitExists("pet") then
         return nil
     end
-    return Guess.MELEE_SWING
+
+    return StillBleeding(now) or Guess.TICK
 end

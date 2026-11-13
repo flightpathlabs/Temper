@@ -7,7 +7,8 @@ local _, ns = ...
 -- It stands beside the game's Options window while Temper's page is
 -- open, in front of everything, and can be dragged to wherever the
 -- numbers are easiest to see. `/temper example` shows it at any other
--- time, and puts it away again.
+-- time, and puts it away again. A sample of the ability alert comes and
+-- goes with it (see ProcAlert.lua).
 
 local Example = {}
 ns.Example = Example
@@ -111,6 +112,13 @@ end
 --- whenever that might have changed.
 function Example.Refresh()
     local wanted = keptOpen or ns.OptionsPageShowing()
+
+    -- The ability alert shows a sample at the same times, so it can be
+    -- seen and placed too.
+    if ns.ProcAlert then
+        ns.ProcAlert.Sample(wanted)
+    end
+
     if not wanted and not stand then
         return
     end

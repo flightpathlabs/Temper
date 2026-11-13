@@ -7,7 +7,7 @@ local _, ns = ...
 -- It's off to begin with, and is popped out from the fight panel's menu
 -- or the options. It's the same width and is laid out the same way as its
 -- twin, so the two can sit side by side or stacked and read as a pair.
--- Click it for the Healing tab, right-click for a short menu, drag it
+-- Click it for the Healing and defence tab, right-click for a short menu, drag it
 -- anywhere.
 --
 -- During a fight the game lets an addon show its running healing but not
@@ -284,7 +284,7 @@ local function ShowTooltip(self)
     )
     GameTooltip:AddLine("Only healing done during a fight is counted.", 1, 1, 1, true)
     GameTooltip:AddLine(
-        "Click for the Healing tab. Right-click for more. Drag to move.",
+        "Click for the Healing and defence tab. Right-click for more. Drag to move.",
         0.6,
         0.6,
         0.6,

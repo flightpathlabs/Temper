@@ -267,12 +267,30 @@ local function NewNumber()
         icon = holder:CreateTexture(nil, "OVERLAY"),
     }
 
-    -- The icon rides just to the left of its number. Trimmed a touch, as
-    -- the game does, to lose the border drawn into every icon.
+    -- The icon rides just to the left of its number.
     number.icon:SetPoint("RIGHT", number.text, "LEFT", -2, 0)
-    number.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     number.icon:Hide()
     return number
+end
+
+--- Gives a number its icon: an ability's, trimmed a touch as the game
+--- does to lose the border drawn into every one, or one of the game's own
+--- small pictures, which has no border and is used whole.
+---@param texture table  the number's icon
+---@param icon number|string|nil  a spell's texture
+---@param atlas string|nil  one of the game's pictures, used instead
+local function SetIcon(texture, icon, atlas)
+    if atlas then
+        -- A picture the game doesn't have isn't an error, but would leave
+        -- whatever icon this number had the last time it was used.
+        if not texture:SetAtlas(atlas) then
+            texture:SetTexture(nil)
+        end
+        texture:SetTexCoord(0, 1, 0, 1)
+    else
+        texture:SetTexture(icon)
+        texture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    end
 end
 
 --- Says, once ever, why the numbers aren't following the enemy: with
@@ -313,8 +331,9 @@ end
 ---@param value any  what to show. May be an amount the client won't let us
 ---                  read, which is why it goes straight to the text and is
 ---                  never looked at here.
----@param look table  { r, g, b, scale, crit, icon }; icon is a texture to
----                   show beside the number, if any
+---@param look table  { r, g, b, scale, crit, icon, atlas }; icon is a
+---                   texture to show beside the number, if any, and atlas
+---                   one of the game's pictures to show instead
 ---@param unit string|nil  whose nameplate to pin it to; the target's if
 ---                        not given
 ---@param stand table|nil  a frame of our own to pin it to instead of a
@@ -330,7 +349,7 @@ function Lane.Show(value, look, unit, stand)
     local gap = GAPS[ns.settings.laneDistance] or GAPS[1]
 
     local plate = stand or PlateFor(unit)
-    local wantsIcon = look.icon ~= nil and not Lane.complaints.icon
+    local wantsIcon = (look.icon ~= nil or look.atlas ~= nil) and not Lane.complaints.icon
     if plate then
         number.point, number.anchor, number.anchorPoint = side.point, plate, side.plate
         number.x, number.y = side.x * gap, side.y * gap
@@ -386,7 +405,7 @@ function Lane.Show(value, look, unit, stand)
     table.insert(showing, number)
 
     number.hasIcon = wantsIcon
-        and Attempt("icon", number.icon.SetTexture, number.icon, look.icon)
+        and Attempt("icon", SetIcon, number.icon, look.icon, look.atlas)
         and Attempt("icon", number.icon.Show, number.icon)
     if number.hasIcon then
         SizeIcon(number, number.drawnSize)

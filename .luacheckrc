@@ -78,10 +78,12 @@ read_globals = {
     "C_Item",
     "C_SkillInfo",
     "C_NamePlate",
+    "C_Secrets",
     "C_Spell",
     "C_SpellBook",
     "C_StringUtil",
     "C_Timer",
+    "C_UnitAuras",
 
     -- Loose API functions
     "GetBindingKey",
@@ -98,6 +100,8 @@ read_globals = {
     "IsControlKeyDown",
     "IsInGroup",
     "IsShiftKeyDown",
+    "PlaySound",
+    "SOUNDKIT",
     "UnitCanAttack",
     "UnitDetailedThreatSituation",
     "UnitExists",
@@ -112,4 +116,11 @@ read_globals = {
     "UnitThreatSituation",
     "geterrorhandler",
     "issecretvalue",
+
+    -- The character sheet's defensive figures
+    "C_PaperDollInfo",
+    "GetShieldBlock",
+    "UnitArmor",
+    "UnitDefenseSkill",
+    "UnitResistance",
 }

@@ -71,8 +71,12 @@ local function KindOf(hit)
     end
 
     -- Physical. A weapon's swing unless it was traced to something the
-    -- player pressed, and shots and wands count as swings.
+    -- player pressed, and shots and wands count as swings. A bleed that
+    -- couldn't be put to an ability was still an ability's doing.
     local spell = hit.spell
+    if spell == ns.Guess.TICK then
+        return "ability"
+    end
     if spell and spell ~= ns.Guess.MELEE_SWING and ns.Sources.Kind(spell) ~= "auto" then
         return "ability"
     end
@@ -106,14 +110,23 @@ local function LookFor(hit)
     return { r = color[1], g = color[2], b = color[3], scale = scale, crit = hit.crit }
 end
 
+-- What's shown beside a tick that couldn't be put to any ability: a
+-- clock, for damage over time, so it isn't taken for a swing.
+local TICK_ATLAS = "auctionhouse-icon-clock"
+
 --- The icon of the ability a hit most likely was, if icons are wanted and
 --- there's a guess to be had.
+---@return number|nil texture
+---@return string|nil atlas  one of the game's pictures, in place of an
+---                          ability's icon
 local function IconFor(hit)
-    if not ns.settings.icons then
+    if not ns.settings.icons or not hit.spell then
         return nil
     end
-
-    return hit.spell and C_Spell.GetSpellTexture(hit.spell)
+    if hit.spell == ns.Guess.TICK then
+        return nil, TICK_ATLAS
+    end
+    return C_Spell.GetSpellTexture(hit.spell)
 end
 
 --- Puts one hit in the lane.
@@ -130,7 +143,7 @@ local function Draw(hit, stand)
     end
 
     local look = LookFor(hit)
-    look.icon = IconFor(hit)
+    look.icon, look.atlas = IconFor(hit)
     ns.Lane.Show(hit.amount, look, hit.unit, stand)
 end
 

@@ -18,8 +18,8 @@ local _, ns = ...
 -- blows and casts from which a finished fight gets its counts and its
 -- timeline.
 --
--- The same event reports what lands on the player: heals, and enemy
--- attacks that hit or were avoided. There's no doubt whose those are, so
+-- The same event reports what lands on the player: heals, enemy attacks
+-- that hit or were avoided, and spells. There's no doubt whose those are, so
 -- they go straight into the log. They're only ever counted: never drawn,
 -- never taken for a blow of the player's own.
 
@@ -61,6 +61,10 @@ local SOAKED = {
     RESIST = true,
 }
 
+-- The school of an ordinary blow, as the event gives it: a mask of one bit
+-- per school, and this is the physical one (Enum.Damageclass.MaskPhysical).
+local PHYSICAL = 1
+
 local IsSecret = issecretvalue or function()
     return false
 end
@@ -88,21 +92,31 @@ end
 
 -- What lands on the player -------------------------------------------------
 
---- Logs a heal or an enemy's attack on the player, as "HEAL", "WOUND" or
---- the way the attack was avoided. Anything else reported about the
---- player (mana and energy gains, mostly) is let go.
+--- Logs a heal or an enemy's attack on the player, as "HEAL", "WOUND",
+--- "MAGIC" or the way the attack was avoided. Anything else reported about
+--- the player (mana and energy gains, mostly) is let go.
 ---
 --- Only physical blows count as attacks that landed: they're the ones
 --- that could have been dodged, parried or blocked. A spell, a tick of
 --- damage over time or a Life Tap couldn't, and counting them would make
---- the share avoided look worse than the player's defence really is.
+--- the share avoided look worse than the player's defence really is. They
+--- are counted, though, apart and by school, since that's the only way to
+--- tell how much of what hurt the player was magic (see Mitigation.lua).
 local function NoteOnPlayer(action, flag, school)
     if action == "HEAL" then
         Remember({ onPlayer = "HEAL", crit = flag == "CRITICAL" })
-    elseif action == "WOUND" and school ~= nil and school ~= 1 then
-        return
+    elseif action == "WOUND" and school ~= nil and school ~= PHYSICAL then
+        -- Marked as resisted, a spell may have been turned aside in full or
+        -- only in part. The amount would say which, and it can't be read,
+        -- so it's counted as a resist and as a spell of its school either way.
+        Remember({ onPlayer = "MAGIC", school = school, resisted = flag == "RESIST" })
     elseif action == "WOUND" then
-        Remember({ onPlayer = SOAKED[flag] and flag or "WOUND" })
+        Remember({
+            onPlayer = SOAKED[flag] and flag or "WOUND",
+            crit = flag == "CRITICAL",
+            crushing = flag == "CRUSHING",
+            partBlocked = flag == "BLOCK_REDUCED",
+        })
     elseif AVOIDED[action] then
         Remember({ onPlayer = action })
     end
@@ -200,7 +214,7 @@ ns.OnEvent("UNIT_COMBAT", function(unit, action, flag, amount, school)
     -- A blow with nothing to explain it, when there's a pet out, is the
     -- pet's. It's still drawn, but it isn't the player's to count: a pet
     -- that crits a lot shouldn't flatter its owner's crit rate.
-    local fromPet = not spell and hit.school == 1
+    local fromPet = not spell and hit.school == PHYSICAL
     hit.pet = fromPet
 
     if fromPet then
@@ -208,11 +222,13 @@ ns.OnEvent("UNIT_COMBAT", function(unit, action, flag, amount, school)
     elseif hit.avoided then
         Remember({ avoided = hit.avoided })
     else
+        -- A tick that couldn't be put to an ability is drawn as one, but
+        -- has no ability to be written down against.
         Remember({
             hit = true,
             crit = hit.crit,
             glancing = hit.glancing,
-            spell = spell,
+            spell = spell ~= ns.Guess.TICK and spell or nil,
             onTarget = unit == "target" or Plain(UnitIsUnit(unit, "target"), false),
         })
     end
@@ -294,6 +310,19 @@ local function CountOnPlayer(defence, entry, began)
         end
     elseif what == "WOUND" then
         defence.struck = defence.struck + 1
+        if entry.crit then
+            defence.crits = defence.crits + 1
+        elseif entry.crushing then
+            defence.crushing = defence.crushing + 1
+        elseif entry.partBlocked then
+            defence.partBlocked = defence.partBlocked + 1
+        end
+    elseif what == "MAGIC" then
+        defence.magic = defence.magic + 1
+        defence.schools[entry.school] = (defence.schools[entry.school] or 0) + 1
+        if entry.resisted then
+            defence.resisted = defence.resisted + 1
+        end
     else
         defence.avoided = defence.avoided + 1
         defence.avoidedBy[what] = (defence.avoidedBy[what] or 0) + 1
@@ -311,14 +340,30 @@ end
 ---                     PARRY and so on) and starved is how often a skill
 ---                     was pressed without the mana or energy for it.
 ---                     defence is the other side of the fight: { heals,
----                     healCrits, struck, avoided, avoidedBy }, the heals
----                     that landed on the player and how many were
----                     critical, and the enemy attacks that landed and
----                     that didn't
+---                     healCrits, struck, crits, crushing, partBlocked,
+---                     avoided, avoidedBy, magic, schools, resisted }, the
+---                     heals that landed on the player and how many were
+---                     critical; the enemy blows that landed, how many of
+---                     those were critical, crushing or partly blocked, and
+---                     the attacks that didn't land; and the spells that hit
+---                     the player, counted by school (the event's mask, so
+---                     4 is fire), with how many were marked as resisted
 ---@return table casts  times each spell was cast, by spell ID
 local function Count(earliest, earliestCast, began)
     local tally = { hits = 0, crits = 0, glancing = 0, avoided = 0, avoidedBy = {}, starved = 0 }
-    local defence = { heals = 0, healCrits = 0, struck = 0, avoided = 0, avoidedBy = {} }
+    local defence = {
+        heals = 0,
+        healCrits = 0,
+        struck = 0,
+        crits = 0,
+        crushing = 0,
+        partBlocked = 0,
+        avoided = 0,
+        avoidedBy = {},
+        magic = 0,
+        schools = {},
+        resisted = 0,
+    }
     local casts = {}
     tally.defence = defence
 

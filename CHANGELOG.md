@@ -21,7 +21,10 @@ First version.
   a slider; gold, red or their own colour; and whether they land with a
   small pop, a big pop, a shake or no fuss.
 - Misses, dodges and parries show as small grey words.
-- Optionally, a best-guess icon of the ability beside each number.
+- Optionally, a best-guess icon of the ability beside each number. A
+  bleed's ticks are told from weapon swings: once Temper has seen an
+  ability tick it shows that ability's icon, and a tick it can't place
+  shows a small clock rather than your weapon.
 - While Temper's options are open, an example enemy stands beside the
   window with made-up hits playing on it, so each change shows as it's
   made. Drag it wherever suits. The Options window itself can be dragged
@@ -76,8 +79,8 @@ First version.
   on you, how many were critical, and how many enemy attacks you dodged,
   parried or blocked are counted too.
 - The fight page has a short "Healing and defence" section, with a link
-  that opens the Healing tab on the same fights.
-- A Healing tab breaks it all down for the last fight, the session, the
+  that opens the Healing and defence tab on the same fights.
+- A Healing and defence tab breaks it all down for the last fight, the session, the
   last ten fights or everything on record: healing and HPS, damage taken
   and how much of it you healed back, a bar for each healing ability and
   each thing that hurt you, and a few plain sentences on what to work on.
@@ -87,6 +90,31 @@ First version.
   the options.
 - Only healing done during a fight is counted. Fights recorded before
   this version have no healing on record.
+
+- **How much was stopped.** An estimate of the damage coming at you that
+  never landed: how much your armour kept off, what your dodges, parries
+  and blocks saved, and what your own shields absorbed, as a share of it
+  all, with a bar for each. Crits and crushing blows taken are counted,
+  and your Defence skill is noted with each fight.
+- Advice on defence: a Defence skill behind the level of the enemies
+  you're fighting, with the crits and crushing blows it's letting through;
+  a resistance worth having when most of the damage was one kind of
+  magic; and how much of the physical damage your armour is stopping.
+- The tab is now called Healing and defence.
+
+**Alerts**
+
+- An optional alert for the moments that change what's worth pressing
+  next: Clearcasting for druids, mages and shamans, a warlock's Shadow
+  Trance, and abilities that open up, such as Overpower, Revenge,
+  Execute, Riposte, Counterattack, Mongoose Bite and Hammer of Wrath.
+  The ability's icon appears below the middle of the screen with the
+  game's own proc glow, and a short sound you can pick or switch off.
+- Off to begin with. It shows in a group too, since it's about your own
+  next move. Clicks pass through it; it can be dragged while the options
+  are open, where a sample shows.
+- `/temper check` says which of your class's alerts this client lets
+  Temper watch, and how.
 
 **Comparing**
 

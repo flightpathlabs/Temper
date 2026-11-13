@@ -1,7 +1,8 @@
 local _, ns = ...
 
 -- Adds up the other side of a set of fights: what the player healed, what
--- they took, and what they did about it.
+-- they took, and what they did about it, including about how much never
+-- reached them (worked out fight by fight in Mitigation.lua).
 --
 -- It's to healing and defence what Summary.lua is to damage. Like a
 -- summary, nothing here is saved: it's worked out from the fights each
@@ -34,6 +35,37 @@ local MUCH_AVOIDABLE = 0.15
 -- many times each has to have been used before what it gives counts.
 local CLEARLY_BETTER_VALUE = 1.2
 local FEWEST_USES = 3
+
+-- A Defence skill has to be this far short of what the enemy calls for
+-- before it's worth a sentence, as with a weapon skill (see Findings.lua).
+-- Fifteen points is also where crushing blows start.
+local SKILL_GAP_WORTH_MENTIONING = 15
+
+-- Spells have to be this many of what hit the player, and this big a
+-- share of it, before what they were made of is worth a sentence; and one
+-- school has to be this big a share of them to be the one that mattered.
+local ENOUGH_SPELLS = 6
+local MUCH_MAGIC = 0.25
+local MOSTLY_ONE_SCHOOL = 2 / 3
+
+-- An enemy lands a critical hit on about one blow in twenty against a
+-- player of its level. This many blows have to have landed before the
+-- share of crits means anything, and the share has to be this high
+-- before it's worth a sentence.
+local ENOUGH_BLOWS = 20
+local MANY_CRITS = 0.12
+
+-- Physical damage has to be this big a share of the damage taken before
+-- what armour did about it is worth a sentence.
+local MOSTLY_PHYSICAL = 0.5
+
+-- The ways in which an attack fails to land, as they're said in a list:
+-- "dodges, parries and misses".
+local TURNED_WORDS = {
+    { "DODGE", "dodges" },
+    { "PARRY", "parries" },
+    { "MISS", "misses" },
+}
 
 -- Adding up -------------------------------------------------------------------
 
@@ -113,6 +145,124 @@ local function AddDefence(summary, defence)
     for way, times in pairs(defence.avoidedBy or {}) do
         summary.avoidedBy[way] = (summary.avoidedBy[way] or 0) + times
     end
+
+    -- Crits and crushing blows were only counted later on. Their share is
+    -- only of the blows in the fights that counted them.
+    if defence.crits then
+        summary.crits = summary.crits + defence.crits
+        summary.crushing = summary.crushing + (defence.crushing or 0)
+        summary.critBlows = summary.critBlows + (defence.struck or 0)
+    end
+
+    -- The same goes for the spells that hit the player.
+    if defence.magic then
+        summary.magic = summary.magic + defence.magic
+        summary.allHits = summary.allHits + defence.magic + (defence.struck or 0)
+        summary.resisted = summary.resisted + (defence.resisted or 0)
+        for school, times in pairs(defence.schools or {}) do
+            summary.schools[school] = (summary.schools[school] or 0) + times
+        end
+    end
+end
+
+--- Adds about what one fight's armour, dodging and blocking stopped. A
+--- fight from before this was worked out adds nothing.
+local function AddStopped(summary, fight)
+    local estimate = ns.Mitigation.Estimate(fight)
+    if not estimate or not estimate.estimated then
+        return
+    end
+
+    local stopped = summary.stopped
+    if not stopped then
+        stopped = {
+            fights = 0,
+            coming = 0,
+            taken = 0,
+            physical = 0,
+            absorbed = 0,
+            armour = 0,
+            avoided = 0,
+            blocked = 0,
+            -- For the average share armour took off: each fight's share,
+            -- weighed by the physical damage it was taken off.
+            cutSum = 0,
+            cutPhysical = 0,
+            ways = {},
+            blocks = 0,
+        }
+        summary.stopped = stopped
+    end
+
+    stopped.fights = stopped.fights + 1
+    for _, field in ipairs({ "coming", "taken", "physical", "absorbed" }) do
+        stopped[field] = stopped[field] + estimate[field]
+    end
+
+    local defence = fight.defence
+    local by = defence.avoidedBy or {}
+
+    if estimate.armour then
+        stopped.armour = stopped.armour + estimate.armour
+        stopped.cutPhysical = stopped.cutPhysical + estimate.physical
+        stopped.cutSum = stopped.cutSum + estimate.armourCut * estimate.physical
+    end
+    if estimate.avoided then
+        stopped.avoided = stopped.avoided + estimate.avoided
+        for _, way in ipairs({ "DODGE", "PARRY", "MISS" }) do
+            stopped.ways[way] = (stopped.ways[way] or 0) + (by[way] or 0)
+        end
+    end
+    if estimate.blocked then
+        stopped.blocked = stopped.blocked + estimate.blocked
+        stopped.blocks = stopped.blocks + (by.BLOCK or 0) + (defence.partBlocked or 0)
+    end
+
+    -- The character's own figures, as they were in the newest fight.
+    local saved = fight.mitigation or {}
+    if not stopped.at or (fight.at or 0) > stopped.at then
+        stopped.at = fight.at or 0
+        stopped.armourValue = saved.armour or stopped.armourValue
+        stopped.blockValue = saved.blockValue or stopped.blockValue
+    end
+end
+
+--- Notes the Defence skill and resistances from a fight, if it's the
+--- newest yet that has them: they're true of the character as they are,
+--- not of the set.
+local function NoteCharacter(summary, fight)
+    local saved = fight.mitigation
+    if not saved then
+        return
+    end
+    local level = fight.level
+
+    if saved.defence and saved.defenceBase and level then
+        local known = summary.defenceSkill
+        if not known or (fight.at or 0) > known.at then
+            local skillPerLevel = ns.Mitigation.SKILL_PER_LEVEL
+            summary.defenceSkill = {
+                at = fight.at or 0,
+                rank = saved.defence,
+                base = saved.defenceBase,
+                cap = level * skillPerLevel,
+                level = level,
+                enemyLevel = fight.enemyLevel,
+                wanted = fight.enemyLevel and fight.enemyLevel * skillPerLevel,
+            }
+        end
+    end
+
+    if saved.resistances then
+        local known = summary.resisting
+        if not known or (fight.at or 0) > known.at then
+            summary.resisting = {
+                at = fight.at or 0,
+                by = saved.resistances,
+                level = fight.enemyLevel or level,
+            }
+        end
+    end
 end
 
 --- Sums up the healing and defence in a set of fights.
@@ -146,7 +296,45 @@ end
 ---   avoidedBy   how many were avoided each way: DODGE, PARRY, BLOCK...
 ---   avoidRate   attacks avoided as a share of all attacks; nil without
 ---               a single attack
+---   crits, crushing   blows that landed as critical or crushing hits
+---   critBlows   the blows that landed in the fights where those were
+---               counted, which older fights didn't
+---   magic       spells that hit the player, in the fights that counted them
+---   allHits     blows and spells together, in those same fights
+---   schools     how many of the spells were of each school, by the
+---               game's mask for it (see Mitigation.lua)
+---   resisted    how many spells were marked as resisted, in full or part
 ---   interrupts, dispels   casts interrupted and effects dispelled
+---
+--- and, each only when there's something to say:
+---
+---   stopped     about how much of the harm coming at the player never
+---               reached them, over the fights where it could be worked
+---               out (see Mitigation.Estimate):
+---                 fights       how many of them
+---                 coming       the harm that came at the player in them
+---                 taken, physical, absorbed   what got through, how much
+---                              of that was physical, and what shields
+---                              soaked up
+---                 armour, avoided, blocked   about what armour, the blows
+---                              dodged, parried and missed, and the
+---                              shield stopped; 0 where none was worked out
+---                 share        all that was stopped, as a share of coming
+---                 armourCut    the share armour took off a physical blow,
+---                              on average; nil if never known
+---                 ways         how many blows were dodged, parried and
+---                              missed: { DODGE, PARRY, MISS }
+---                 blocks       how many blows the shield blocked
+---                 armourValue, blockValue   the player's armour and block,
+---                              as they were in the newest of the fights
+---   defenceSkill  { rank, base, cap, level, enemyLevel, wanted }: the
+---               player's Defence skill in the newest fight that noted it,
+---               with bonuses and as trained, the most their level
+---               allows, and what that fight's enemy called for
+---   resisting   { by, level }: the player's resistances in the newest
+---               fight that noted them, by school, and the level of the
+---               enemy they were up against
+---   level, enemyLevel   as they were in the newest fight
 function Healing.Of(fights)
     local summary = {
         fights = 0,
@@ -163,14 +351,25 @@ function Healing.Of(fights)
         struck = 0,
         avoided = 0,
         avoidedBy = {},
+        crits = 0,
+        crushing = 0,
+        critBlows = 0,
+        magic = 0,
+        allHits = 0,
+        schools = {},
+        resisted = 0,
         interrupts = 0,
         dispels = 0,
     }
 
     local abilities, blows = {}, {}
+    local newest
 
     for _, fight in ipairs(fights or {}) do
         summary.fights = summary.fights + 1
+        if not newest or (fight.at or 0) > (newest.at or 0) then
+            newest = fight
+        end
 
         if IsTracked(fight) then
             summary.tracked = summary.tracked + 1
@@ -188,6 +387,27 @@ function Healing.Of(fights)
             if fight.defence then
                 AddDefence(summary, fight.defence)
             end
+
+            -- Missing straight after an update, until the game is
+            -- restarted and finds the new file.
+            if ns.Mitigation then
+                AddStopped(summary, fight)
+                NoteCharacter(summary, fight)
+            end
+        end
+    end
+
+    if newest then
+        summary.level = newest.level
+        summary.enemyLevel = newest.enemyLevel
+    end
+
+    local stopped = summary.stopped
+    if stopped then
+        local kept = stopped.armour + stopped.avoided + stopped.blocked + stopped.absorbed
+        stopped.share = stopped.coming > 0 and kept / stopped.coming or 0
+        if stopped.cutPhysical > 0 then
+            stopped.armourCut = stopped.cutSum / stopped.cutPhysical
         end
     end
 
@@ -225,6 +445,56 @@ function Healing.Of(fights)
     end)
 
     return summary
+end
+
+--- The words for blows dodged, parried and missed, naming only the ways
+--- that happened, so a player who can't parry isn't told they did.
+local function TurnedWords(ways)
+    local words = {}
+    for _, way in ipairs(TURNED_WORDS) do
+        if (ways[way[1]] or 0) > 0 then
+            table.insert(words, way[2])
+        end
+    end
+
+    if #words == 0 then
+        return "dodges and misses"
+    elseif #words == 1 then
+        return words[1]
+    end
+    local last = table.remove(words)
+    return table.concat(words, ", ") .. " and " .. last
+end
+
+--- Each way the harm coming at the player was stopped, biggest first,
+--- leaving out any that stopped nothing.
+---@param stopped table  from Healing.Of
+---@return table  list of { key = "armour", "avoided", "blocked" or
+---               "absorbed", words = how a sentence says it ("armour",
+---               "dodges and misses"...), amount, share of what came at
+---               the player }
+function Healing.StoppedWays(stopped)
+    local ways = {}
+    local function Add(key, words, amount)
+        if amount > 0 and stopped.coming > 0 then
+            table.insert(ways, {
+                key = key,
+                words = words,
+                amount = amount,
+                share = amount / stopped.coming,
+            })
+        end
+    end
+
+    Add("armour", "armour", stopped.armour)
+    Add("avoided", TurnedWords(stopped.ways), stopped.avoided)
+    Add("blocked", "your shield", stopped.blocked)
+    Add("absorbed", "absorbs", stopped.absorbed)
+
+    table.sort(ways, function(a, b)
+        return a.amount > b.amount
+    end)
+    return ways
 end
 
 -- Saying what it shows ------------------------------------------------------------
@@ -290,6 +560,127 @@ local function WorstAvoidable(summary)
     end
 end
 
+--- How far the player's Defence skill is behind what the enemy calls for,
+--- if it's far enough to matter and could still be trained higher.
+---@return table|nil skill  the summary's defenceSkill
+---@return number|nil gap  how many points short it is
+local function DefenceShortfall(summary)
+    local skill = summary.defenceSkill
+    if not skill or not skill.wanted then
+        return nil
+    end
+
+    -- Not worth a word about a fight in which the enemy hardly swung at
+    -- the player, as for someone fighting from range.
+    if summary.struck + summary.avoided < ENOUGH_BLOWS then
+        return nil
+    end
+
+    -- As high as the player's level allows, there's nothing to train, and
+    -- nothing to be done about enemies above it. Only the part of the gap
+    -- that training can close counts.
+    local gap = math.min(skill.wanted, skill.cap) - skill.rank
+    if skill.base >= skill.cap or gap < SKILL_GAP_WORTH_MENTIONING then
+        return nil
+    end
+    return skill, gap
+end
+
+--- "2 critical and 3 crushing blows", or whichever of the two there were.
+local function HardBlowsText(summary)
+    local crits, crushing = summary.crits, summary.crushing
+    if crits > 0 and crushing > 0 then
+        return ("%d critical and %s"):format(crits, ns.Count(crushing, "crushing blow"))
+    elseif crushing > 0 then
+        return ns.Count(crushing, "crushing blow")
+    end
+    return ns.Count(crits, "critical hit")
+end
+
+--- The sentence on a Defence skill that's behind. It says what the gap
+--- costs by the character sheet's own sums, and what it came to here.
+local function DefenceSentence(summary, skill, gap, these)
+    local mitigation = ns.Mitigation
+    local crushing = mitigation.CrushingChance(skill.enemyLevel, skill.level, skill.rank)
+    local critMore = gap * mitigation.COST_PER_POINT
+
+    local cost
+    if crushing > 0 then
+        cost = ("about a %s chance of a crushing blow and %.1f%% more of a critical hit"):format(
+            ns.Percent(crushing),
+            critMore
+        )
+    else
+        cost = (
+            "about %.1f%% more chance of a critical hit, and %.1f%% less of missing you or "
+            .. "being dodged"
+        ):format(critMore, critMore * 2)
+    end
+
+    local took = ""
+    if summary.critBlows > 0 and summary.crits + summary.crushing > 0 then
+        took = (" You took %s in %s."):format(HardBlowsText(summary), these)
+    end
+
+    return (
+        "Your Defence skill is %d; level %d enemies call for %d, which gives them %s.%s "
+        .. "It rises as enemies attack you."
+    ):format(skill.rank, skill.enemyLevel, skill.wanted, cost, took)
+end
+
+--- The school of magic most of the spells that hit the player were of,
+--- when spells were a good part of what hit them and one school was most
+--- of those, and there's resistance to be had against it.
+---@return number|nil school  the game's mask for it
+---@return number|nil times  how many of the spells were of it
+local function MainSchool(summary)
+    if summary.magic < ENOUGH_SPELLS or summary.magic / summary.allHits < MUCH_MAGIC then
+        return nil
+    end
+
+    local main, most = nil, 0
+    for school, times in pairs(summary.schools) do
+        if times > most then
+            main, most = school, times
+        end
+    end
+
+    local resistible = ns.Mitigation and ns.Mitigation.Resistible(main)
+    if main and most / summary.magic >= MOSTLY_ONE_SCHOOL and resistible then
+        return main, most
+    end
+end
+
+--- The sentence on the player's resistance to the school most of what hit
+--- them was. Nil when the resistance wasn't noted.
+local function ResistanceSentence(summary, school, times, these)
+    local resisting = summary.resisting
+    local resistance = resisting and resisting.by[school]
+    if not resistance or not resisting.level then
+        return nil
+    end
+
+    local word = ns.Mitigation.SchoolWord(school)
+    local most = ("Most of the spells that hit you in %s were %s: %d of %d."):format(
+        these,
+        word,
+        times,
+        summary.magic
+    )
+    if resistance <= 0 then
+        return (
+            "%s You have no %s resistance, and gear with %s resistance would turn some of "
+            .. "it aside."
+        ):format(most, word, word)
+    end
+
+    local share = ns.Mitigation.ResistedShare(resistance, resisting.level)
+    return (
+        "%s Your %s resistance of %d turns aside about %s of %s damage from level %d "
+        .. "enemies, and gear with %s resistance raises that."
+    ):format(most, word, resistance, ns.Percent(share), word, resisting.level, word)
+end
+
 --- A few sentences about the healing and defence in a set of fights.
 ---@param summary table  from Healing.Of
 ---@return table  list of { kind = "good", "warning" or "tip", text = the
@@ -309,7 +700,14 @@ function Healing.Findings(summary)
 
     local these = summary.fights == 1 and "this fight" or "these fights"
 
-    -- First, how the healing stood against the damage taken.
+    -- First, a Defence skill that's letting blows through. Of everything
+    -- here it's the one that goes away just by fighting.
+    local defence, gap = DefenceShortfall(summary)
+    if defence then
+        Say("warning", "%s", DefenceSentence(summary, defence, gap, these))
+    end
+
+    -- Then how the healing stood against the damage taken.
     local back = summary.healedBack
     if back and back >= 1 then
         Say(
@@ -355,6 +753,13 @@ function Healing.Findings(summary)
         end
     end
 
+    -- Then magic that the right gear would turn some of aside.
+    local school, times = MainSchool(summary)
+    local resistance = school and ResistanceSentence(summary, school, times, these)
+    if resistance then
+        Say("tip", "%s", resistance)
+    end
+
     -- Then what a heal's cost buys, where one gives clearly more for its
     -- mana than another: that's a choice the player can make.
     local best, worst = BestValue(summary)
@@ -370,6 +775,50 @@ function Healing.Findings(summary)
             resource,
             NameBeside(best, worst),
             ns.Number(worst.cost * best.perCost)
+        )
+    end
+
+    -- Then a lot of hard blows. When the Defence skill is behind, that's
+    -- already been said, with the counts.
+    local hard = summary.crits + summary.crushing
+    if
+        not defence
+        and summary.critBlows >= ENOUGH_BLOWS
+        and hard / summary.critBlows >= MANY_CRITS
+    then
+        local why = ""
+        local level, enemyLevel = summary.level, summary.enemyLevel
+        if level and enemyLevel and enemyLevel > level then
+            why = " Enemies above your level land them more often."
+        end
+        Say(
+            "tip",
+            "%s of the enemy blows that landed on you in %s were critical or crushing: %s "
+                .. "of %d.%s",
+            ns.Percent(hard / summary.critBlows),
+            these,
+            HardBlowsText(summary),
+            summary.critBlows,
+            why
+        )
+    end
+
+    -- Then what armour did, said plainly, when most of the harm was the
+    -- kind it works on.
+    local stopped = summary.stopped
+    if
+        stopped
+        and stopped.armourCut
+        and stopped.armour > 0
+        and stopped.physical >= stopped.taken * MOSTLY_PHYSICAL
+    then
+        Say(
+            "tip",
+            "Your armour took about %s off each physical blow in %s: about %s damage "
+                .. "you didn't take.",
+            ns.Percent(stopped.armourCut),
+            these,
+            ns.Number(stopped.armour)
         )
     end
 
