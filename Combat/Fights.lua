@@ -26,8 +26,8 @@ local _, ns = ...
 --   power     { kind, start, finish }: how full the player's mana, energy
 --             or rage was at each end, as a share of the most it can be.
 --             Usually absent: the game hides these more often than not
---   starved   how many times a skill was pressed without the mana, rage
---             or energy for it
+--   resource  what the player fights with: "MANA", "ENERGY", "RAGE"...
+--   starved   how many times an ability was tried without enough of it
 --   sizes     how hard the blows landed, as far as could be worked out
 --             (see Sizes.lua)
 --   rest      seconds between the fight before ending and this one
@@ -101,6 +101,16 @@ end
 --- How full the player's mana, energy or rage is, as a share of the most
 --- it can be. Nil if the game won't say.
 ---@return number|nil share, string|nil kind  e.g. 0.42, "MANA"
+--- Which resource the player fights with: "MANA", "ENERGY", "RAGE"...
+--- The game says this even when it won't say how full it is.
+local function PowerKind()
+    local _, token = UnitPowerType("player")
+    if IsSecret(token) or type(token) ~= "string" then
+        return nil
+    end
+    return token
+end
+
 local function PowerNow()
     local kind, token = UnitPowerType("player")
     local now = Readable(UnitPower("player", kind))
@@ -363,6 +373,7 @@ ns.OnEvent("PLAYER_REGEN_ENABLED", function()
         enemyLevel = began.enemyLevel,
         level = UnitLevel("player"),
         weapons = ns.Weapons.Skills(),
+        resource = select(2, pcall(PowerKind)) or nil,
         timeline = timeline,
         rest = began.rest and math.floor(began.rest + 0.5),
         power = PowerSpent(began),

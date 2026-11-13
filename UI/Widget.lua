@@ -1,10 +1,13 @@
 local _, ns = ...
 
--- The widget: a small panel that's always up, with the figures from the
+-- The panel: a small frame that's always up, with the figures from the
 -- fight in progress or, between fights, the last one.
 --
 -- Click it for the full window, right-click for a short menu, drag it
--- anywhere. It's on to begin with and can be turned off.
+-- anywhere. It's on to begin with and can be turned off. Under the main
+-- figures it can carry two more things, each of which can be switched off
+-- from its menu or the options: the last few fights, and a few figures for
+-- the session so far.
 --
 -- During a fight the game lets an addon show its running damage but not
 -- read it. So the two live figures are passed straight from the game's
@@ -16,8 +19,21 @@ local _, ns = ...
 local Kit = ns.Kit
 
 local WIDTH = 220
-local HEIGHT = 64
 local LIVE_REFRESH_SECONDS = 0.5
+
+-- The main figures take this much height. Three lines share it: the title
+-- from 8 down to 22, the figures from 26 to 42, the counts from 45 to 55.
+local MAIN_HEIGHT = 64
+
+-- The lines under the main figures: how tall each is, and the space
+-- above a block of them, which holds a ruled line.
+local LINE_HEIGHT = 14
+local BLOCK_GAP = 8
+
+-- How many earlier fights each choice of the "recent fights" setting
+-- shows. The first choice is none.
+local RECENT_COUNTS = { 0, 3, 5 }
+local MOST_RECENT = 5
 
 -- The last fight is set against the player's average over this many of
 -- the counted fights before it, and against nothing if there are fewer
@@ -36,6 +52,10 @@ local widget
 -- When the fight in progress began, on GetTime's clock; nil between fights.
 local fightStart
 local ticker
+
+-- When the character logged in, as server time. Fights since then are
+-- "this session" when the player hasn't started one of their own.
+local loggedInAt = 0
 
 -- How the last fight compares with the ones before it, in words for the
 -- tooltip; nil when there's no comparison to make.
@@ -153,6 +173,8 @@ local function ReferenceText(change, fights)
     )
 end
 
+-- The main figures -----------------------------------------------------------
+
 -- The game's running figures for this fight are passed to the text
 -- without being looked at. Each is run under pcall on its own: if the
 -- game won't hand one over, that one shows a dash and the rest carry on.
@@ -232,16 +254,8 @@ local function ShowLast()
     reference = change and ReferenceText(change, fights) or nil
 end
 
-local function Refresh()
-    if not widget then
-        return
-    end
-
-    widget:SetShown(ns.settings.widget)
-    if not ns.settings.widget then
-        return
-    end
-
+--- Redraws the part that changes while a fight is going on.
+local function RefreshMain()
     if fightStart then
         ShowLive()
     else
@@ -259,6 +273,156 @@ local function Refresh()
     end
 end
 
+-- Under the main figures -------------------------------------------------------
+
+--- The fights the "session" figures cover, and what to call them: the
+--- session in progress if the player started one, otherwise everything
+--- since they logged in.
+local function SessionSoFar()
+    local recording = ns.Recorder.Open()
+    if recording then
+        return ns.Recorder.FightsOf(recording), "Session " .. recording.number
+    end
+
+    local fights = {}
+    for _, fight in ipairs(ns.character.fights) do
+        if fight.at >= loggedInAt then
+            table.insert(fights, fight)
+        end
+    end
+    return fights, "This session"
+end
+
+--- Fills one line of the lower part: text at the left, text at the right.
+local function SetLine(line, top, left, right)
+    line.left:ClearAllPoints()
+    line.left:SetPoint("TOPLEFT", 10, -top)
+    line.left:SetPoint("RIGHT", line.right, "LEFT", -6, 0)
+    line.left:SetText(left)
+
+    line.right:ClearAllPoints()
+    line.right:SetPoint("TOPRIGHT", -10, -top)
+    line.right:SetText(right or "")
+
+    line.left:Show()
+    line.right:Show()
+end
+
+--- Lays out the recent fights and the session's figures, whichever are
+--- switched on, and sets the panel's height to fit them.
+local function RefreshLower()
+    local lines, rules = widget.lines, widget.rules
+    local used, ruled = 0, 0
+    local top = MAIN_HEIGHT
+
+    local function Rule()
+        ruled = ruled + 1
+        local rule = rules[ruled]
+        rule:ClearAllPoints()
+        rule:SetPoint("TOPLEFT", 10, -(top + BLOCK_GAP / 2 - 1))
+        rule:SetPoint("RIGHT", -10, 0)
+        rule:Show()
+        top = top + BLOCK_GAP
+    end
+
+    local function Line(left, right)
+        used = used + 1
+        SetLine(lines[used], top, left, right)
+        top = top + LINE_HEIGHT
+    end
+
+    -- The few fights before the one in the main figures, newest first.
+    local fights = ns.character.fights
+    local wanted = RECENT_COUNTS[ns.settings.widgetRecent] or 0
+    local shown = math.min(wanted, #fights - 1)
+    if shown > 0 then
+        Rule()
+        for back = 1, shown do
+            local fight = fights[#fights - back]
+            Line(
+                Kit.Colored(fight.target or "Fight", MUTED),
+                ns.Rate(fight.damage / fight.length) .. " DPS"
+            )
+        end
+    end
+
+    if ns.settings.widgetStats then
+        local session, name = SessionSoFar()
+        local summary = ns.Summary.Of(session)
+
+        Rule()
+        Line(
+            Kit.Colored(name, Kit.GOLD),
+            summary.fights == 1 and "1 fight" or summary.fights .. " fights"
+        )
+        if summary.fights > 0 then
+            local crit = summary.critRate and ns.Percent(summary.critRate) .. " crit" or ""
+            Line(Kit.Colored("Average", MUTED) .. " " .. ns.Rate(summary.dps) .. " DPS", crit)
+
+            -- The size of a blow is worked out, not read, hence "about".
+            local sizes = summary.sizes
+            if sizes and sizes.biggest then
+                Line(
+                    Kit.Colored("Biggest hit", MUTED) .. " about " .. ns.Number(sizes.biggest),
+                    sizes.biggestCrit == sizes.biggest and "a crit" or ""
+                )
+            end
+        end
+    end
+
+    for index = used + 1, #lines do
+        lines[index].left:Hide()
+        lines[index].right:Hide()
+    end
+    for index = ruled + 1, #rules do
+        rules[index]:Hide()
+    end
+
+    -- A little room under the last line, when there are any.
+    widget:SetHeight(top > MAIN_HEIGHT and top + 6 or MAIN_HEIGHT)
+end
+
+--- Shows or hides our mark in the corner, and moves the title to suit.
+local function RefreshBranding()
+    local branded = ns.settings.widgetBrand
+    widget.mark:SetShown(branded)
+
+    widget.title:ClearAllPoints()
+    if branded then
+        widget.title:SetPoint("LEFT", widget.mark, "RIGHT", 4, 0)
+    else
+        widget.title:SetPoint("TOPLEFT", 10, -9)
+    end
+    widget.title:SetPoint("RIGHT", widget.time, "LEFT", -6, 0)
+end
+
+local function Refresh()
+    if not widget then
+        return
+    end
+
+    widget:SetShown(ns.settings.widget)
+    if not ns.settings.widget then
+        return
+    end
+
+    RefreshBranding()
+    RefreshMain()
+    RefreshLower()
+end
+
+-- Menu and tooltip -----------------------------------------------------------
+
+--- Adds a tick box to the menu for one of the panel's own settings.
+local function AddToggle(root, label, key, on, off)
+    root:CreateCheckbox(label, function()
+        return ns.settings[key] ~= off
+    end, function()
+        ns.settings[key] = ns.settings[key] == off and on or off
+        ns.Publish("SETTINGS_CHANGED")
+    end)
+end
+
 local function ShowMenu(self)
     MenuUtil.CreateContextMenu(self, function(_, root)
         root:CreateTitle(ns.TITLE)
@@ -266,6 +430,14 @@ local function ShowMenu(self)
             ns.ToggleRecording()
         end)
         root:CreateButton("Open Temper", OpenWindow)
+
+        root:CreateDivider()
+        root:CreateTitle("Show on this panel")
+        AddToggle(root, "Recent fights", "widgetRecent", 2, 1)
+        AddToggle(root, "Session figures", "widgetStats", true, false)
+        AddToggle(root, "The Temper icon", "widgetBrand", true, false)
+
+        root:CreateDivider()
         root:CreateButton("Options", function()
             ns.OpenOptions()
         end)
@@ -294,6 +466,8 @@ local function ShowTooltip(self)
     GameTooltip:Show()
 end
 
+-- Building it -------------------------------------------------------------------
+
 local function Label(font, justify)
     local label = widget:CreateFontString(nil, "ARTWORK", font)
     label:SetJustifyH(justify or "LEFT")
@@ -304,7 +478,7 @@ end
 local function Create()
     -- The game's own tooltip border, so it looks like it belongs.
     widget = CreateFrame("Button", "TemperWidget", UIParent, "TooltipBackdropTemplate")
-    widget:SetSize(WIDTH, HEIGHT)
+    widget:SetSize(WIDTH, MAIN_HEIGHT)
     widget:SetFrameStrata("LOW")
     widget:SetClampedToScreen(true)
 
@@ -336,29 +510,26 @@ local function Create()
     widget:SetScript("OnEnter", ShowTooltip)
     widget:SetScript("OnLeave", GameTooltip_Hide)
 
-    -- Three lines share the 64 of height: the title from 8 down to 22, the
-    -- figures from 26 to 42, and the counts from 45 to 55, which leaves 9
-    -- under them. Across, each line keeps 10 clear at both ends.
+    -- Everything hangs from the top edge, so that when the panel grows to
+    -- hold more lines the main figures stay where they are.
 
     -- Top line: our mark, what was fought, and for how long.
-    local mark = widget:CreateTexture(nil, "ARTWORK")
-    mark:SetTexture(ICON)
-    mark:SetSize(14, 14)
-    mark:SetPoint("TOPLEFT", 9, -8)
+    widget.mark = widget:CreateTexture(nil, "ARTWORK")
+    widget.mark:SetTexture(ICON)
+    widget.mark:SetSize(14, 14)
+    widget.mark:SetPoint("TOPLEFT", 9, -8)
 
     widget.time = Label("GameFontHighlightSmall", "RIGHT")
     widget.time:SetPoint("TOPRIGHT", -10, -9)
     widget.time:SetTextColor(unpack(MUTED))
 
     widget.title = Label("GameFontNormalSmall")
-    widget.title:SetPoint("LEFT", mark, "RIGHT", 4, 0)
-    widget.title:SetPoint("RIGHT", widget.time, "LEFT", -6, 0)
 
     -- Middle line: DPS in large figures with its arrow, and the total at
     -- the other end. Each figure has its label as a separate piece of
     -- text, because a live figure can't be joined to anything.
     widget.dps = Label("GameFontHighlightLarge")
-    widget.dps:SetPoint("TOPLEFT", mark, "BOTTOMLEFT", 1, -4)
+    widget.dps:SetPoint("TOPLEFT", 10, -26)
 
     local dpsLabel = Label("GameFontHighlightSmall")
     dpsLabel:SetPoint("BOTTOMLEFT", widget.dps, "BOTTOMRIGHT", 3, 1)
@@ -370,26 +541,43 @@ local function Create()
     widget.arrow:Hide()
 
     local damageLabel = Label("GameFontHighlightSmall", "RIGHT")
-    damageLabel:SetPoint("TOPRIGHT", widget, "TOPRIGHT", -10, -31)
+    damageLabel:SetPoint("TOPRIGHT", -10, -31)
     damageLabel:SetTextColor(unpack(MUTED))
     damageLabel:SetText("damage")
 
     widget.damage = Label("GameFontHighlight", "RIGHT")
     widget.damage:SetPoint("BOTTOMRIGHT", damageLabel, "BOTTOMLEFT", -3, 0)
 
-    -- Bottom line: hits and crits, and at the right-hand end whether a
+    -- Third line: hits and crits, and at the right-hand end whether a
     -- session is being recorded. The counts stop short of that, and are
     -- cut off with dots sooner than run into it.
     widget.recording = Label("GameFontHighlightSmall", "RIGHT")
-    widget.recording:SetPoint("BOTTOMRIGHT", -10, 9)
+    widget.recording:SetPoint("TOPRIGHT", -10, -45)
 
     widget.counts = Label("GameFontHighlightSmall")
-    widget.counts:SetPoint("BOTTOMLEFT", 10, 9)
+    widget.counts:SetPoint("TOPLEFT", 10, -45)
     widget.counts:SetPoint("RIGHT", widget.recording, "LEFT", -6, 0)
     widget.counts:SetTextColor(unpack(MUTED))
+
+    -- Lines for the lower part, made once and filled as needed: the most
+    -- recent fights there can be, and three for the session.
+    widget.lines, widget.rules = {}, {}
+    for index = 1, MOST_RECENT + 3 do
+        widget.lines[index] = {
+            left = Label("GameFontHighlightSmall"),
+            right = Label("GameFontHighlightSmall", "RIGHT"),
+        }
+    end
+    for index = 1, 2 do
+        local rule = widget:CreateTexture(nil, "ARTWORK")
+        rule:SetColorTexture(1, 1, 1, 0.12)
+        rule:SetHeight(1)
+        widget.rules[index] = rule
+    end
 end
 
 ns.Subscribe("DATABASE_READY", function()
+    loggedInAt = GetServerTime()
     Create()
     Refresh()
 end)
@@ -398,7 +586,7 @@ ns.Subscribe("FIGHTS_CHANGED", Refresh)
 ns.Subscribe("EXPERIMENTS_CHANGED", Refresh)
 ns.Subscribe("SETTINGS_CHANGED", Refresh)
 
--- A fight: keep the panel ticking over while it lasts. These are
+-- A fight: keep the main figures ticking over while it lasts. These are
 -- registered after the fight record's own handlers, so by the time the
 -- second one runs the finished fight has already been saved.
 ns.OnEvent("PLAYER_REGEN_DISABLED", function()
@@ -408,7 +596,11 @@ ns.OnEvent("PLAYER_REGEN_DISABLED", function()
     if ticker then
         ticker:Cancel()
     end
-    ticker = C_Timer.NewTicker(LIVE_REFRESH_SECONDS, Refresh)
+    ticker = C_Timer.NewTicker(LIVE_REFRESH_SECONDS, function()
+        if widget and ns.settings.widget then
+            RefreshMain()
+        end
+    end)
 end)
 
 ns.OnEvent("PLAYER_REGEN_ENABLED", function()

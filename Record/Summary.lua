@@ -114,6 +114,41 @@ local function FinishSplit(split)
     end
 end
 
+-- Fewer fights than this and "the earlier half" is one or two fights.
+local FEWEST_FOR_A_TREND = 6
+
+--- DPS in the earlier and the later half of a set of fights.
+---@return table|nil  { early, late }; nil with too few fights to halve
+local function Trend(fights)
+    if not fights or #fights < FEWEST_FOR_A_TREND then
+        return nil
+    end
+
+    local ordered = {}
+    for _, fight in ipairs(fights) do
+        table.insert(ordered, fight)
+    end
+    table.sort(ordered, function(a, b)
+        return (a.at or 0) < (b.at or 0)
+    end)
+
+    local half = math.floor(#ordered / 2)
+    local function Rate(from, to)
+        local damage, seconds = 0, 0
+        for index = from, to do
+            damage = damage + ordered[index].damage
+            seconds = seconds + ordered[index].length
+        end
+        return seconds > 0 and damage / seconds or nil
+    end
+
+    local early, late = Rate(1, half), Rate(#ordered - half + 1, #ordered)
+    if not early or not late then
+        return nil
+    end
+    return { early = early, late = late }
+end
+
 --- Sums up a set of fights.
 ---@param fights table  list of fights, in any order
 ---@return table summary:
@@ -144,7 +179,10 @@ end
 ---   rested      { fights, rest, seconds, damage, perMinute }: for fights
 ---               whose rest beforehand is known, the damage a minute once
 ---               that rest is counted
----   starved     times a skill was pressed without the mana or energy
+---   resource    what the player fights with: "MANA", "ENERGY"...
+---   trend       { early, late }: DPS in the earlier and later half of
+---               the fights, when there are enough to halve; else nil
+---   starved     times an ability was tried without the mana or energy
 ---   sizes       how hard blows landed, where that could be worked out;
 ---               all of it an estimate. nil if none could be:
 ---                 hits, total, crits, critTotal   blows sized, and sums
@@ -312,7 +350,10 @@ function Summary.Of(fights)
         summary.rested = rested
     end
 
+    summary.trend = Trend(fights)
+
     if newest then
+        summary.resource = newest.resource
         summary.level = newest.level
         summary.enemyLevel = newest.enemyLevel
         summary.weapons = newest.weapons

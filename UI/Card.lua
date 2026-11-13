@@ -435,9 +435,9 @@ local function AddFigure(label, figure)
     GameTooltip:AddDoubleLine(label, figure, Kit.GOLD[1], Kit.GOLD[2], Kit.GOLD[3], 1, 1, 1)
 end
 
---- The game's own tooltip for the ability, with our figures underneath.
---- The bar itself only has room for damage and share; what each use did
---- and what it cost are here for whoever wants them.
+--- What an ability did, in a tooltip of our own: its name and rank, then
+--- the figures the bar has no room for. The game's own tooltip for the
+--- ability is a paragraph of rules, which isn't what's wanted here.
 local function ShowAbilityTooltip(bar)
     local ability = bar.ability
     if not ability then
@@ -445,13 +445,11 @@ local function ShowAbilityTooltip(bar)
     end
 
     GameTooltip:SetOwner(bar, "ANCHOR_RIGHT")
-    if ability.id and ability.id ~= 0 then
-        GameTooltip:SetSpellByID(ability.id)
-    else
-        GameTooltip:SetText(ability.name)
+    GameTooltip:SetText(ability.name, 1, 1, 1)
+    if ability.rank then
+        GameTooltip:AddLine(ability.rank, Kit.MUTED[1], Kit.MUTED[2], Kit.MUTED[3])
     end
 
-    GameTooltip:AddLine(" ")
     AddFigure("Damage", ("%s (%s)"):format(ns.Number(ability.damage), ns.Percent(ability.share)))
     if ability.perCast then
         AddFigure(

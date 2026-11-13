@@ -120,8 +120,8 @@ ns.OnEvent("PLAYER_LOGIN", function()
         category,
         "motion",
         "How the numbers move",
-        "Steady stream is the calmest: numbers stay put and step up a line as new ones "
-            .. "arrive, like a chat log. The others drift, arc or shrink as they go.",
+        "Rising stream is the calmest: small numbers that climb straight up at a steady "
+            .. "pace, like a scrolling log. The others stay put, arc or shrink as they go.",
         motions
     )
 
@@ -207,6 +207,29 @@ ns.OnEvent("PLAYER_LOGIN", function()
         "A small panel with your DPS, damage, hits and crits for the fight you're in, or "
             .. "the last one. Click it to open Temper, right-click for a menu, drag it "
             .. "anywhere."
+    )
+
+    AddDropdown(
+        category,
+        "widgetRecent",
+        "Recent fights on the panel",
+        "A line for each of the fights before the last one, with its DPS.",
+        { "None", "Last 3", "Last 5" }
+    )
+
+    AddCheckbox(
+        category,
+        "widgetStats",
+        "Session figures on the panel",
+        "How many fights, your average DPS, how often you crit and your biggest hit, for "
+            .. "the session you started or else since you logged in."
+    )
+
+    AddCheckbox(
+        category,
+        "widgetBrand",
+        "The Temper icon on the panel",
+        "Untick for a plainer panel."
     )
 
     AddCheckbox(

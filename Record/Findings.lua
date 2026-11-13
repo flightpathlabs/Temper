@@ -63,7 +63,13 @@ local EMPTY = 0.1
 
 -- Pauses between fights are worth a sentence once they add up to this
 -- much of the time spent fighting.
-local MUCH_REST = 0.5
+-- How much more one ability has to give for its cost than another before
+-- it's worth suggesting the cost be spent there instead.
+local CLEARLY_BETTER_VALUE = 1.2
+
+-- How far DPS has to move between the earlier and later half of a set of
+-- fights before it's called a trend.
+local TREND_WORTH_MENTIONING = 0.1
 
 -- Shares the way people say them. How each use of an ability went is an
 -- estimate, and "2 in 5" claims no more precision than that.
@@ -388,35 +394,53 @@ function Findings.For(summary, comparison)
         )
     end
 
-    -- Said as rest for each minute of fighting: both are lengths of time
-    -- the player already has a feel for, and it reads the same for one
-    -- fight as for twenty.
-    local rested = summary.rested
-    if rested and rested.seconds > 0 and rested.rest >= rested.seconds * MUCH_REST then
-        local perMinute = rested.rest / rested.seconds * 60
+    -- The game hides how much mana is left, but it does say so each time
+    -- an ability is tried without enough. Only mana is worth a word:
+    -- energy and rage are meant to run out.
+    if summary.resource == "MANA" and summary.starved >= STARVED_OFTEN then
+        Say("warning", "You ran short of mana %d times in %s.", summary.starved, these)
+    end
+
+    -- How DPS moved across the fights themselves, when there are enough
+    -- of them for the two halves to mean something.
+    local trend = summary.trend
+    local moved = trend and ns.Change(trend.early, trend.late)
+    if moved and math.abs(moved) >= TREND_WORTH_MENTIONING then
         Say(
-            "tip",
-            "You rested about %s for every minute of fighting.",
-            ns.Duration(math.floor(perMinute / 5 + 0.5) * 5)
+            moved > 0 and "good" or "tip",
+            "Your DPS %s over %s: %s in the earlier half, %s in the later.",
+            moved > 0 and "rose" or "fell",
+            these,
+            ns.Rate(trend.early),
+            ns.Rate(trend.late)
         )
     end
 
-    -- The game hides how much mana or energy is left, but it does say so
-    -- each time an ability is tried without enough.
-    if summary.starved >= STARVED_OFTEN then
-        Say("warning", "You ran short of mana or energy %d times in %s.", summary.starved, these)
-    end
-
-    -- Then what's working well.
+    -- Then what an ability's cost buys. Where one gives clearly more for
+    -- its mana or energy than another, say what the difference comes to
+    -- in damage: that's a choice the player can make.
     local best, worst = BestValue(summary)
-    if best then
+    if best and best.perCost >= worst.perCost * CLEARLY_BETTER_VALUE then
+        local resource = ns.Summary.PowerWord(best.power)
+        Say(
+            "tip",
+            "%s costs %d %s for about %s damage. The same %s spent on %s would do about %s.",
+            worst.name,
+            worst.cost,
+            resource,
+            ns.Number(worst.perCast),
+            resource,
+            best.name,
+            ns.Number(worst.cost * best.perCost)
+        )
+    elseif best then
         Say(
             "good",
-            "Best value for %s: %s, %.1f damage per point. %s gives %.1f.",
-            ns.Summary.PowerWord(best.power),
+            "%s and %s give about the same for their %s: %.1f and %.1f damage per point.",
             best.name,
-            best.perCost,
             worst.name,
+            ns.Summary.PowerWord(best.power),
+            best.perCost,
             worst.perCost
         )
     end

@@ -7,16 +7,20 @@ local _, ns = ...
 -- appeared, how solid it is and how large. Nothing here touches a frame,
 -- which keeps the motions easy to add to and easy to reason about.
 --
--- Whatever the motion, a new number nudges the ones before it upward to
--- make room (see Lane.lua). In the steady stream that nudge is the only
--- movement there is.
+-- Whatever the motion, a number arriving on the heels of another nudges
+-- the earlier one up to make room (see Lane.lua).
 
 local Motions = {}
 ns.Motions = Motions
 
--- A critical hit lands oversized and settles within this many seconds.
+-- How fast the rising stream climbs, in pixels a second. Slow enough to
+-- read, quick enough that a line has cleared before the next arrives.
+local RISE_SPEED = 26
+
+-- A critical hit lands slightly oversized and settles within this many
+-- seconds.
 local POP_SECONDS = 0.14
-local POP_SIZE = 0.35
+local POP_SIZE = 0.25
 
 --- Full strength until `from`, then a steady fade to nothing.
 local function Fade(progress, from)
@@ -30,19 +34,22 @@ end
 -- is the order in the options and must not be shuffled.
 
 Motions[1] = {
-    label = "Steady stream",
-    -- Stays where it lands. Each new number steps the column up one line,
-    -- like lines in a chat window, and the oldest fade off the top.
+    label = "Rising stream",
+    -- Straight up at one steady pace for as long as it stays, like lines
+    -- scrolling up a page. Nothing sideways, nothing sudden.
+    ---@param life number  seconds the number is on screen for
     ---@return number dx, number dy, number alpha, number scale
-    move = function(progress)
-        return 0, 0, Fade(progress, 0.75), 1
+    move = function(progress, _, life)
+        return 0, RISE_SPEED * progress * life, Fade(progress, 0.7), 1
     end,
 }
 
 Motions[2] = {
-    label = "Rise and fade",
+    label = "Stay and step up",
+    -- Stays where it lands. Each new number steps the column up one line,
+    -- like lines in a chat window, and the oldest fade off the top.
     move = function(progress)
-        return 0, 46 * progress, Fade(progress, 0.7), 1
+        return 0, 0, Fade(progress, 0.75), 1
     end,
 }
 

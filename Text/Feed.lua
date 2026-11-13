@@ -11,9 +11,9 @@ ns.Feed = Feed
 
 local BLIZZARD_DAMAGE_TEXT = "floatingCombatTextCombatDamage_v2"
 
-local CRIT_SCALE = 1.3
+local CRIT_SCALE = 1.25
 local GLANCING_SCALE = 0.85
-local WORD_SCALE = 0.7
+local WORD_SCALE = 0.85
 
 local WHITE = { 1, 1, 1 }
 local GREY = { 0.72, 0.72, 0.72 }

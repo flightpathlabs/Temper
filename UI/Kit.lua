@@ -268,13 +268,20 @@ end
 --- game's glow under the mouse, and its band across a row that's chosen.
 --- Call row.chosen:SetShown(...) to mark it.
 function Kit.DressRow(row)
+    -- Both are glows, meant to be added to what's under them. Drawn
+    -- plainly they're solid bands, and the one under the mouse sits above
+    -- the row's text and hides it.
     row.chosen = row:CreateTexture(nil, "BACKGROUND")
     row.chosen:SetAtlas("auctionhouse-ui-row-select")
+    row.chosen:SetBlendMode("ADD")
+    row.chosen:SetAlpha(0.7)
     row.chosen:SetAllPoints()
     row.chosen:Hide()
 
     row.hover = row:CreateTexture(nil, "HIGHLIGHT")
     row.hover:SetAtlas("auctionhouse-ui-row-highlight")
+    row.hover:SetBlendMode("ADD")
+    row.hover:SetAlpha(0.5)
     row.hover:SetAllPoints()
 end
 

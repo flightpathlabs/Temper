@@ -83,6 +83,9 @@ local function Create()
     frame:Hide()
 
     ButtonFrameTemplate_HidePortrait(frame)
+
+    -- Without a portrait the strip under the title bar holds nothing.
+    ButtonFrameTemplate_HideAttic(frame)
     frame:SetTitle(ns.TITLE)
 
     frame:SetMovable(true)

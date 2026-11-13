@@ -9,8 +9,9 @@ local _, ns = ...
 -- measured either. So a number is only ever moved by changing how far it
 -- sits from the nameplate, never by asking where it is now.
 --
--- New numbers appear at the bottom of the column and step the earlier
--- ones up a line, so the column reads like a short log of recent hits.
+-- New numbers appear at the bottom of the column and rise steadily, so
+-- the column reads like a short scrolling log of recent hits. Two that
+-- arrive together are kept a line apart.
 --
 -- When the target has no nameplate, numbers appear at a fixed spot above
 -- the middle of the screen instead.
@@ -25,12 +26,12 @@ local MAX_NUMBERS = 24
 local STAY_SECONDS = { 1.4, 2.8, 4.5 }
 local CRIT_LINGER = 1.25
 
--- Room to leave between one number and the next, at normal size.
-local LINE_HEIGHT = 17
-
--- The game's combat font is drawn very large and scaled down by whoever
--- uses it. This brings it to a little under the height of a line.
-local FONT_SCALE = 15 / 64
+-- The size of a number at normal size, in the game's ordinary text font
+-- with an outline so it reads over any background, and the room to leave
+-- between one number and the next.
+local FONT_SIZE = 13
+local LINE_HEIGHT = FONT_SIZE + 3
+local FONT = GameFontNormal:GetFont() or STANDARD_TEXT_FONT
 
 -- An ability's icon, when shown, is this many times the line height.
 local ICON_SIZE = 0.8
@@ -40,7 +41,7 @@ local ICON_SIZE = 0.8
 local STEP_SPEED = 12
 
 -- Setting values to sizes and distances.
-local SIZES = { 0.8, 1, 1.3 }
+local SIZES = { 0.85, 1, 1.25 }
 local GAPS = { 4, 22, 46 }
 
 -- For each side of the nameplate: the edge of the text that's pinned, the
@@ -95,7 +96,10 @@ local function Put(number, x, y, alpha, scale)
     local text = number.text
     text:SetPoint(number.point, number.anchor, number.anchorPoint, x, y)
     text:SetAlpha(alpha)
-    text:SetTextScale(scale * FONT_SCALE)
+
+    -- The size proper is in the font (see Lane.Show). This is only for
+    -- the brief swell of a critical hit and for the motion that shrinks.
+    text:SetTextScale(scale)
 end
 
 local function ShowIcon(number, texture)
@@ -104,7 +108,7 @@ local function ShowIcon(number, texture)
 end
 
 local function PutIcon(number, alpha, scale)
-    local size = LINE_HEIGHT * ICON_SIZE * scale
+    local size = LINE_HEIGHT * ICON_SIZE * scale * number.scale
     number.icon:SetSize(size, size)
     number.icon:SetAlpha(alpha)
 end
@@ -113,7 +117,7 @@ end
 local function Place(number, now, elapsed)
     local progress = (now - number.start) / number.life
     local motion = ns.Motions[ns.settings.motion] or ns.Motions[1]
-    local dx, dy, alpha, scale = motion.move(progress, number.lean)
+    local dx, dy, alpha, scale = motion.move(progress, number.lean, number.life)
 
     -- Step up toward the height the newer numbers have asked for, quickly
     -- but not in one jump.
@@ -121,7 +125,6 @@ local function Place(number, now, elapsed)
     number.lift = number.lift + remaining * math.min(1, elapsed * STEP_SPEED)
 
     number.rise = dy
-    scale = scale * number.scale
     if number.crit then
         scale = scale * ns.Motions.Pop(now - number.start)
     end
@@ -204,7 +207,7 @@ end)
 
 local function NewNumber()
     local number = {
-        text = holder:CreateFontString(nil, "OVERLAY", "CombatTextFontOutline"),
+        text = holder:CreateFontString(nil, "OVERLAY"),
         icon = holder:CreateTexture(nil, "OVERLAY"),
     }
 
@@ -266,6 +269,10 @@ function Lane.Show(value, look, unit)
     end
     number.scale = look.scale * (SIZES[ns.settings.textSize] or 1)
     number.crit = look.crit
+
+    -- A font has to be set before any text is, and this is where the
+    -- number gets its size.
+    number.text:SetFont(FONT, math.floor(FONT_SIZE * number.scale + 0.5), "OUTLINE")
     number.rise = 0
     number.lift = 0
     number.liftWanted = 0

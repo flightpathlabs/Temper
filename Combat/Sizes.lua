@@ -43,6 +43,12 @@ local LEAD_SECONDS = 2
 -- modifier. It's a sign the two figures weren't measuring the same blow.
 local LOWEST_RATIO, HIGHEST_RATIO = 0.6, 1.6
 
+-- How far above an ability's usual blow one blow of it can be and still
+-- be believed. Hits vary, and a critical hit is double or so; anything
+-- beyond that is two blows mistaken for one.
+local HIT_STRETCH = 1.6
+local CRIT_STRETCH = 3
+
 -- How much of a new reading of that ratio to believe, against what's been
 -- seen before.
 local LEARNING_RATE = 0.3
@@ -208,12 +214,27 @@ function Sizes.Finish(blows, fight)
         end
     end
 
+    local counts = BlowsBySpell(blows)
+
+    --- The most one blow of an ability could plausibly have done: a good
+    --- deal more than its usual blow, and more again for a critical hit,
+    --- but never more than everything that ability did.
+    local function Ceiling(blow)
+        local total = blow.spell and totals[blow.spell]
+        if not total then
+            return nil
+        end
+        local usual = total / (counts[blow.spell] or 1)
+        local stretch = blow.crit and CRIT_STRETCH or HIT_STRETCH
+        return math.min(usual * stretch, total * 1.05) + 1
+    end
+
     local sizes = { hits = 0, total = 0, crits = 0, critTotal = 0 }
     for _, blow in ipairs(blows) do
         local damage = blow.size and math.floor(blow.size * ratio + 0.5)
-        local most = blow.spell and totals[blow.spell]
+        local most = Ceiling(blow)
 
-        if damage and not (most and damage > most * 1.05 + 1) then
+        if damage and not (most and damage > most) then
             if blow.crit then
                 sizes.crits = sizes.crits + 1
                 sizes.critTotal = sizes.critTotal + damage

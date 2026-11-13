@@ -23,10 +23,15 @@ ns.Timeline = Timeline
 
 local Kit = ns.Kit
 
--- How much of a fight one line holds, and how often a time is marked
--- under it.
-local ROW_SECONDS = 30
+-- How much of a fight one line holds at most, and how often a time is
+-- marked under it. A short fight gets a shorter line, so its few icons
+-- aren't huddled at one end of a line made for half a minute.
+local LONGEST_ROW = 30
+local SHORTEST_ROW = 10
 local TICK_SECONDS = 5
+
+-- How much one line holds for the fight being shown.
+local rowSeconds = LONGEST_ROW
 
 -- The most a saved timeline holds (see Combat\Hits.lua). One that's full
 -- was cut short, and says so.
@@ -206,12 +211,12 @@ end
 ---@param width number  of the whole timeline
 ---@return number row, number x  the line, counting from 0, and how far in
 local function Seat(lane, t, scale, width)
-    local row = math.floor(t / ROW_SECONDS)
+    local row = math.floor(t / rowSeconds)
     if row > lane.row then
         lane.row, lane.free = row, INSET
     end
 
-    local x = math.max(INSET + (t - lane.row * ROW_SECONDS) * scale, lane.free)
+    local x = math.max(INSET + (t - lane.row * rowSeconds) * scale, lane.free)
     if x + lane.size + INSET > width then
         lane.row, x = lane.row + 1, INSET
     end
@@ -232,7 +237,7 @@ local function CreateRow(timeline)
     row.rule = timeline:CreateTexture(nil, "BACKGROUND")
     row.rule:SetColorTexture(Kit.MUTED[1], Kit.MUTED[2], Kit.MUTED[3], 0.6)
 
-    for index = 1, ROW_SECONDS / TICK_SECONDS do
+    for index = 1, LONGEST_ROW / TICK_SECONDS do
         local tick = timeline:CreateTexture(nil, "BACKGROUND")
         tick:SetColorTexture(Kit.MUTED[1], Kit.MUTED[2], Kit.MUTED[3], 0.6)
         tick:SetSize(1, TICK_HEIGHT)
@@ -282,7 +287,7 @@ local function ShowRow(timeline, row, index, reach, scale)
 
             time:ClearAllPoints()
             time:SetPoint("TOPLEFT", tick, "BOTTOMLEFT", 0, -2)
-            time:SetText(Clock(index * ROW_SECONDS + seconds))
+            time:SetText(Clock(index * rowSeconds + seconds))
             time:Show()
         else
             tick:Hide()
@@ -358,8 +363,12 @@ local function Set(self, fight)
         return
     end
 
+    -- Whole ticks, so the last time marked is the end of the line.
+    local wanted = math.ceil(fight.length / TICK_SECONDS) * TICK_SECONDS
+    rowSeconds = math.min(math.max(wanted, SHORTEST_ROW), LONGEST_ROW)
+
     local width = self:GetWidth()
-    local scale = (width - 2 * INSET - SKILL_SIZE) / ROW_SECONDS
+    local scale = (width - 2 * INSET - SKILL_SIZE) / rowSeconds
 
     local skills = { size = SKILL_SIZE, top = SKILL_TOP, alpha = 1, row = 0, free = INSET }
     local swings = {
@@ -392,8 +401,8 @@ local function Set(self, fight)
     -- Every line runs the full width except the last, which stops where
     -- the fight did, or where the icons do if they were crowded past it.
     local covered = Covered(fight)
-    local last = math.max(math.ceil(covered / ROW_SECONDS) - 1, skills.row, swings.row)
-    local reach = INSET + (covered - last * ROW_SECONDS) * scale + SKILL_SIZE
+    local last = math.max(math.ceil(covered / rowSeconds) - 1, skills.row, swings.row)
+    local reach = INSET + (covered - last * rowSeconds) * scale + SKILL_SIZE
     for _, lane in ipairs({ skills, swings }) do
         if lane.row == last then
             reach = math.max(reach, lane.free - SPACE)

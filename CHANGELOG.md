@@ -7,12 +7,11 @@ First version.
 **The numbers**
 
 - Your hits appear in a column by each enemy's nameplate and follow it. By
-  default they're a steady stream: small, staying put, stepping up a line
-  as new ones arrive, and lingering a few seconds so you can read back
-  over them.
+  default they're a rising stream: small numbers climbing straight up at
+  a steady pace, like a scrolling log.
 - Numbers show above your target and any other enemy that's fighting you,
   each with a column of its own.
-- Choose how they move (steady stream, rise and fade, arc away, shrink
+- Choose how they move (rising stream, stay and step up, arc away, shrink
   away), how long they stay, which side of the nameplate they sit on, how
   far off, and how large.
 - Critical hits are larger, land with a small pop, and can be gold, red or
@@ -26,6 +25,9 @@ First version.
   damage, a timer, hits, crits and misses) and the last fight's
   exact figures in between. Click it for the window, right-click for a
   menu, drag it anywhere, or turn it off.
+- Under those it can list your last few fights and a few figures for the
+  session: fights, average DPS, crit rate and biggest hit. Each of these,
+  and the Temper icon, can be switched off from the panel's menu.
 
 **Fights**
 
@@ -45,7 +47,7 @@ First version.
 - "What to work on" says in a few sentences what's holding your damage
   back: a weapon skill behind the level of the enemies you're fighting,
   an ability that keeps failing, time with no ability in use, running
-  short of mana.
+  short of mana, or an ability whose cost would do more spent on another.
 - A note can be left on any session.
 
 **Comparing**

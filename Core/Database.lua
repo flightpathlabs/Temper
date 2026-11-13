@@ -30,7 +30,7 @@ local addonName, ns = ...
 -- never assume the table is there, and never replace what did load with
 -- defaults. We only ever fill in what's missing.
 
-local SCHEMA = 2
+local SCHEMA = 3
 
 ns.DEFAULT_SETTINGS = {
     -- Show the player's hits in a lane by the target's nameplate.
@@ -39,7 +39,7 @@ ns.DEFAULT_SETTINGS = {
     -- Show numbers above every enemy being fought, not only the target.
     allEnemies = true,
 
-    -- How the numbers move: 1 a steady stream, 2 rise and fade, 3 arc
+    -- How the numbers move: 1 rise steadily, 2 stay and step up, 3 arc
     -- away, 4 shrink away.
     motion = 1,
 
@@ -73,6 +73,12 @@ ns.DEFAULT_SETTINGS = {
 
     -- The small panel that shows the fight in progress or the last one.
     widget = true,
+
+    -- On that panel: our icon in the corner; the few fights before the
+    -- last (1 none, 2 three, 3 five); and figures for the session so far.
+    widgetBrand = true,
+    widgetRecent = 2,
+    widgetStats = true,
 
     -- A small Record button on the screen. Off unless asked for: the window
     -- and the panel's menu both record, and there's a key binding.
@@ -138,8 +144,15 @@ ns.OnEvent("ADDON_LOADED", function(name)
     end
     -- The Record button was on to begin with in the first layout. Anyone
     -- coming from that never chose it, so they get the new default.
-    if db.settings.recordButton ~= nil and (db.schema or 1) < SCHEMA then
+    if db.settings.recordButton ~= nil and (db.schema or 1) < 2 then
         db.settings.recordButton = false
+    end
+
+    -- The motions were renumbered and the default replaced in the third
+    -- layout, so a saved choice no longer means what it did.
+    if (db.schema or 1) < 3 then
+        db.settings.motion = nil
+        db.settings.textSize = nil
     end
     FillIn(db.settings, ns.DEFAULT_SETTINGS)
 

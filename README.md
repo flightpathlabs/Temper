@@ -19,9 +19,9 @@ game data and nowhere else.
 
 **Tidy damage numbers.** Your hits appear in a column by each enemy's
 nameplate and follow it around, in place of numbers flying all over the
-screen. By default they're a steady stream: small, staying put, stepping
-up a line as new ones arrive. Critical hits are larger, a different
-colour, and land with a pop.
+screen. By default they're a rising stream: small numbers climbing
+straight up at a steady pace, like a scrolling log. Critical hits are a
+little larger and a different colour.
 
 **A panel for the fight you're in.** A small panel shows your DPS, damage,
 hits, crits and misses as the fight goes, and the last fight's exact

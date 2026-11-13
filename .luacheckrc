@@ -48,6 +48,7 @@ read_globals = {
     -- Blizzard's shared Lua helpers
     "AbbreviateNumbers",
     "BreakUpLargeNumbers",
+    "ButtonFrameTemplate_HideAttic",
     "ButtonFrameTemplate_HidePortrait",
     "CombatFeedbackText",
     "CreateColor",
@@ -67,6 +68,8 @@ read_globals = {
     "CreateFrame",
     "UIParent",
     "GameTooltip",
+    "GameFontNormal",
+    "STANDARD_TEXT_FONT",
     "Settings",
 
     -- Namespaced API
