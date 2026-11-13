@@ -211,6 +211,58 @@ local FROM_OTHERS = {
     look = { spell = 1243 },
 }
 
+-- The buffs worth asking another player for, one line each in the "From
+-- others" tooltip, lit or not. Each is satisfied by any of its spells: the
+-- one-target buff or its group version, and for a paladin any blessing,
+-- since a player only gets one from each paladin. Found by name like the
+-- list above.
+local MAJOR_BUFFS = {
+    {
+        english = "Power Word: Fortitude",
+        named = { 1243, 21562 }, -- and Prayer of Fortitude
+        look = { spell = 1243 },
+    },
+    {
+        english = "Mark of the Wild",
+        named = { 1126, 21849 }, -- and Gift of the Wild
+        look = { spell = 1126 },
+    },
+    {
+        english = "Arcane Intellect",
+        named = { 1459, 23028 }, -- and Arcane Brilliance
+        look = { spell = 1459 },
+    },
+    {
+        english = "Divine Spirit",
+        named = { 14752, 27681 }, -- and Prayer of Spirit
+        look = { spell = 14752 },
+    },
+    {
+        english = "Shadow Protection",
+        named = { 976 },
+        look = { spell = 976 },
+    },
+    {
+        english = "A Blessing",
+        label = "A paladin's Blessing",
+        named = {
+            19740, -- Might
+            19742, -- Wisdom
+            20217, -- Kings
+            1038, -- Salvation
+            19977, -- Light
+            20911, -- Sanctuary
+            25782, -- and the Greater ones
+            25894,
+            25898,
+            25895,
+            25890,
+            25899,
+        },
+        look = { spell = 20217 },
+    },
+}
+
 -- The class's own long-lasting buffs, by class as the game names classes
 -- in English whatever the language. Only buffs that last ten minutes or
 -- more and that belong up for every fight are here: a shout or a seal
@@ -422,6 +474,9 @@ local function Rebuild()
     className = class
 
     for _, kind in ipairs({ FOOD, ELIXIRS, FLASKS, SCROLLS, FROM_OTHERS }) do
+        Prepare(kind)
+    end
+    for _, kind in ipairs(MAJOR_BUFFS) do
         Prepare(kind)
     end
 
@@ -1007,6 +1062,46 @@ local function BuffLine(name, expires)
     return left and ("%s: %s"):format(name, left) or name
 end
 
+-- A small icon at the start of a tooltip line, trimmed of its border as
+-- the game trims spell icons, and greyed out for a buff that isn't up.
+local LINE_ICON = "|T%s:16:16:0:0:64:64:5:59:5:59|t "
+local GREY_LINE_ICON = "|T%s:16:16:0:0:64:64:5:59:5:59:110:110:110|t "
+
+local function WithIcon(icon, text, missing)
+    if not icon then
+        return text
+    end
+    return (missing and GREY_LINE_ICON or LINE_ICON):format(tostring(icon)) .. text
+end
+
+--- One line per buff worth asking another player for, lit or greyed out,
+--- then any of the world's buffs the player has.
+local function MajorLines(Add)
+    local counted = {}
+    for _, kind in ipairs(MAJOR_BUFFS) do
+        local aura = FindAll(kind)[1]
+        if aura then
+            counted[aura] = true
+            local line = BuffLine(aura.name, aura.expires)
+            if aura.own then
+                line = line .. " (your own)"
+            end
+            Add(WithIcon(aura.icon or kind.icon, line))
+        else
+            -- Named by its one-target version, in the player's language.
+            local first = Read(C_Spell.GetSpellName, kind.named[1])
+            local name = kind.label or (type(first) == "string" and first) or kind.english
+            Add(WithIcon(kind.icon, name .. ": not up", true), true)
+        end
+    end
+
+    for _, aura in ipairs(FindFromOthers()) do
+        if not counted[aura] then
+            Add(WithIcon(aura.icon, BuffLine(aura.name, aura.expires)))
+        end
+    end
+end
+
 -- What lights each icon, for its tooltip when it's dim.
 local HINTS = {
     rested = "Lights while you have rested experience. It builds up while you're in an inn "
@@ -1071,6 +1166,8 @@ function Readiness.Tooltip(key)
         end
     elseif key == "weapon" then
         WeaponLines(Add)
+    elseif key == "others" then
+        MajorLines(Add)
     elseif key == "class" then
         for _, need in ipairs(needs) do
             local first = FindAll(need)[1]
@@ -1086,7 +1183,7 @@ function Readiness.Tooltip(key)
         end
     end
 
-    if not slot.lit or key == "class" or key == "elixir" then
+    if (not slot.lit or key == "class" or key == "elixir") and key ~= "others" then
         Add(HINTS[key], true)
     end
     if fighting then
