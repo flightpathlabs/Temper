@@ -71,10 +71,7 @@ end
 
 --- "2 interrupts", or nothing when there were none.
 local function InterruptsText(interrupts)
-    if interrupts == 0 then
-        return ""
-    end
-    return ("%d %s"):format(interrupts, interrupts == 1 and "interrupt" or "interrupts")
+    return interrupts > 0 and ns.Count(interrupts, "interrupt") or ""
 end
 
 -- The main figures -----------------------------------------------------------

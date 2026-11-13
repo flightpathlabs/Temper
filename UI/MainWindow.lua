@@ -261,9 +261,14 @@ function ns.ShowRecording(recording)
     ns.ShowFights(ns.Recorder.FightsOf(recording), earlier and ns.Recorder.FightsOf(earlier) or nil)
 end
 
---- Opens the window on the Healing tab. This is what a click on the
---- healing panel does.
-function ns.ShowHealing()
+--- Opens the window on the Healing tab: on the given fights, as from the
+--- Fights page, or with none given, as from the healing panel, on
+--- whichever of its own choices it was last on.
+---@param fights table|nil  list of fights
+function ns.ShowHealing(fights)
+    if ns.HealingTab then
+        ns.HealingTab.Cover(fights)
+    end
     Open(HEALING)
 end
 

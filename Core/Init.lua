@@ -51,6 +51,15 @@ function ns.Duration(seconds)
     return ("%dm %02ds"):format(math.floor(seconds / 60), seconds % 60)
 end
 
+--- A count with the thing counted.
+---@param count number  rounded to a whole number
+---@param thing string  what's counted, as one of them: "cast"
+---@return string  e.g. "1 cast", "3 casts"
+function ns.Count(count, thing)
+    count = math.floor(count + 0.5)
+    return ("%d %s%s"):format(count, thing, count == 1 and "" or "s")
+end
+
 --- How much something changed, as a fraction of where it started.
 ---@param before number
 ---@param after number

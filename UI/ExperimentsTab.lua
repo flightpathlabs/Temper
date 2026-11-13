@@ -7,9 +7,15 @@ local _, ns = ...
 -- its page is a checklist of three steps rather than a table of figures:
 -- win a few fights as you are, make your change, win the same number
 -- again. The step the player is on is marked, and the one button they
--- have to click sits on the step that needs it. The verdict appears
--- underneath as soon as there's anything to say, and is only given a
--- colour and an arrow when it's sure enough of itself to deserve them.
+-- have to click sits on the step that needs it. The verdict comes next as
+-- soon as there's anything to say, with the figures it rests on under it,
+-- and is only given a colour and an arrow when it's sure enough of itself
+-- to deserve them.
+--
+-- The page and the form are built from the same pieces as the Fights page
+-- and laid out the same way (see "Pages" in Kit.lua): a title on its line
+-- at the top, and under it each part in a box of its own, so that moving
+-- between the two tabs nothing jumps.
 --
 -- All the reckoning is in Record\Experiments.lua. This file only draws it.
 
@@ -18,6 +24,10 @@ ns.ExperimentsTab = ExperimentsTab
 
 local Kit = ns.Kit
 local Experiments = ns.Experiments
+
+local Paragraph = Kit.Paragraph
+local Place, PlaceText = Kit.Place, Kit.PlaceText
+local Inside, PlaceSection = Kit.Inside, Kit.PlaceSection
 
 -- The list sits in a sunken panel with its scroll bar, laid out as on the
 -- Fights tab so the two don't jump when switching between them. The panel
@@ -28,15 +38,59 @@ local LIST_EDGE = 4
 local PANEL_WIDTH = 292
 local ROW_HEIGHT = 40
 
-local STEP_HEIGHT = 42
-local CONTINUE_HEIGHT = 28
-local QUESTION_WIDTH = 320
-local TILE_WIDTH = 170
+-- Space between the right-hand side's edge and what's on it, and the room
+-- kept clear down its right for the scroll bar. Both as on the Fights page.
+local MARGIN = 14
+local SCROLL_BAR_ROOM = 24
 
--- The verdict's heading sits this far under the steps, and further when
--- the line about fights being counted is showing between them.
-local VERDICT_GAP = 12
-local COUNTED_ROOM = 20
+-- Down the top: the line the title stands on, with the small print to its
+-- right, and where the sections start.
+local TITLE_FOOT = 26
+local TITLE_GAP = 12
+local HEAD_HEIGHT = 32
+
+-- How wide the page is when the window is its usual size. Only used if
+-- it's filled before the game has worked out its real width.
+local USUAL_WIDTH = 547
+
+-- Space between one section and the next, between lines of text in one,
+-- and above a button.
+local SECTION_GAP = Kit.SECTION_GAP
+local LINE_GAP = 6
+local BUTTON_GAP = 8
+
+-- A step of the checklist is an icon with its words starting this far in
+-- to clear it: what to do, and a note under that. The middle step has the
+-- button as well while it's wanted.
+local STEP_ICON = 16
+local STEP_INDENT = 26
+local NOTE_GAP = 4
+local STEP_GAP = 10
+local CONTINUE_HEIGHT = 28
+
+-- The verdict: its headline, with an arrow before it when it has earned
+-- one, and under a rule the figures it rests on, a cell for each.
+local HEADLINE_HEIGHT = 20
+local HEADLINE_ARROW = 16
+local HEADLINE_INDENT = 24
+local RULE_GAP = 10
+local FIGURES_HEIGHT = 44
+local FIGURE_WIDTH = 110
+local FIGURE_PADDING = 10
+local FIGURE_VALUE_TOP = 15
+local FIGURE_COUNT_TOP = 33
+local FIGURE_ARROW = 12
+local FIGURE_ARROW_GAP = 3
+
+-- The form: the question box, whose border the template draws a little
+-- outside it; the row the menu of sizes stands in; and the line of advice
+-- with its icon.
+local BOX_NUDGE = 5
+local BOX_HEIGHT = 22
+local SIZE_ROW = 28
+local MENU_WIDTH = 140
+local ADVICE_ICON = 20
+local ADVICE_INDENT = 28
 
 -- How many fights in each set the form offers.
 local SIZES = { 3, 5, 8 }
@@ -53,6 +107,10 @@ local NONE = "No experiments yet.\n\nExperiments are kept on this computer and n
 local IDEA = "No two fights go the same way, so one fight can't tell you whether a change "
     .. "helped. An experiment compares a few fights before the change with a few after it."
 
+local SIZE_HINT = "More fights take longer and give a surer answer."
+
+local READY = "It starts straight away. Your next fights are the first set."
+
 local FAIRER = "The same kind of enemy each time makes it fairer."
 
 -- Said under the steps while a set is being recorded. With the panel
@@ -62,6 +120,12 @@ local COUNTED_WITH_PANEL = "You can close this window: fights are counted as you
     .. "and the panel keeps count."
 local COUNTED_WITHOUT_PANEL = "Fights are counted as you win them. Check back here to see "
     .. "when the set is done."
+
+-- Said in place of a verdict while there isn't one, and after one given
+-- before the second set is finished.
+local NOT_YET = "It will appear here once there are fights in both sets."
+local NOTHING_TO_COMPARE = "There aren't fights in both sets, so there's nothing to compare."
+local MAY_CHANGE = "The second set is still being recorded, so this may change."
 
 -- How far along a step is, for each state an experiment can be in.
 local STEP_STATES = {
@@ -331,44 +395,69 @@ local function BuildRows()
     return rows
 end
 
--- Pieces of the right-hand side ----------------------------------------------
+-- Laying out ---------------------------------------------------------------------
 
---- Text that runs on to as many lines as it needs. Anchor its left and
---- right edges, or give it a width, so it knows where to wrap.
-local function Paragraph(parent, font, justify)
-    local text = Kit.Text(parent, font, justify)
-    text:SetWordWrap(true)
-    text:SetJustifyV("TOP")
-    text:SetSpacing(3)
-    return text
+--- Notes a piece of the page, so that a fill can start by clearing every
+--- piece away and then show only the ones it places.
+local function Piece(page, piece)
+    table.insert(page.pieces, piece)
+    return piece
 end
 
---- Puts a region under another, the same width. Doing it again moves it.
-local function PlaceBelow(region, above, gap)
-    region:SetPoint("TOPLEFT", above, "BOTTOMLEFT", 0, -gap)
-    region:SetPoint("TOPRIGHT", above, "BOTTOMRIGHT", 0, -gap)
+--- The width there is for the sections, on the page or the form.
+local function WidthOf(frame)
+    local width = frame:GetWidth()
+    return width > 0 and width or USUAL_WIDTH
 end
+
+--- Puts a piece that keeps its own width in its place: a button, say,
+--- which Kit.Place would stretch to the width of the section.
+---@param indent number|nil  how far in from the layout's left edge
+local function PlaceFixed(layout, piece, gap, indent)
+    layout.y = layout.y + gap
+
+    piece:ClearAllPoints()
+    piece:SetPoint("TOPLEFT", layout.frame, "TOPLEFT", layout.left + (indent or 0), -layout.y)
+    piece:Show()
+
+    layout.y = layout.y + piece:GetHeight()
+end
+
+--- Places text in line with the words of the steps, clear of their icons.
+local function PlaceIndented(layout, text, gap, words)
+    local indented = {
+        frame = layout.frame,
+        left = layout.left + STEP_INDENT,
+        width = layout.width - STEP_INDENT,
+        y = layout.y,
+    }
+    PlaceText(indented, text, gap, words)
+    layout.y = indented.y
+end
+
+-- The steps --------------------------------------------------------------------
 
 --- One line of the checklist: an icon for how far along it is, what to
 --- do, and a note underneath.
-local function CreateStep(parent)
-    local step = CreateFrame("Frame", nil, parent)
-    step:SetHeight(STEP_HEIGHT)
+local function CreateStep(section)
+    local step = CreateFrame("Frame", nil, section)
 
-    step.icon = Kit.Icon(step, 16)
-    step.icon:SetPoint("TOPLEFT", 0, -3)
+    step.icon = Kit.Icon(step, STEP_ICON)
+    step.icon:SetPoint("TOPLEFT")
 
     step.title = Kit.Text(step, "GameFontHighlight")
-    step.title:SetPoint("TOPLEFT", 26, -4)
-    step.title:SetPoint("TOPRIGHT", 0, -4)
+    step.title:SetPoint("TOPLEFT", STEP_INDENT, -1)
 
-    step.note = Kit.Text(step, "GameFontHighlightSmall")
-    PlaceBelow(step.note, step.title, 4)
+    step.note = Paragraph(step, "GameFontHighlightSmall")
+    step.note:SetPoint("TOPLEFT", step.title, "BOTTOMLEFT", 0, -NOTE_GAP)
 
     return step
 end
 
-local function FillStep(step, state, title, note)
+--- Fills a step in and makes it as tall as what's in it.
+---@param width number  of the whole step, icon and all
+---@param button table|nil  the button to show under the note, if any
+local function FillStep(step, state, title, note, width, button)
     Kit.SetIcon(step.icon, STEP_ICONS[state])
 
     -- A step that hasn't been reached is greyed out rather than hidden, so
@@ -377,49 +466,190 @@ local function FillStep(step, state, title, note)
     step.icon:SetDesaturated(later)
     step.icon:SetAlpha(later and 0.5 or 1)
 
+    local wordsWidth = width - STEP_INDENT
+    step.title:SetWidth(wordsWidth)
     step.title:SetText(title)
     step.title:SetTextColor(unpack(STEP_COLORS[state]))
+    local height = 1 + step.title:GetStringHeight()
+
+    step.note:SetWidth(wordsWidth)
     step.note:SetText(note)
+    step.note:SetShown(note ~= "")
+    if note ~= "" then
+        height = height + NOTE_GAP + step.note:GetStringHeight()
+    end
+
+    if button then
+        button:ClearAllPoints()
+        button:SetPoint("TOPLEFT", STEP_INDENT, -(height + BUTTON_GAP))
+        height = height + BUTTON_GAP + CONTINUE_HEIGHT
+    end
+
+    step:SetHeight(math.max(STEP_ICON, height))
 end
 
---- One set's DPS in large type, with the number of fights it's the
---- average of underneath, where the kit's tile would put a change.
-local function CreateSetTile(parent)
-    local tile = Kit.Tile(parent)
-    tile:SetWidth(TILE_WIDTH)
+-- The verdict ------------------------------------------------------------------
 
-    tile.count = Kit.Text(tile, "GameFontHighlightSmall")
-    tile.count:SetPoint("TOPLEFT", tile.value, "BOTTOMLEFT", 0, -3)
-    tile.count:SetTextColor(unpack(Kit.MUTED))
+--- The verdict in a line of large type, after an arrow when it has one.
+local function CreateHeadline(section)
+    local headline = CreateFrame("Frame", nil, section)
+    headline:SetHeight(HEADLINE_HEIGHT)
 
-    return tile
+    headline.arrow = Kit.Icon(headline, HEADLINE_ARROW)
+    headline.arrow:SetPoint("LEFT")
+
+    headline.text = Kit.Text(headline, "GameFontNormalLarge")
+    return headline
+end
+
+--- One of the figures under the verdict: a small label, the figure, and
+--- under it how many fights it's the average of. Every cell but the first
+--- has a rule down its left, as in the row of figures on the Fights page.
+---@param index number  1 for the cell on the left
+local function CreateFigure(figures, index, label)
+    local left = (index - 1) * FIGURE_WIDTH
+    local cell = CreateFrame("Frame", nil, figures)
+    cell:SetPoint("TOPLEFT", left, 0)
+    cell:SetPoint("BOTTOMLEFT", left, 0)
+    cell:SetWidth(FIGURE_WIDTH)
+
+    cell.inset = 0
+    if index > 1 then
+        cell.inset = FIGURE_PADDING
+
+        local rule = Kit.Rule(cell)
+        rule:SetWidth(1)
+        rule:SetPoint("TOPLEFT")
+        rule:SetPoint("BOTTOMLEFT")
+    end
+
+    cell.label = Kit.Text(cell, "GameFontDisableSmall")
+    cell.label:SetPoint("TOPLEFT", cell.inset, -2)
+    cell.label:SetText(label)
+
+    cell.arrow = Kit.Icon(cell, FIGURE_ARROW)
+    cell.arrow:SetPoint("TOPLEFT", cell.inset, -(FIGURE_VALUE_TOP + 2))
+    cell.arrow:Hide()
+
+    cell.value = Kit.Text(cell, "GameFontHighlightMedium")
+
+    cell.count = Kit.Text(cell, "GameFontHighlightSmall")
+    cell.count:SetPoint("TOPLEFT", cell.inset, -FIGURE_COUNT_TOP)
+    cell.count:SetTextColor(unpack(Kit.MUTED))
+
+    return cell
+end
+
+---@param count string  what goes under the figure; "" for nothing
+---@param change number|nil  for the arrow before the figure, if it has one
+local function FillFigure(cell, value, count, change)
+    Kit.SetArrow(cell.arrow, change)
+
+    -- With no arrow the figure starts where it would have been.
+    local indent = cell.arrow:IsShown() and FIGURE_ARROW + FIGURE_ARROW_GAP or 0
+    cell.value:ClearAllPoints()
+    cell.value:SetPoint("TOPLEFT", cell.inset + indent, -FIGURE_VALUE_TOP)
+    cell.value:SetText(value)
+    cell.count:SetText(count)
+end
+
+--- The figures the verdict rests on, in a row, with the button that opens
+--- the two sets side by side at the end of it.
+local function CreateFigures(section)
+    local figures = CreateFrame("Frame", nil, section)
+    figures:SetHeight(FIGURES_HEIGHT)
+
+    figures.before = CreateFigure(figures, 1, "DPS before")
+    figures.after = CreateFigure(figures, 2, "DPS after")
+    figures.change = CreateFigure(figures, 3, "Change")
+
+    figures.compare = Kit.Button(figures, "Compare the two sets", 180, function()
+        if selected then
+            ns.ShowFights(
+                Experiments.FightsOf(selected, "after"),
+                Experiments.FightsOf(selected, "before")
+            )
+        end
+    end)
+    figures.compare:SetPoint("RIGHT")
+
+    return figures
+end
+
+---@param firm boolean  true if the verdict points one way, from PointsOneWay
+local function FillHeadline(headline, words, verdict, firm)
+    -- Green or red and an arrow for a verdict that points one way. White
+    -- for one that's sure there's no difference, and grey for one that
+    -- can't tell.
+    local color = WHITE
+    if firm then
+        color = verdict.direction == "better" and Kit.GOOD or Kit.BAD
+    elseif verdict.sureness == "unsure" then
+        color = Kit.MUTED
+    end
+
+    Kit.SetArrow(headline.arrow, firm and verdict.change or nil)
+
+    -- The words start where the arrow would be when there isn't one.
+    local indent = headline.arrow:IsShown() and HEADLINE_INDENT or 0
+    headline.text:ClearAllPoints()
+    headline.text:SetPoint("LEFT", indent, 0)
+    headline.text:SetPoint("RIGHT")
+    headline.text:SetText(words)
+    headline.text:SetTextColor(unpack(color))
+end
+
+local function FillFigures(figures, verdict, firm)
+    FillFigure(figures.before, ns.Rate(verdict.before), FightsText(verdict.fightsBefore))
+    FillFigure(figures.after, ns.Rate(verdict.after), FightsText(verdict.fightsAfter))
+
+    -- The change is held to the same rule as the headline: the percentage
+    -- is always there to read, but only a firm one is coloured.
+    if firm then
+        FillFigure(figures.change, Kit.ChangeText(verdict.change), "", verdict.change)
+    else
+        local plain = Kit.Colored(PlainChangeText(verdict.change), Kit.MUTED)
+        FillFigure(figures.change, plain, "")
+    end
 end
 
 -- The page for one experiment -------------------------------------------------
 
 local function CreatePage(parent)
     local page = CreateFrame("Frame", nil, parent)
+    page.pieces = {}
 
+    -- Fixed at the top: the question, and on the same line, small and to
+    -- the right, when it was started. The title is given its width when
+    -- it's filled, as whatever the small print beside it leaves.
     page.title = Kit.Text(page, "GameFontNormalLarge")
-    page.title:SetPoint("TOPLEFT", 14, -8)
-    page.title:SetPoint("TOPRIGHT", -14, -8)
+    page.title:SetPoint("BOTTOMLEFT", page, "TOPLEFT", MARGIN, -TITLE_FOOT)
 
-    page.subtitle = Kit.Text(page, "GameFontHighlightSmall")
+    -- Smaller type sits a little lower on its line, so it's raised to
+    -- stand level with the title.
+    page.subtitle = Kit.Text(page, "GameFontHighlightSmall", "RIGHT")
+    page.subtitle:SetPoint("BOTTOMRIGHT", page, "TOPRIGHT", -SCROLL_BAR_ROOM, 1 - TITLE_FOOT)
     page.subtitle:SetTextColor(unpack(Kit.MUTED))
-    PlaceBelow(page.subtitle, page.title, 3)
 
-    local stepsHeader = Kit.Header(page, "What to do")
-    PlaceBelow(stepsHeader, page.subtitle, 14)
+    -- The rest scrolls, should it ever need to. The template brings its
+    -- own scroll bar, which stays out of sight while everything fits.
+    page.scroll = CreateFrame("ScrollFrame", nil, page, "ScrollFrameTemplate")
+    page.scroll:SetPoint("TOPLEFT", MARGIN, -HEAD_HEIGHT)
+    page.scroll:SetPoint("BOTTOMRIGHT", -SCROLL_BAR_ROOM, 8)
+    page.scroll.ScrollBar:SetHideIfUnscrollable(true)
 
+    local body = CreateFrame("Frame", nil, page.scroll)
+    body:SetSize(USUAL_WIDTH, 1)
+    page.scroll:SetScrollChild(body)
+    page.body = body
+
+    -- A section's contents belong to the section, so they're drawn over
+    -- its fill and go when it goes.
+    local steps = Piece(page, Kit.Section(body, "What to do"))
+    page.stepsSection = steps
     page.steps = {}
     for index = 1, 3 do
-        local step = CreateStep(page)
-        if index == 1 then
-            PlaceBelow(step, stepsHeader, 6)
-        else
-            PlaceBelow(step, page.steps[index - 1], 0)
-        end
-        page.steps[index] = step
+        page.steps[index] = Piece(page, CreateStep(steps))
     end
 
     -- The one thing the player has to click, on the step that asks for it.
@@ -429,137 +659,34 @@ local function CreatePage(parent)
         end
     end)
     page.continue:SetHeight(CONTINUE_HEIGHT)
-    page.continue:SetPoint("BOTTOMLEFT", 26, 6)
 
     -- Under the steps while a set is being recorded: whether the window
-    -- has to stay open for it. In line with the words of the steps.
-    page.counted = Kit.Text(page, "GameFontHighlightSmall")
-    page.counted:SetPoint("TOPLEFT", page.steps[3], "BOTTOMLEFT", 26, -2)
-    page.counted:SetPoint("RIGHT", page.steps[3], "RIGHT")
+    -- has to stay open for it.
+    page.counted = Piece(page, Paragraph(steps, "GameFontHighlightSmall"))
     page.counted:SetTextColor(unpack(Kit.MUTED))
 
-    -- FillPage moves this down out of that line's way when it's showing.
-    page.verdictHeader = Kit.Header(page, "The verdict")
-    PlaceBelow(page.verdictHeader, page.steps[3], VERDICT_GAP)
+    local verdict = Piece(page, Kit.Section(body, "The verdict"))
+    page.verdictSection = verdict
 
     -- Said in place of a verdict while there isn't one.
-    page.pending = Paragraph(page, "GameFontHighlight")
+    page.pending = Piece(page, Paragraph(verdict, "GameFontHighlight"))
     page.pending:SetTextColor(unpack(Kit.MUTED))
-    PlaceBelow(page.pending, page.verdictHeader, 8)
 
-    -- Everything that belongs to a verdict, to show and hide as one.
-    local verdict = CreateFrame("Frame", nil, page)
-    verdict:SetPoint("TOPLEFT", page.verdictHeader, "BOTTOMLEFT")
-    verdict:SetPoint("BOTTOMRIGHT", -14, 8)
-    page.verdict = verdict
+    page.headline = Piece(page, CreateHeadline(verdict))
+    page.detail = Piece(page, Paragraph(verdict, "GameFontHighlight"))
 
-    verdict.arrow = Kit.Icon(verdict, 18)
-    verdict.arrow:SetPoint("TOPLEFT", 0, -10)
+    page.rule = Piece(page, Kit.Rule(verdict))
+    page.rule:SetHeight(1)
 
-    verdict.headline = Kit.Text(verdict, "GameFontNormalHuge")
-
-    verdict.detail = Paragraph(verdict, "GameFontHighlight")
-    verdict.detail:SetPoint("TOPLEFT", 0, -38)
-    verdict.detail:SetPoint("TOPRIGHT", 0, -38)
-
-    local figuresHeader = Kit.Header(verdict, "DPS")
-    PlaceBelow(figuresHeader, verdict.detail, 14)
-
-    verdict.before = CreateSetTile(verdict)
-    verdict.before:SetPoint("TOPLEFT", figuresHeader, "BOTTOMLEFT", 0, -8)
-
-    verdict.after = CreateSetTile(verdict)
-    verdict.after:SetPoint("TOPLEFT", verdict.before, "TOPRIGHT", 20, 0)
-
-    -- The change stands beside the figure it brought about. FillVerdict
-    -- places the words, which move up when there's no arrow.
-    verdict.changeArrow = Kit.Icon(verdict, 12)
-    verdict.changeArrow:SetPoint("LEFT", verdict.after.value, "RIGHT", 10, 0)
-
-    verdict.change = Kit.Text(verdict, "GameFontHighlight")
-
-    verdict.compare = Kit.Button(verdict, "Compare the two sets", 180, function()
-        if selected then
-            ns.ShowFights(
-                Experiments.FightsOf(selected, "after"),
-                Experiments.FightsOf(selected, "before")
-            )
-        end
-    end)
-    verdict.compare:SetPoint("TOPLEFT", verdict.before, "BOTTOMLEFT", 0, -12)
+    page.figures = Piece(page, CreateFigures(verdict))
 
     return page
 end
 
-local function FillVerdict(page, experiment)
-    local verdict = Experiments.Verdict(experiment)
-    local finished = experiment.state == "done"
-
-    -- A verdict can be given while the second set is still coming in, as
-    -- long as it's labelled as one that may yet change.
-    local soFar = verdict ~= nil and not finished
-    page.verdictHeader.title:SetText(soFar and "The verdict so far" or "The verdict")
-    page.verdict:SetShown(verdict ~= nil)
-    page.pending:SetShown(verdict == nil)
-
-    if not verdict then
-        page.pending:SetText(
-            finished and "There aren't fights in both sets, so there's nothing to compare."
-                or "It will appear here once there are fights in both sets."
-        )
-        return
-    end
-
-    local widgets = page.verdict
-    local headline, detail = Experiments.InWords(verdict)
-    if soFar then
-        detail = detail .. " The second set is still being recorded, so this may change."
-    end
-
-    -- Green or red and an arrow for a verdict that points one way. White
-    -- for one that's sure there's no difference, and grey for one that
-    -- can't tell.
-    local firm = PointsOneWay(verdict)
-    local color = WHITE
-    if firm then
-        color = verdict.direction == "better" and Kit.GOOD or Kit.BAD
-    elseif verdict.sureness == "unsure" then
-        color = Kit.MUTED
-    end
-
-    Kit.SetArrow(widgets.arrow, firm and verdict.change or nil)
-
-    -- The headline starts where the arrow would be when there isn't one.
-    local indent = widgets.arrow:IsShown() and 24 or 0
-    widgets.headline:ClearAllPoints()
-    widgets.headline:SetPoint("TOPLEFT", indent, -9)
-    widgets.headline:SetPoint("TOPRIGHT", 0, -9)
-    widgets.headline:SetText(headline)
-    widgets.headline:SetTextColor(unpack(color))
-    widgets.detail:SetText(detail)
-
-    widgets.before:Set("Before", ns.Rate(verdict.before))
-    widgets.before.count:SetText(FightsText(verdict.fightsBefore))
-    widgets.after:Set("After", ns.Rate(verdict.after))
-    widgets.after.count:SetText(FightsText(verdict.fightsAfter))
-
-    -- The change is held to the same rule as the headline: the percentage
-    -- is always there to read, but only a firm one is coloured.
-    Kit.SetArrow(widgets.changeArrow, firm and verdict.change or nil)
-    widgets.change:ClearAllPoints()
-    if widgets.changeArrow:IsShown() then
-        widgets.change:SetPoint("LEFT", widgets.changeArrow, "RIGHT", 3, 0)
-    else
-        widgets.change:SetPoint("LEFT", widgets.after.value, "RIGHT", 10, 0)
-    end
-    widgets.change:SetText(
-        firm and Kit.ChangeText(verdict.change)
-            or Kit.Colored(PlainChangeText(verdict.change), Kit.MUTED)
-    )
-end
-
-local function FillPage(page, experiment)
-    page.title:SetText(Question(experiment))
+--- The question, and on the same line, small and to the right, when it
+--- was started and how big its sets are.
+---@param width number  of the page, which the two share
+local function ShowTitle(page, experiment, width)
     page.subtitle:SetText(
         ("Started %s   %s in each set"):format(
             date("%d %b %H:%M", experiment.startedAt),
@@ -567,70 +694,132 @@ local function FillPage(page, experiment)
         )
     )
 
-    local states = STEP_STATES[experiment.state] or STEP_STATES.done
-    for index, step in ipairs(page.steps) do
-        local state = states[index]
-        FillStep(step, state, StepTitle(experiment, index, state), StepNote(index, state))
-    end
+    -- A long question is cut short before it runs into the small print.
+    page.title:SetWidth(width - page.subtitle:GetStringWidth() - TITLE_GAP)
+    page.title:SetText(Question(experiment))
+end
 
-    -- The middle step grows to make room for its button while it's wanted.
-    -- With a session in progress the second set can't begin, and the note
-    -- under the step says so.
+--- The three steps, and under them, while a set is being recorded, a line
+--- on whether the window has to stay open for it.
+local function PlaceSteps(page, layout, experiment)
+    local section = page.stepsSection
+    local inside = Inside(layout, section)
+    local states = STEP_STATES[experiment.state] or STEP_STATES.done
+
+    -- The middle step makes room for its button while it's wanted. With a
+    -- session in progress the second set can't begin, and the note under
+    -- the step says so.
     local waiting = experiment.state == "change"
-    page.steps[2]:SetHeight(waiting and STEP_HEIGHT + CONTINUE_HEIGHT + 8 or STEP_HEIGHT)
     page.continue:SetShown(waiting)
     page.continue:SetEnabled(not ns.Recorder.Open())
 
-    local recording = experiment.state == "before" or experiment.state == "after"
-    page.counted:SetShown(recording)
-    page.counted:SetText(ns.settings.widget and COUNTED_WITH_PANEL or COUNTED_WITHOUT_PANEL)
-    PlaceBelow(
-        page.verdictHeader,
-        page.steps[3],
-        recording and VERDICT_GAP + COUNTED_ROOM or VERDICT_GAP
-    )
+    local gap = 0
+    for index, step in ipairs(page.steps) do
+        local state = states[index]
+        local button = index == 2 and waiting and page.continue or nil
+        local title, note = StepTitle(experiment, index, state), StepNote(index, state)
+        FillStep(step, state, title, note, inside.width, button)
+        Place(inside, step, gap)
+        gap = STEP_GAP
+    end
 
-    FillVerdict(page, experiment)
+    if experiment.state == "before" or experiment.state == "after" then
+        local words = ns.settings.widget and COUNTED_WITH_PANEL or COUNTED_WITHOUT_PANEL
+        PlaceIndented(inside, page.counted, STEP_GAP, words)
+    end
+
+    PlaceSection(layout, section, inside)
+end
+
+--- The verdict and why it can or can't be trusted, then the figures it
+--- rests on. Until there are fights in both sets, a line saying so.
+local function PlaceVerdict(page, layout, experiment)
+    local verdict = Experiments.Verdict(experiment)
+    local finished = experiment.state == "done"
+
+    local section = page.verdictSection
+    local inside = Inside(layout, section)
+
+    -- A verdict can be given while the second set is still coming in, as
+    -- long as it's labelled as one that may yet change.
+    local soFar = verdict ~= nil and not finished
+    section.title:SetText(soFar and "The verdict so far" or "The verdict")
+
+    if not verdict then
+        PlaceText(inside, page.pending, 0, finished and NOTHING_TO_COMPARE or NOT_YET)
+        PlaceSection(layout, section, inside)
+        return
+    end
+
+    local headline, detail = Experiments.InWords(verdict)
+    if soFar then
+        detail = detail .. " " .. MAY_CHANGE
+    end
+
+    local firm = PointsOneWay(verdict)
+    FillHeadline(page.headline, headline, verdict, firm)
+    Place(inside, page.headline, 0)
+    PlaceText(inside, page.detail, LINE_GAP, detail)
+
+    Place(inside, page.rule, RULE_GAP, 1)
+    FillFigures(page.figures, verdict, firm)
+    Place(inside, page.figures, RULE_GAP)
+
+    PlaceSection(layout, section, inside)
+end
+
+local function FillPage(page, experiment)
+    local width = WidthOf(page.scroll)
+    ShowTitle(page, experiment, width)
+
+    for _, piece in ipairs(page.pieces) do
+        piece:Hide()
+    end
+
+    local layout = { frame = page.body, left = 0, width = width, y = 0 }
+
+    PlaceSteps(page, layout, experiment)
+    PlaceVerdict(page, layout, experiment)
+
+    page.body:SetSize(width, layout.y + SECTION_GAP)
+
+    -- Another experiment starts at the top. A redraw of the same one, as
+    -- when a fight ends while the page is open, leaves the reader where
+    -- they were.
+    if page.shown ~= experiment then
+        page.scroll:SetVerticalScroll(0)
+    end
+    page.shown = experiment
 end
 
 -- The form that starts one ----------------------------------------------------
 
-local function CreateForm(parent)
-    local form = CreateFrame("Frame", nil, parent)
-
-    form.title = Kit.Text(form, "GameFontNormalLarge")
-    form.title:SetPoint("TOPLEFT", 14, -8)
-    form.title:SetPoint("TOPRIGHT", -14, -8)
-    form.title:SetText("New experiment")
-
-    local idea = Paragraph(form, "GameFontHighlight")
-    PlaceBelow(idea, form.title, 10)
-    idea:SetText(IDEA)
-
-    local questionLabel = Kit.Text(form, "GameFontNormal")
-    questionLabel:SetText("What are you trying?")
-    PlaceBelow(questionLabel, idea, 24)
-
-    -- The box's border is drawn a little outside it, hence the nudge right.
-    form.question = CreateFrame("EditBox", nil, form, "InputBoxInstructionsTemplate")
-    form.question:SetSize(QUESTION_WIDTH, 22)
-    form.question:SetPoint("TOPLEFT", questionLabel, "BOTTOMLEFT", 6, -6)
-    form.question:SetAutoFocus(false)
-    form.question:SetMaxLetters(ns.NOTE_LENGTH)
-    form.question:SetScript("OnEnterPressed", StartExperiment)
+--- The box for what's being tried. Its border runs the width of the
+--- section once it's placed.
+local function CreateQuestionBox(section)
+    local box = CreateFrame("EditBox", nil, section, "InputBoxInstructionsTemplate")
+    box:SetHeight(BOX_HEIGHT)
+    box:SetAutoFocus(false)
+    box:SetMaxLetters(ns.NOTE_LENGTH)
+    box:SetScript("OnEnterPressed", StartExperiment)
 
     -- The template leaves room on the left for a search icon we don't have.
-    form.question.Instructions:SetAllPoints()
-    form.question.Instructions:SetText("For example: New bow")
+    box.Instructions:SetAllPoints()
+    box.Instructions:SetText("For example: New bow")
 
-    local sizeLabel = Kit.Text(form, "GameFontNormal")
-    sizeLabel:SetText("How many fights in each set?")
-    sizeLabel:SetPoint("TOPLEFT", form.question, "BOTTOMLEFT", -6, -20)
+    return box
+end
 
-    form.size = CreateFrame("DropdownButton", nil, form, "WowStyle1DropdownTemplate")
-    form.size:SetWidth(140)
-    form.size:SetPoint("TOPLEFT", sizeLabel, "BOTTOMLEFT", 0, -6)
-    form.size:SetupMenu(function(_, root)
+--- The menu of how many fights go in each set, with a word on choosing
+--- beside it.
+local function CreateSizeRow(section)
+    local row = CreateFrame("Frame", nil, section)
+    row:SetHeight(SIZE_ROW)
+
+    local menu = CreateFrame("DropdownButton", nil, row, "WowStyle1DropdownTemplate")
+    menu:SetWidth(MENU_WIDTH)
+    menu:SetPoint("LEFT")
+    menu:SetupMenu(function(_, root)
         local function IsChosen(size)
             return size == fightsEachWay
         end
@@ -642,37 +831,104 @@ local function CreateForm(parent)
         end
     end)
 
-    local sizeHint = Kit.Text(form, "GameFontHighlightSmall")
-    sizeHint:SetPoint("LEFT", form.size, "RIGHT", 14, 0)
-    sizeHint:SetTextColor(unpack(Kit.MUTED))
-    sizeHint:SetText("More fights take longer and give a surer answer.")
+    local hint = Kit.Text(row, "GameFontHighlightSmall")
+    hint:SetPoint("LEFT", menu, "RIGHT", 14, 0)
+    hint:SetTextColor(unpack(Kit.MUTED))
+    hint:SetText(SIZE_HINT)
 
-    -- The button and the line under it share a strip that runs to the
-    -- right edge of the form, which gives the line somewhere to wrap.
-    local strip = CreateFrame("Frame", nil, form)
-    strip:SetPoint("TOPLEFT", form.size, "BOTTOMLEFT", 0, -26)
-    strip:SetPoint("BOTTOMRIGHT", -14, 8)
+    return row
+end
 
-    form.start = Kit.Button(strip, "Start the experiment", 180, StartExperiment)
-    form.start:SetPoint("TOPLEFT")
+--- What happens next or, if it can't start, why not, after an icon.
+local function CreateAdvice(section)
+    local advice = CreateFrame("Frame", nil, section)
 
-    -- Under the button: what happens next or, if it can't start, why not.
-    form.adviceIcon = Kit.Icon(strip, 20)
-    form.adviceIcon:SetPoint("TOPLEFT", 0, -34)
+    advice.icon = Kit.Icon(advice, ADVICE_ICON)
+    advice.icon:SetPoint("TOPLEFT")
 
-    form.advice = Paragraph(strip, "GameFontHighlight")
-    form.advice:SetPoint("TOPLEFT", 28, -37)
-    form.advice:SetPoint("TOPRIGHT", 0, -37)
+    advice.text = Paragraph(advice, "GameFontHighlight")
+    advice.text:SetPoint("TOPLEFT", ADVICE_INDENT, -3)
+
+    return advice
+end
+
+local function CreateForm(parent)
+    local form = CreateFrame("Frame", nil, parent)
+
+    form.title = Kit.Text(form, "GameFontNormalLarge")
+    form.title:SetPoint("BOTTOMLEFT", form, "TOPLEFT", MARGIN, -TITLE_FOOT)
+    form.title:SetText("New experiment")
+
+    -- The sections stand where the page's do. The form is short enough
+    -- not to need scrolling, so it doesn't.
+    local body = CreateFrame("Frame", nil, form)
+    body:SetPoint("TOPLEFT", MARGIN, -HEAD_HEIGHT)
+    body:SetPoint("BOTTOMRIGHT", -SCROLL_BAR_ROOM, 8)
+    form.body = body
+
+    form.ideaSection = Kit.Section(body, "How it works")
+    form.idea = Paragraph(form.ideaSection, "GameFontHighlight")
+
+    form.questionSection = Kit.Section(body, "What are you trying?")
+    form.question = CreateQuestionBox(form.questionSection)
+
+    form.sizeSection = Kit.Section(body, "How many fights in each set?")
+    form.sizeRow = CreateSizeRow(form.sizeSection)
+
+    form.startSection = Kit.Section(body, "What happens next")
+    form.advice = CreateAdvice(form.startSection)
+    form.start = Kit.Button(form.startSection, "Start the experiment", 180, StartExperiment)
 
     return form
 end
 
-local function FillForm(form)
-    local reason = WhyNotStart()
-    form.start:SetEnabled(reason == nil)
+local function PlaceIdea(form, layout)
+    local inside = Inside(layout, form.ideaSection)
+    PlaceText(inside, form.idea, 0, IDEA)
+    PlaceSection(layout, form.ideaSection, inside)
+end
 
-    Kit.SetIcon(form.adviceIcon, reason and "warning" or "tip")
-    form.advice:SetText(reason or "It starts straight away. Your next fights are the first set.")
+local function PlaceQuestion(form, layout)
+    local inside = Inside(layout, form.questionSection)
+
+    -- The box's border is drawn a little outside it, hence the nudge right.
+    form.question:SetWidth(inside.width - BOX_NUDGE)
+    PlaceFixed(inside, form.question, 0, BOX_NUDGE)
+
+    PlaceSection(layout, form.questionSection, inside)
+end
+
+local function PlaceSize(form, layout)
+    local inside = Inside(layout, form.sizeSection)
+    Place(inside, form.sizeRow, 0)
+    PlaceSection(layout, form.sizeSection, inside)
+end
+
+--- The advice, and under it the button.
+---@param reason string|nil  why it can't start, from WhyNotStart
+local function PlaceStart(form, layout, reason)
+    local inside = Inside(layout, form.startSection)
+
+    local advice = form.advice
+    Kit.SetIcon(advice.icon, reason and "warning" or "tip")
+    advice.text:SetWidth(inside.width - ADVICE_INDENT)
+    advice.text:SetText(reason or READY)
+    advice:SetHeight(math.max(ADVICE_ICON, advice.text:GetStringHeight() + 3))
+    Place(inside, advice, 0)
+
+    form.start:SetEnabled(reason == nil)
+    PlaceFixed(inside, form.start, BUTTON_GAP)
+
+    PlaceSection(layout, form.startSection, inside)
+end
+
+local function FillForm(form)
+    local layout = { frame = form.body, left = 0, width = WidthOf(form.body), y = 0 }
+
+    PlaceIdea(form, layout)
+    PlaceQuestion(form, layout)
+    PlaceSize(form, layout)
+    PlaceStart(form, layout, WhyNotStart())
 end
 
 -- The tab ---------------------------------------------------------------------
@@ -725,10 +981,11 @@ function ExperimentsTab.Create(parent, window)
     tab.none:SetText(NONE)
 
     -- Right: the page and the form share the space, one showing at a time.
+    -- They stand where the Fights tab's page does.
     tab.page = CreatePage(tab)
     tab.form = CreateForm(tab)
     for _, side in ipairs({ tab.page, tab.form }) do
-        side:SetPoint("TOPLEFT", panel, "TOPRIGHT", 8, -6)
+        side:SetPoint("TOPLEFT", panel, "TOPRIGHT", 8, -4)
         side:SetPoint("BOTTOMRIGHT", -4, 4)
     end
 

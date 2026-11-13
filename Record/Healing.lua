@@ -30,8 +30,10 @@ local MUCH_HEALED_BACK = 0.5
 local MUCH_AVOIDABLE = 0.15
 
 -- How much more healing one ability has to give for its cost than another
--- before it's worth suggesting the cost be spent there instead.
+-- before it's worth suggesting the cost be spent there instead, and how
+-- many times each has to have been used before what it gives counts.
 local CLEARLY_BETTER_VALUE = 1.2
+local FEWEST_USES = 3
 
 -- Adding up -------------------------------------------------------------------
 
@@ -227,15 +229,22 @@ end
 
 -- Saying what it shows ------------------------------------------------------------
 
+--- True if a heal's healing for its cost is worth comparing: the player
+--- paid for it, and it's been used often enough to go by. One lucky
+--- critical heal shouldn't be enough to recommend it. A pet pays for its
+--- heals out of its own, which is nothing the player can spend.
+local function Comparable(ability)
+    return ability.perCost ~= nil and not ability.pet and (ability.casts or 0) >= FEWEST_USES
+end
+
 --- The healing ability that gives most and least for what it costs, among
 --- the player's own that cost the same resource. Needs two to mean
 --- anything.
 local function BestValue(summary)
-    -- Compare within whichever resource most of them use. A pet pays for
-    -- its heals out of its own, which is nothing the player can spend.
+    -- Compare within whichever resource most of them use.
     local counts, common = {}, nil
     for _, ability in ipairs(summary.abilities) do
-        if ability.perCost and not ability.pet then
+        if Comparable(ability) then
             counts[ability.power] = (counts[ability.power] or 0) + 1
             if not common or counts[ability.power] > counts[common] then
                 common = ability.power
@@ -245,7 +254,7 @@ local function BestValue(summary)
 
     local best, worst
     for _, ability in ipairs(summary.abilities) do
-        if ability.perCost and not ability.pet and ability.power == common then
+        if Comparable(ability) and ability.power == common then
             if not best or ability.perCost > best.perCost then
                 best = ability
             end
@@ -279,12 +288,6 @@ local function WorstAvoidable(summary)
             return blow.id and blow.id ~= 0 and blow or nil
         end
     end
-end
-
---- A count with the thing counted: "1 cast", "3 casts".
-local function Counted(times, thing)
-    times = math.floor(times + 0.5)
-    return ("%d %s%s"):format(times, thing, times == 1 and "" or "s")
 end
 
 --- A few sentences about the healing and defence in a set of fights.
@@ -376,14 +379,14 @@ function Healing.Findings(summary)
         Say(
             "good",
             "You interrupted %s and dispelled %s in %s.",
-            Counted(interrupts, "cast"),
-            Counted(dispels, "effect"),
+            ns.Count(interrupts, "cast"),
+            ns.Count(dispels, "effect"),
             these
         )
     elseif interrupts > 0 then
-        Say("good", "You interrupted %s in %s.", Counted(interrupts, "cast"), these)
+        Say("good", "You interrupted %s in %s.", ns.Count(interrupts, "cast"), these)
     elseif dispels > 0 then
-        Say("good", "You dispelled %s in %s.", Counted(dispels, "effect"), these)
+        Say("good", "You dispelled %s in %s.", ns.Count(dispels, "effect"), these)
     end
 
     return found

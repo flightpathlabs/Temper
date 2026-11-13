@@ -63,6 +63,8 @@ First version.
   back: a weapon skill behind the level of the enemies you're fighting,
   an ability that keeps failing, time with no ability in use, running
   short of mana, or an ability whose cost would do more spent on another.
+  Advice about cost waits until each ability has been used a few times,
+  so one lucky hit doesn't decide it.
 - A note can be left on any session.
 
 **Healing and defence**
@@ -74,7 +76,7 @@ First version.
   on you, how many were critical, and how many enemy attacks you dodged,
   parried or blocked are counted too.
 - The fight page has a short "Healing and defence" section, with a link
-  to the Healing tab.
+  that opens the Healing tab on the same fights.
 - A Healing tab breaks it all down for the last fight, the session, the
   last ten fights or everything on record: healing and HPS, damage taken
   and how much of it you healed back, a bar for each healing ability and

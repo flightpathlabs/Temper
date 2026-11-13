@@ -61,11 +61,12 @@ local PLENTY_LEFT = 0.4
 local NEARLY_EMPTY = 0.15
 local EMPTY = 0.1
 
--- Pauses between fights are worth a sentence once they add up to this
--- much of the time spent fighting.
 -- How much more one ability has to give for its cost than another before
--- it's worth suggesting the cost be spent there instead.
+-- it's worth suggesting the cost be spent there instead, and how many
+-- times each has to have been used before what it gives can be trusted.
+-- One lucky critical hit shouldn't be enough to recommend an ability.
 local CLEARLY_BETTER_VALUE = 1.2
+local FEWEST_USES = 3
 
 -- How far DPS has to move between the earlier and later half of a set of
 -- fights before it's called a trend.
@@ -104,6 +105,12 @@ end
 -- times is a habit worth knowing about; once or twice is just a fight.
 local STARVED_OFTEN = 3
 
+--- True if an ability's damage for its cost is worth comparing: it costs
+--- something, and it's been used often enough to go by.
+local function Comparable(ability)
+    return ability.perCost ~= nil and (ability.casts or 0) >= FEWEST_USES
+end
+
 --- The ability that gives most and least damage for what it costs, among
 --- those that cost the same resource. Needs two to mean anything.
 local function BestValue(summary)
@@ -111,7 +118,7 @@ local function BestValue(summary)
     -- within whichever resource most of them use.
     local counts, common = {}, nil
     for _, ability in ipairs(summary.abilities) do
-        if ability.perCost then
+        if Comparable(ability) then
             counts[ability.power] = (counts[ability.power] or 0) + 1
             if not common or counts[ability.power] > counts[common] then
                 common = ability.power
@@ -121,7 +128,7 @@ local function BestValue(summary)
 
     local best, worst
     for _, ability in ipairs(summary.abilities) do
-        if ability.perCost and ability.power == common then
+        if Comparable(ability) and ability.power == common then
             if not best or ability.perCost > best.perCost then
                 best = ability
             end
@@ -134,6 +141,16 @@ local function BestValue(summary)
     if best and worst and best ~= worst then
         return best, worst
     end
+end
+
+--- What to call an ability in a sentence that also names another. Two
+--- ranks of one ability share a name, and both are often still in use, so
+--- then the rank goes in too.
+local function NameBeside(ability, other)
+    if ability.name == other.name and ability.rank then
+        return ("%s (%s)"):format(ability.name, ability.rank)
+    end
+    return ability.name
 end
 
 --- The ability whose contribution moved most each way since the earlier
@@ -425,20 +442,20 @@ function Findings.For(summary, comparison)
         Say(
             "tip",
             "%s costs %d %s for about %s damage. The same %s spent on %s would do about %s.",
-            worst.name,
+            NameBeside(worst, best),
             worst.cost,
             resource,
             ns.Number(worst.perCast),
             resource,
-            best.name,
+            NameBeside(best, worst),
             ns.Number(worst.cost * best.perCost)
         )
     elseif best then
         Say(
             "good",
             "%s and %s give about the same for their %s: %.1f and %.1f damage per point.",
-            best.name,
-            worst.name,
+            NameBeside(best, worst),
+            NameBeside(worst, best),
             ns.Summary.PowerWord(best.power),
             best.perCost,
             worst.perCost

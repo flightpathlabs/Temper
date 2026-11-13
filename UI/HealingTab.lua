@@ -8,7 +8,8 @@ local _, ns = ...
 -- up?", so the choice is between a few ready-made sets of fights: the last
 -- one, this session, the last ten, everything. The menu for that sits in
 -- the strip under the title bar, with a line beside it saying what the set
--- came to.
+-- came to. When the player comes here from the Fights page, the fights
+-- they were reading there are offered too, and chosen.
 --
 -- The page is built from the same pieces as the Fights page and laid out
 -- the same way (see "Pages" in Kit.lua), so the two read as one. A row of
@@ -67,6 +68,10 @@ local SCOPES = {
 }
 local RECENT_FIGHTS = 10
 
+-- The extra choice for fights brought over from the Fights page. Only on
+-- the menu once there are some.
+local CHOSEN = { key = "chosen", label = "Chosen on the Fights tab" }
+
 local NO_FIGHTS = "No fights on record yet.\n\n"
     .. "Fight something on your own and what you healed, and what hurt you, "
     .. "will appear here.\n\n"
@@ -118,6 +123,9 @@ local tab
 -- running and no longer: the last fight is the right place to start.
 local scope = "last"
 
+-- The fights last brought over from the Fights page, if any.
+local chosen
+
 local Refresh
 
 -- Which fights ------------------------------------------------------------------
@@ -128,7 +136,9 @@ local Refresh
 ---@return string|nil name  what the set is called, if it has a name
 local function FightsIn(choice)
     local fights = ns.character.fights
-    if choice == "all" then
+    if choice == CHOSEN.key and chosen then
+        return chosen
+    elseif choice == "all" then
         return fights
     elseif choice == "session" then
         -- What counts as the session is the panel's rule (see Widget.lua),
@@ -655,7 +665,11 @@ local function CreateStrip(window)
         for _, choice in ipairs(SCOPES) do
             root:CreateRadio(choice.label, IsChosen, Choose, choice.key)
         end
+        if chosen then
+            root:CreateRadio(CHOSEN.label, IsChosen, Choose, CHOSEN.key)
+        end
     end)
+    strip.menu = menu
 
     strip.cameTo = Kit.Text(strip, "GameFontHighlight")
     strip.cameTo:SetPoint("LEFT", menu, "RIGHT", MENU_GAP, 0)
@@ -798,9 +812,52 @@ local function ShowPage(summary)
     tab.shown = scope
 end
 
+--- Covers the given fights, from the Fights page, the next time the tab
+--- is drawn. Called with none, as when the healing panel is clicked, it
+--- goes back to the last fight if it was on fights brought over before:
+--- those are old news by now, though the menu still offers them. Safe to
+--- call before the tab exists.
+---@param fights table|nil  list of fights
+function HealingTab.Cover(fights)
+    if fights then
+        chosen = fights
+        scope = CHOSEN.key
+    elseif scope == CHOSEN.key then
+        scope = "last"
+    end
+
+    -- The page is the same choice as before, but not the same fights, so
+    -- it starts again at the top.
+    if tab then
+        tab.shown = nil
+    end
+end
+
 function Refresh()
     if not tab or not tab:IsVisible() then
         return
+    end
+
+    -- A fight deleted since it was brought over is no longer on record.
+    -- Drop the set rather than draw a fight that isn't there.
+    if chosen then
+        local kept = {}
+        for _, fight in ipairs(ns.character.fights) do
+            kept[fight] = true
+        end
+        for _, fight in ipairs(chosen) do
+            if not kept[fight] then
+                chosen = nil
+                if scope == CHOSEN.key then
+                    scope = "last"
+
+                    -- The menu read its label when the tab was shown,
+                    -- which was before this. Have it read it again.
+                    tab.strip.menu:GenerateMenu()
+                end
+                break
+            end
+        end
     end
 
     local fights, name = FightsIn(scope)

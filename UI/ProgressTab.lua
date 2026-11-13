@@ -3,10 +3,12 @@ local _, ns = ...
 -- The Progress tab: how the character is coming along, measured only
 -- against themselves.
 --
--- Read top to bottom it's three things. The bests, four at most, to have
--- something to beat. A column for each day's DPS, to see which way it's
--- going. And, out of the way in the bottom right-hand corner of the
--- window, the button that forgets the lot.
+-- Read top to bottom it's four things. The bests, four at most, to have
+-- something to beat. A line on which fights count towards them. A column
+-- for each day's DPS, to see which way it's going. And, out of the way in
+-- the bottom right-hand corner of the window, the button that forgets the
+-- lot. The first three each sit in a box of their own (see Kit.Section),
+-- as the parts of the Fights and Healing pages do.
 --
 -- A best is only worth having if it was earned, so each one can be left
 -- out with a click when it was a fluke, and the next best takes its place
@@ -17,42 +19,49 @@ ns.ProgressTab = ProgressTab
 
 local Kit = ns.Kit
 
--- The page is the window's inset, about 890 wide and 634 high. Down the
--- page, with all four bests showing, it's spent like this:
+local Place, Inside, PlaceSection = Kit.Place, Kit.Inside, Kit.PlaceSection
+
+-- The page is the window's inset, about 890 wide and 634 high. It's laid
+-- out the way the Healing page is (see "Pages" in Kit.lua), but it never
+-- has to scroll: there are only ever four bests and one chart, and it's
+-- sized to hold them. A section spends 34 over what's in it, for its
+-- title and padding, and 10 under. Down the page, with all four bests
+-- showing, it's spent like this:
 --
---   margin 10, the bests' header 24, gap 8        42
---   two rows of cards at 62, with 6 between      130
---   gap 10, the line on what counts 18            28
---   gap 18, the chart's header 24, gap 8          50
---   the chart                                    280
---   gap 10, the trend sentence 14                 24
+--   margin 10                                                10
+--   the bests: two rows of cards at 62, with 6 between      174
+--   gap 8, which fights count: a line of 18                  70
+--   gap 8, the chart 260, gap 10, the trend's line 14       336
 --
--- That's 554, which leaves 40 clear above the bottom edge.
-local PADDING = 14
+-- That's 590, which leaves 44 clear above the bottom edge.
+local MARGIN = 14
 local TOP_MARGIN = 10
-local GAP = 8
 local LINE_GAP = 10
-local SECTION_GAP = 18
+
+-- How wide the page is when the window is its usual size: the inset less
+-- its margins. Only used if the tab is filled before the game has worked
+-- out its real width.
+local USUAL_WIDTH = 862
 
 -- Bests sit two to a row, and there's room for two rows of them.
 local MOST_BESTS = 4
 local CARD_HEIGHT = 62
 local CARD_GAP = 6
 
--- The line under the bests that says how many fights are left out.
-local NOTE_HEIGHT = 18
+-- The line on which fights count starts clear of the "i" before it, and
+-- the trend's clear of its arrow.
+local HELP_SIZE = 18
+local COUNTED_INDENT = 24
+local TREND_ICON = 14
+local TREND_INDENT = 20
 
-local CHART_HEIGHT = 280
+local CHART_HEIGHT = 260
 
 -- The days share the chart's width between them, up to a point: one or
 -- two days with the whole width to themselves would be absurdly fat. A
 -- column fills this much of its day's slot.
 local WIDEST_SLOT = 120
 local COLUMN_SHARE = 0.62
-
--- The chart's width when it's asked for before the window has been laid
--- out: the page less its padding.
-local USUAL_CHART_WIDTH = 857
 
 -- Room under the columns for the day and the level, and over the tallest
 -- column for its figure.
@@ -229,48 +238,14 @@ local function OnCardClick(card, mouseButton)
     ns.ShowFights({ best.fight })
 end
 
---- The small print in a card's corner that leaves its fight out. It's
---- grey until the mouse is on it, so four of them don't shout over the
---- figures they sit beside.
-local function CreateLeaveOutLink(card)
-    local link = CreateFrame("Button", nil, card)
-
-    local label = Kit.Text(link, "GameFontDisableSmall")
-    label:SetPoint("CENTER")
-    label:SetText("Leave out")
-
-    link:SetFontString(label)
-    link:SetNormalFontObject("GameFontDisableSmall")
-    link:SetHighlightFontObject("GameFontHighlightSmall")
-    link:SetSize(label:GetStringWidth() + 8, 18)
-    link:SetScript("OnClick", function()
-        LeaveOut(card.best.fight)
-    end)
-
-    Kit.Tooltip(link, "Leave this fight out", function()
-        return LEAVE_OUT_HELP
-    end)
-    return link
-end
-
 --- One best: a star, what it's the best of, the figure in large type, and
---- which fight it was. Click it to read the fight.
+--- which fight it was. Click it to read the fight. Where it stands is left
+--- to PlaceBests.
 local function CreateCard(index)
-    local card = CreateFrame("Button", nil, tab.bests)
+    local card = CreateFrame("Button", nil, tab.bestsSection)
     card:SetHeight(CARD_HEIGHT)
     card:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     card:SetScript("OnClick", OnCardClick)
-
-    -- Odd ones take the left half of the row, even ones the right.
-    local row = math.floor((index - 1) / 2)
-    local top = -row * (CARD_HEIGHT + CARD_GAP)
-    if index % 2 == 1 then
-        card:SetPoint("TOPLEFT", tab.bests, "TOPLEFT", 0, top)
-        card:SetPoint("TOPRIGHT", tab.bests, "TOP", -CARD_GAP / 2, top)
-    else
-        card:SetPoint("TOPLEFT", tab.bests, "TOP", CARD_GAP / 2, top)
-        card:SetPoint("TOPRIGHT", tab.bests, "TOPRIGHT", 0, top)
-    end
 
     local fill = card:CreateTexture(nil, "BACKGROUND")
     fill:SetAllPoints()
@@ -283,8 +258,15 @@ local function CreateCard(index)
     local star = Kit.Icon(card, 22, "best")
     star:SetPoint("LEFT", 12, 0)
 
-    card.link = CreateLeaveOutLink(card)
+    -- The small print in the corner that leaves the fight out. Four of
+    -- them sit beside the figures, so they're the kit's quiet kind of link.
+    card.link = Kit.Link(card, "Leave out", function()
+        LeaveOut(card.best.fight)
+    end)
     card.link:SetPoint("BOTTOMRIGHT", -6, 4)
+    Kit.Tooltip(card.link, "Leave this fight out", function()
+        return LEAVE_OUT_HELP
+    end)
 
     card.title = Kit.Text(card, "GameFontDisableSmall")
     card.title:SetPoint("TOPLEFT", 46, -8)
@@ -303,9 +285,15 @@ local function CreateCard(index)
     return card
 end
 
+--- The cards, two to a row: odd ones on the left half, even ones on the
+--- right.
 ---@param bests table  from Progress.Bests; the first few are shown
-local function FillBests(bests)
+local function PlaceBests(layout, bests)
+    local section = tab.bestsSection
+    local inside = Inside(layout, section)
+
     local showing = math.min(#bests, MOST_BESTS)
+    local width = math.floor((inside.width - CARD_GAP) / 2)
 
     for index = 1, showing do
         local best = bests[index]
@@ -314,6 +302,13 @@ local function FillBests(bests)
         card.title:SetText(best.title)
         card.value:SetText(best.value)
         card.detail:SetText(best.detail)
+
+        local row = math.floor((index - 1) / 2)
+        local left = inside.left + ((index - 1) % 2) * (width + CARD_GAP)
+        local top = inside.y + row * (CARD_HEIGHT + CARD_GAP)
+        card:ClearAllPoints()
+        card:SetPoint("TOPLEFT", section, "TOPLEFT", left, -top)
+        card:SetWidth(width)
         card:Show()
     end
 
@@ -324,13 +319,77 @@ local function FillBests(bests)
         tab.cards[index]:Hide()
     end
 
-    -- Everything below is hung from the bottom of this, so it moves up
-    -- when there's only one row of bests.
+    -- With only one row of bests, everything under it moves up.
     local rows = math.max(math.ceil(showing / 2), 1)
-    tab.bests:SetHeight(rows * CARD_HEIGHT + (rows - 1) * CARD_GAP)
+    inside.y = inside.y + rows * CARD_HEIGHT + (rows - 1) * CARD_GAP
+
+    PlaceSection(layout, section, inside)
+end
+
+-- Which fights count -------------------------------------------------------------
+
+--- How many fights are left out, with the rules that leave them out a
+--- mouse-over away on the "i" before it.
+local function CreateCountedRow(section)
+    local row = CreateFrame("Frame", nil, section)
+
+    local whatCounts = Kit.HelpButton(row, "Which fights count", WHAT_COUNTS)
+    whatCounts:SetPoint("TOPLEFT")
+
+    row.text = Kit.Paragraph(row, "GameFontHighlight")
+    row.text:SetPoint("TOPLEFT", COUNTED_INDENT, -3)
+
+    return row
+end
+
+local function PlaceCounted(layout, fights)
+    local section = tab.countedSection
+    local inside = Inside(layout, section)
+
+    local row = tab.countedRow
+    row.text:SetWidth(inside.width - COUNTED_INDENT)
+    row.text:SetText(CountedText(fights))
+    row:SetHeight(math.max(HELP_SIZE, row.text:GetStringHeight() + 3))
+    Place(inside, row, 0)
+
+    PlaceSection(layout, section, inside)
 end
 
 -- Day by day -------------------------------------------------------------------
+
+--- The chart's ground: a faint backing for the columns to stand in, and
+--- the line they stand on, with room under it for the days.
+local function CreateChart(section)
+    local chart = CreateFrame("Frame", nil, section)
+    chart:SetHeight(CHART_HEIGHT)
+
+    local backing = chart:CreateTexture(nil, "BACKGROUND")
+    backing:SetPoint("TOPLEFT")
+    backing:SetPoint("BOTTOMRIGHT", 0, LABEL_ROOM)
+    backing:SetColorTexture(1, 1, 1, 0.03)
+
+    local baseline = chart:CreateTexture(nil, "BORDER")
+    baseline:SetPoint("BOTTOMLEFT", 0, LABEL_ROOM - 1)
+    baseline:SetPoint("BOTTOMRIGHT", 0, LABEL_ROOM - 1)
+    baseline:SetHeight(1)
+    baseline:SetColorTexture(Kit.MUTED[1], Kit.MUTED[2], Kit.MUTED[3], 0.6)
+
+    return chart
+end
+
+--- The upshot of the chart in a sentence, after an arrow for which way
+--- it went.
+local function CreateTrendRow(section)
+    local row = CreateFrame("Frame", nil, section)
+
+    row.icon = Kit.Icon(row, TREND_ICON)
+    row.icon:SetPoint("TOPLEFT")
+
+    row.text = Kit.Paragraph(row, "GameFontHighlight")
+    row.text:SetPoint("TOPLEFT", TREND_INDENT, -1)
+
+    return row
+end
 
 --- One day of the chart: a slot the full height of the chart, so there's
 --- plenty to hover over, with the column standing in it. How wide it is
@@ -370,7 +429,8 @@ local function CreateColumn(index)
 end
 
 ---@param days table  from Progress.ByDay; at least one day
-local function FillChart(days)
+---@param width number  of the chart
+local function FillChart(days, width)
     local peak = 0
     for _, day in ipairs(days) do
         peak = math.max(peak, day.dps)
@@ -379,8 +439,6 @@ local function FillChart(days)
     -- The days share the width between them. When the slots are as wide
     -- as they're allowed to be and there's width left over, the group
     -- stands in the middle of it.
-    local width = tab.chart:GetWidth()
-    width = width > 0 and width or USUAL_CHART_WIDTH
     local slot = math.floor(math.min(width / #days, WIDEST_SLOT))
     local left = math.floor((width - slot * #days) / 2)
 
@@ -435,20 +493,43 @@ local function FillChart(days)
     end
 end
 
-local function FillTrend(days)
+---@param width number  of the whole row, arrow and all
+local function FillTrend(row, days, width)
     local text, change = Trend(days)
-    tab.trend:SetText(text)
+    row.text:SetWidth(width - TREND_INDENT)
+    row.text:SetText(text)
+    row:SetHeight(math.max(TREND_ICON, row.text:GetStringHeight() + 1))
 
     -- With no arrow to show, a clock stands in for "give it time", so the
     -- words always start in the same place.
-    Kit.SetArrow(tab.trendIcon, change)
-    if not tab.trendIcon:IsShown() then
-        Kit.SetIcon(tab.trendIcon, "clock")
-        tab.trendIcon:Show()
+    Kit.SetArrow(row.icon, change)
+    if not row.icon:IsShown() then
+        Kit.SetIcon(row.icon, "clock")
+        row.icon:Show()
     end
 end
 
+--- A column a day, and under the chart the sentence on what it shows.
+local function PlaceDays(layout, days)
+    local section = tab.daysSection
+    local inside = Inside(layout, section)
+
+    Place(inside, tab.chart, 0)
+    FillChart(days, inside.width)
+
+    FillTrend(tab.trendRow, days, inside.width)
+    Place(inside, tab.trendRow, LINE_GAP)
+
+    PlaceSection(layout, section, inside)
+end
+
 -- The tab -------------------------------------------------------------------------
+
+--- The width there is for the page.
+local function PageWidth()
+    local width = tab.page:GetWidth()
+    return width > 0 and width or USUAL_WIDTH
+end
 
 local function Refresh()
     if not tab or not tab:IsVisible() then
@@ -468,10 +549,13 @@ local function Refresh()
         return
     end
 
-    FillBests(ns.Progress.Bests())
-    tab.counted:SetText(CountedText(fights))
-    FillChart(days)
-    FillTrend(days)
+    local layout = { frame = tab.page, left = 0, width = PageWidth(), y = 0 }
+
+    PlaceBests(layout, ns.Progress.Bests())
+    PlaceCounted(layout, fights)
+    PlaceDays(layout, days)
+
+    tab.page:SetHeight(layout.y)
 end
 
 local function AskToForget()
@@ -479,16 +563,12 @@ local function AskToForget()
     Kit.Confirm(FORGET_QUESTION:format(name), ns.Recorder.ForgetEverything)
 end
 
---- A section heading with a quiet word at its right-hand end saying what
---- the section is or what can be done with it.
-local function CreateSection(parent, title, caption)
-    local header = Kit.Header(parent, title)
-
-    local hint = Kit.Text(header, "GameFontDisableSmall", "RIGHT")
-    hint:SetPoint("TOPRIGHT", 0, -4)
-    hint:SetText(caption)
-
-    return header
+--- A quiet word at the right-hand end of a section's title band, saying
+--- what the section is or what can be done with it.
+local function AddCaption(section, words)
+    local caption = Kit.Text(section, "GameFontDisableSmall", "RIGHT")
+    caption:SetPoint("RIGHT", section.title, "RIGHT")
+    caption:SetText(words)
 end
 
 --- What's shown until a fight counts: a picture and a few words on what
@@ -500,11 +580,9 @@ local function CreateEmptyState()
     local icon = Kit.Icon(empty, 40, "combat")
     icon:SetPoint("CENTER", 0, 50)
 
-    empty.text = Kit.Text(empty, "GameFontHighlight", "CENTER")
+    empty.text = Kit.Paragraph(empty, "GameFontHighlight", "CENTER")
     empty.text:SetPoint("TOP", icon, "BOTTOM", 0, -14)
     empty.text:SetWidth(440)
-    empty.text:SetWordWrap(true)
-    empty.text:SetSpacing(3)
     empty.text:SetTextColor(unpack(Kit.MUTED))
 
     return empty
@@ -521,64 +599,30 @@ function ProgressTab.Create(parent, window)
 
     tab.empty = CreateEmptyState()
 
+    -- Everything else, to show and hide as one. The sections are laid out
+    -- on a page inside the margins, which only needs to know its width.
     local content = CreateFrame("Frame", nil, tab)
     content:SetAllPoints()
     tab.content = content
 
+    tab.page = CreateFrame("Frame", nil, content)
+    tab.page:SetPoint("TOPLEFT", MARGIN, -TOP_MARGIN)
+    tab.page:SetPoint("TOPRIGHT", -MARGIN, -TOP_MARGIN)
+    tab.page:SetHeight(1)
+
     -- Top: the bests. The cards are made as they're first needed.
-    local bestsHeader = CreateSection(content, "Your bests", "Click one to read the fight.")
-    bestsHeader:SetPoint("TOPLEFT", PADDING, -TOP_MARGIN)
-    bestsHeader:SetPoint("RIGHT", -PADDING, 0)
+    tab.bestsSection = Kit.Section(tab.page, "Your bests")
+    AddCaption(tab.bestsSection, "Click one to read the fight.")
 
-    tab.bests = CreateFrame("Frame", nil, content)
-    tab.bests:SetPoint("TOPLEFT", bestsHeader, "BOTTOMLEFT", 0, -GAP)
-    tab.bests:SetPoint("RIGHT", -PADDING, 0)
-    tab.bests:SetHeight(CARD_HEIGHT)
+    -- Under them: how many fights are left out, and why.
+    tab.countedSection = Kit.Section(tab.page, "Which fights count")
+    tab.countedRow = CreateCountedRow(tab.countedSection)
 
-    -- Under them: how many fights are left out, with the rules that leave
-    -- them out a mouse-over away.
-    local note = CreateFrame("Frame", nil, content)
-    note:SetPoint("TOPLEFT", tab.bests, "BOTTOMLEFT", 0, -LINE_GAP)
-    note:SetPoint("RIGHT", -PADDING, 0)
-    note:SetHeight(NOTE_HEIGHT)
-
-    local whatCounts = Kit.HelpButton(note, "Which fights count", WHAT_COUNTS)
-    whatCounts:SetPoint("LEFT")
-
-    tab.counted = Kit.Text(note, "GameFontHighlightSmall")
-    tab.counted:SetPoint("LEFT", whatCounts, "RIGHT", 6, 0)
-    tab.counted:SetPoint("RIGHT")
-    tab.counted:SetTextColor(unpack(Kit.MUTED))
-
-    -- Middle: a column a day.
-    local daysHeader =
-        CreateSection(content, "DPS, day by day", "One column for each day you fought.")
-    daysHeader:SetPoint("TOPLEFT", note, "BOTTOMLEFT", 0, -SECTION_GAP)
-    daysHeader:SetPoint("RIGHT", -PADDING, 0)
-
-    tab.chart = CreateFrame("Frame", nil, content)
-    tab.chart:SetPoint("TOPLEFT", daysHeader, "BOTTOMLEFT", 0, -GAP)
-    tab.chart:SetPoint("RIGHT", -PADDING, 0)
-    tab.chart:SetHeight(CHART_HEIGHT)
-
-    local backing = tab.chart:CreateTexture(nil, "BACKGROUND")
-    backing:SetPoint("TOPLEFT")
-    backing:SetPoint("BOTTOMRIGHT", 0, LABEL_ROOM)
-    backing:SetColorTexture(1, 1, 1, 0.03)
-
-    local baseline = tab.chart:CreateTexture(nil, "BORDER")
-    baseline:SetPoint("BOTTOMLEFT", 0, LABEL_ROOM - 1)
-    baseline:SetPoint("BOTTOMRIGHT", 0, LABEL_ROOM - 1)
-    baseline:SetHeight(1)
-    baseline:SetColorTexture(Kit.MUTED[1], Kit.MUTED[2], Kit.MUTED[3], 0.6)
-
-    -- And the upshot of the chart in a sentence.
-    tab.trendIcon = Kit.Icon(content, 14)
-    tab.trendIcon:SetPoint("TOPLEFT", tab.chart, "BOTTOMLEFT", 0, -LINE_GAP)
-
-    tab.trend = Kit.Text(content, "GameFontHighlight")
-    tab.trend:SetPoint("LEFT", tab.trendIcon, "RIGHT", 6, 0)
-    tab.trend:SetPoint("RIGHT", -PADDING, 0)
+    -- Then a column a day, and the upshot of it in a sentence.
+    tab.daysSection = Kit.Section(tab.page, "DPS, day by day")
+    AddCaption(tab.daysSection, "One column for each day you fought.")
+    tab.chart = CreateChart(tab.daysSection)
+    tab.trendRow = CreateTrendRow(tab.daysSection)
 
     -- Bottom: forgetting everything, on the window's own edge. It has the
     -- right-hand corner to itself, because the left is where the other

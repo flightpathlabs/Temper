@@ -203,11 +203,6 @@ local function DifferenceLines(comparison)
     return lines
 end
 
---- "2 interrupts", "1 dispel".
-local function Counted(count, what)
-    return count == 1 and ("1 " .. what) or ("%d %ss"):format(count, what)
-end
-
 --- What the fights have to say about healing and defence, in a line or
 --- three. The Healing tab has the detail.
 ---@param healing table  from Healing.Of
@@ -246,10 +241,10 @@ local function HealingLines(healing)
 
     local deeds = {}
     if healing.interrupts > 0 then
-        table.insert(deeds, Counted(healing.interrupts, "interrupt"))
+        table.insert(deeds, ns.Count(healing.interrupts, "interrupt"))
     end
     if healing.dispels > 0 then
-        table.insert(deeds, Counted(healing.dispels, "dispel"))
+        table.insert(deeds, ns.Count(healing.dispels, "dispel"))
     end
     if #deeds > 0 then
         table.insert(lines, table.concat(deeds, ", ") .. ".")
@@ -737,8 +732,9 @@ function Card.Create(parent)
         card.healingLines[index] = Piece(card, Paragraph(healing, "GameFontHighlight"))
     end
 
-    local more = Kit.Link(healing, "Open the Healing tab", function()
-        ns.ShowHealing()
+    -- The Healing tab, on the same fights as this page.
+    local more = Kit.Link(healing, "More on the Healing tab", function()
+        ns.ShowHealing(card.fights)
     end)
     more:SetPoint("RIGHT", healing.title, "RIGHT", 4, 0)
 
@@ -920,6 +916,7 @@ end
 ---                      this set, what to say when there's nothing in it,
 ---                      and the session when it's exactly one whole one
 function Card.Fill(card, fights, before, heading)
+    card.fights = fights
     local summary = ns.Summary.Of(fights)
     if summary.fights == 0 then
         ShowEmpty(card, heading)

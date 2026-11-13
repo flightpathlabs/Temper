@@ -125,9 +125,6 @@ function Fights.Describe(spell)
     end
 end
 
---- How full the player's mana, energy or rage is, as a share of the most
---- it can be. Nil if the game won't say.
----@return number|nil share, string|nil kind  e.g. 0.42, "MANA"
 --- Which resource the player fights with: "MANA", "ENERGY", "RAGE"...
 --- The game says this even when it won't say how full it is.
 local function PowerKind()
@@ -138,6 +135,9 @@ local function PowerKind()
     return token
 end
 
+--- How full the player's mana, energy or rage is, as a share of the most
+--- it can be. Nil if the game won't say.
+---@return number|nil share, string|nil kind  e.g. 0.42, "MANA"
 local function PowerNow()
     local kind, token = UnitPowerType("player")
     local now = Readable(UnitPower("player", kind))
@@ -258,8 +258,6 @@ local function ReadTally()
     return damage, spells, enemies
 end
 
--- A fight belongs to whichever recording was running when it began.
--- Pressing Record or Stop in the middle of one takes effect from the next.
 --- How the player's mana, energy or rage stood at each end of the fight.
 local function PowerSpent(began)
     local ok, finish, kind = pcall(PowerNow)
@@ -361,6 +359,10 @@ ns.OnEvent("PLAYER_REGEN_DISABLED", function()
         power = power,
         powerKind = powerKind,
         grouped = IsInGroup(),
+
+        -- A fight belongs to whichever session was running when it
+        -- began, even if that session is ended before the fight is. One
+        -- started mid-fight begins with the next.
         recording = ns.Recorder.Open(),
     }
 end)

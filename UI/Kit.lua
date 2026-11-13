@@ -168,58 +168,6 @@ end
 
 -- Bigger pieces ----------------------------------------------------------------
 
---- A section heading: a title with the game's ruled line under it.
----@return table frame  24 high; anchor its left and right edges
-function Kit.Header(parent, title)
-    local header = CreateFrame("Frame", nil, parent)
-    header:SetHeight(24)
-
-    header.title = Kit.Text(header, "GameFontNormal")
-    header.title:SetPoint("TOPLEFT", 0, -2)
-    header.title:SetText(title)
-
-    header.rule = header:CreateTexture(nil, "ARTWORK")
-    header.rule:SetAtlas("Options_HorizontalDivider")
-    header.rule:SetHeight(2)
-    header.rule:SetPoint("BOTTOMLEFT", 0, 1)
-    header.rule:SetPoint("BOTTOMRIGHT", 0, 1)
-    header.rule:SetAlpha(0.6)
-
-    return header
-end
-
---- A headline figure: what it is, the figure in large type, and how it
---- changed, with an arrow.
----@return table tile  56 high; call tile:Set(name, value, changeText, change)
-function Kit.Tile(parent)
-    local tile = CreateFrame("Frame", nil, parent)
-    tile:SetHeight(56)
-
-    tile.name = Kit.Text(tile, "GameFontDisableSmall")
-    tile.name:SetPoint("TOPLEFT")
-
-    tile.value = Kit.Text(tile, "GameFontNormalHuge")
-    tile.value:SetPoint("TOPLEFT", tile.name, "BOTTOMLEFT", 0, -3)
-
-    tile.arrow = Kit.Icon(tile, 12)
-    tile.arrow:SetPoint("TOPLEFT", tile.value, "BOTTOMLEFT", 0, -3)
-    tile.arrow:Hide()
-
-    tile.change = Kit.Text(tile, "GameFontHighlightSmall")
-    tile.change:SetPoint("LEFT", tile.arrow, "RIGHT", 3, 0)
-
-    --- @param changeText string|nil  from ChangeText or PointsText
-    --- @param change number|nil  the figure behind it, for the arrow
-    function tile:Set(name, value, changeText, change)
-        self.name:SetText(name)
-        self.value:SetText(value)
-        self.change:SetText(changeText or "")
-        Kit.SetArrow(self.arrow, changeText and change or nil)
-    end
-
-    return tile
-end
-
 --- A bar in the style of the game's own damage meter: an icon, then a
 --- bar with a name on the left and figures on the right.
 ---@return table row  22 high; call row:Set(icon, name, figures, share, color)
@@ -475,8 +423,8 @@ end
 
 -- Pages -------------------------------------------------------------------------
 
--- The Fights page and the Healing page are built from the same pieces and
--- laid out the same way, so the two read as one. A page that scrolls can't
+-- Every page in the window is built from the same pieces and laid out the
+-- same way, so they read as one. A page that scrolls can't
 -- size itself from its anchors, and text only wraps once it's told how
 -- wide it may be. So a page is laid out by hand each time it's filled:
 -- every piece is given a width and a place under the piece before it, and
