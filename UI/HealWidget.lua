@@ -29,10 +29,11 @@ local BLOCK_GAP = 8
 local LIVE_REFRESH_SECONDS = 0.5
 
 -- Where it starts out. The fight panel starts at the left of the screen,
--- centred 60 below the middle, and with everything on it switched on it
--- reaches about 160 below. This one hangs by its top edge just under that.
+-- centred 60 below the middle, and with everything on it switched on,
+-- buffs included, it reaches about 170 below. This one hangs by its top
+-- edge just under that.
 local START_X = 40
-local START_Y = -166
+local START_Y = -178
 
 -- The session's figures take at most this many lines.
 local SESSION_LINES = 2

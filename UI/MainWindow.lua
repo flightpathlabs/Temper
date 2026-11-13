@@ -321,6 +321,13 @@ local function PrintCheck()
             ns.Print(line)
         end
     end
+
+    -- Anything the readiness warnings and the buff row had to give up on.
+    if ns.Readiness then
+        for what, problem in pairs(ns.Readiness.complaints) do
+            ns.Print("Temper couldn't read your %s, and has stopped trying: %s", what, problem)
+        end
+    end
 end
 
 SLASH_TEMPER1 = "/temper"

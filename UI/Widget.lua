@@ -6,9 +6,12 @@ local _, ns = ...
 -- Click it for the full window, right-click for a short menu, drag it
 -- anywhere. In its top corner, a stopwatch starts and ends a session and
 -- a cog opens the options. It's on to begin
--- with and can be turned off. Under the main figures it can carry two
+-- with and can be turned off. Under the main figures it can carry three
 -- more things, each of which can be switched off from its menu or the
--- options: the last few fights, and a few figures for the session so far.
+-- options: the last few fights, a few figures for the session so far, and
+-- a row of small icons for the buffs worth having up, each lit while it's
+-- on (what's on is Combat\Readiness.lua's to say). The warning box that
+-- sits above the panel is a frame of its own (see ReadyAlert.lua).
 --
 -- During a fight the game lets an addon show its running damage but not
 -- read it. So the two live figures are passed straight from the game's
@@ -35,6 +38,13 @@ local BLOCK_GAP = 8
 -- shows. The first choice is none.
 local RECENT_COUNTS = { 0, 3, 5 }
 local MOST_RECENT = 5
+
+-- The buff icons along the bottom: how big, how far apart, how many there
+-- can be, and how faint one is while its buff isn't on.
+local BUFF_SIZE = 14
+local BUFF_GAP = 5
+local MOST_BUFFS = 8
+local BUFF_DIM = 0.35
 
 -- The last fight is set against the player's average over this many of
 -- the counted fights before it, and against nothing if there are fewer
@@ -322,8 +332,28 @@ local function SetLine(line, top, left, right)
     line.right:Show()
 end
 
---- Lays out the recent fights and the session's figures, whichever are
---- switched on, and sets the panel's height to fit them.
+--- Shows one buff icon: in full colour while its buff is on, grey and
+--- faint while it isn't.
+local function ShowBuff(icon, slot)
+    Kit.SetSpellIcon(icon.face, slot.icon)
+    icon.face:SetDesaturated(not slot.lit)
+    icon:SetAlpha(slot.lit and 1 or BUFF_DIM)
+    icon.key = slot.key
+    icon:Show()
+end
+
+--- The buffs to show along the bottom, when they're switched on. Their
+--- file is one the game only finds when it starts, so straight after an
+--- update there are none.
+local function BuffSlots()
+    if not ns.settings.widgetBuffs or not ns.Readiness then
+        return {}
+    end
+    return ns.Readiness.Slots()
+end
+
+--- Lays out the recent fights, the session's figures and the buffs,
+--- whichever are switched on, and sets the panel's height to fit them.
 local function RefreshLower()
     local lines, rules = widget.lines, widget.rules
     local used, ruled = 0, 0
@@ -381,6 +411,33 @@ local function RefreshLower()
                     sizes.biggestCrit == sizes.biggest and "a crit" or ""
                 )
             end
+        end
+    end
+
+    -- One row of icons, left to right, under everything else.
+    local buffs = BuffSlots()
+    local shownBuffs = math.min(#buffs, MOST_BUFFS)
+    if shownBuffs > 0 then
+        Rule()
+        for index = 1, shownBuffs do
+            local icon = widget.buffs[index]
+            icon:ClearAllPoints()
+            icon:SetPoint("TOPLEFT", 10 + (index - 1) * (BUFF_SIZE + BUFF_GAP), -top)
+            ShowBuff(icon, buffs[index])
+        end
+        top = top + BUFF_SIZE
+    end
+    for index = shownBuffs + 1, #widget.buffs do
+        widget.buffs[index]:Hide()
+        widget.buffs[index].key = nil
+    end
+
+    -- The row can shift under a resting mouse (a weapon equipped adds an
+    -- icon), and the tooltip has to follow what's under it now.
+    for index = 1, shownBuffs do
+        local icon = widget.buffs[index]
+        if GameTooltip:IsOwned(icon) then
+            icon:GetScript("OnEnter")(icon)
         end
     end
 
@@ -451,10 +508,21 @@ local function ShowMenu(self)
         AddToggle(root, "Session figures", "widgetStats", true, false)
         AddToggle(root, "The Temper icon", "widgetBrand", true, false)
 
-        -- The healing panel is a frame of its own (see HealWidget.lua), so
-        -- it sits apart from what's shown on this one.
+        -- The buffs and the warning box come from files the game only
+        -- finds when it starts, so straight after an update there's
+        -- nothing for their ticks to switch.
+        if ns.Readiness then
+            AddToggle(root, "Buffs along the bottom", "widgetBuffs", true, false)
+        end
+
+        -- The healing panel and the warning box are frames of their own
+        -- (see HealWidget.lua and ReadyAlert.lua), so they sit apart from
+        -- what's shown on this one.
         root:CreateDivider()
         AddToggle(root, "Healing panel", "healWidget", true, false)
+        if ns.Readiness and ns.ReadyAlert then
+            AddToggle(root, "Warn me when I'm not ready", "readyAlert", true, false)
+        end
 
         root:CreateDivider()
         root:CreateButton("Options", function()
@@ -534,6 +602,42 @@ local function CreateStopwatch()
     end)
     Kit.Tooltip(button, "Session", StopwatchTooltip)
     return button
+end
+
+--- What a buff icon's tooltip says: what it is, and whether it's on.
+local function ShowBuffTooltip(self)
+    if not self.key or not ns.Readiness then
+        return
+    end
+    local title, lines = ns.Readiness.Tooltip(self.key)
+    if not title then
+        return
+    end
+
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText(title)
+    for _, line in ipairs(lines) do
+        local color = line.hint and Kit.MUTED or { 1, 1, 1 }
+        GameTooltip:AddLine(line.text, color[1], color[2], color[3], true)
+    end
+    GameTooltip:Show()
+end
+
+--- One buff icon along the bottom. It answers the mouse for its tooltip,
+--- but lets clicks and drags through to the panel under it.
+local function CreateBuff()
+    local icon = CreateFrame("Frame", nil, widget)
+    icon:SetSize(BUFF_SIZE, BUFF_SIZE)
+    icon:Hide()
+
+    icon.face = icon:CreateTexture(nil, "ARTWORK")
+    icon.face:SetAllPoints()
+
+    icon:EnableMouse(true)
+    pcall(icon.SetMouseClickEnabled, icon, false)
+    icon:SetScript("OnEnter", ShowBuffTooltip)
+    icon:SetScript("OnLeave", GameTooltip_Hide)
+    return icon
 end
 
 local function Create()
@@ -638,12 +742,23 @@ local function Create()
             right = Label("GameFontHighlightSmall", "RIGHT"),
         }
     end
-    for index = 1, 2 do
+    for index = 1, 3 do
         local rule = widget:CreateTexture(nil, "ARTWORK")
         rule:SetColorTexture(1, 1, 1, 0.12)
         rule:SetHeight(1)
         widget.rules[index] = rule
     end
+
+    widget.buffs = {}
+    for index = 1, MOST_BUFFS do
+        widget.buffs[index] = CreateBuff()
+    end
+end
+
+--- The panel's frame, for what hangs from it (the warning box above it).
+--- nil until the saved data is ready.
+function ns.FightPanel()
+    return widget
 end
 
 ns.Subscribe("DATABASE_READY", function()
@@ -655,6 +770,7 @@ end)
 ns.Subscribe("FIGHTS_CHANGED", Refresh)
 ns.Subscribe("EXPERIMENTS_CHANGED", Refresh)
 ns.Subscribe("SETTINGS_CHANGED", Refresh)
+ns.Subscribe("READINESS_CHANGED", Refresh)
 
 -- A fight: keep the main figures ticking over while it lasts. These are
 -- registered after the fight record's own handlers, so by the time the

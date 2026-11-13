@@ -87,10 +87,19 @@ ns.DEFAULT_SETTINGS = {
     widget = true,
 
     -- On that panel: our icon in the corner; the few fights before the
-    -- last (1 none, 2 three, 3 five); and figures for the session so far.
+    -- last (1 none, 2 three, 3 five); figures for the session so far; and
+    -- along the bottom, a small icon for each kind of buff worth having
+    -- up, lit while it's on (see Combat\Readiness.lua).
     widgetBrand = true,
     widgetRecent = 2,
     widgetStats = true,
+    widgetBuffs = true,
+
+    -- A short note just above that panel when something's amiss before a
+    -- fight: a fishing pole still in hand, a buff of the class's own not
+    -- up, gear about to break (see UI\ReadyAlert.lua). Silent but for a
+    -- fight begun with the fishing pole, which plays the alert sound below.
+    readyAlert = true,
 
     -- A second panel like it, for healing. Off unless asked for: it can be
     -- popped out from the fight panel's menu or the options.

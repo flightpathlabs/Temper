@@ -28,7 +28,10 @@ plays beside the options while you do.
 
 **A panel for the fight you're in.** A small panel shows your DPS, damage,
 hits, crits and misses as the fight goes, and the last fight's exact
-figures in between. Click it for the full window.
+figures in between. Click it for the full window. Small icons along its
+bottom light for the buffs you have up, and a short note just above it
+says when you're not ready: a fishing pole still in hand, a class buff
+not up, gear about to break.
 
 **A record of every fight.** Each solo fight is kept and listed with its
 damage, DPS, length and crit rate. Open one and you get:

@@ -23,6 +23,7 @@ Combat\Procs.lua
 Combat\Sizes.lua
 Combat\Tallies.lua
 Combat\Mitigation.lua
+Combat\Readiness.lua
 Combat\Fights.lua
 
 Record\Recorder.lua
@@ -42,6 +43,7 @@ UI\RecordButton.lua
 UI\Widget.lua
 UI\HealWidget.lua
 UI\ProcAlert.lua
+UI\ReadyAlert.lua
 UI\Timeline.lua
 UI\Card.lua
 UI\FightsTab.lua

@@ -7,11 +7,11 @@ local _, ns = ...
 -- puts on the screen.
 --
 -- While the page is open an example enemy stands beside the window with
--- made-up hits playing on it (see Example.lua), and a sample of the
--- ability alert shows if that's on, so every change can be judged as it's
--- made. The Options window sits in the middle of the screen, where the
--- fighting happens, so this file also lets it be dragged aside by its
--- title bar.
+-- made-up hits playing on it (see Example.lua), and samples of the
+-- ability alert and of the warning above the fight panel show if those
+-- are on, so every change can be judged as it's made. The Options window
+-- sits in the middle of the screen, where the fighting happens, so this
+-- file also lets it be dragged aside by its title bar.
 
 local PREFIX = "Temper_"
 
@@ -339,6 +339,33 @@ local function AddScreenOptions(layout)
         "The Temper icon on the panel",
         "Untick for a plainer panel."
     )
+
+    -- These two are drawn from a file the game only finds when it starts,
+    -- so straight after an update they aren't there to offer.
+    if ns.Readiness then
+        AddCheckbox(
+            category,
+            "widgetBuffs",
+            "Buffs along the bottom of the panel",
+            "A row of small icons, lit while you have that kind of buff: rested experience, "
+                .. "food, an elixir, a flask, a scroll, something on your weapon, your class's "
+                .. "own buffs, and buffs from others. Point at one for what it is and how long "
+                .. "is left."
+        )
+    end
+
+    if ns.Readiness and ns.ReadyAlert then
+        AddCheckbox(
+            category,
+            "readyAlert",
+            "Warn me when I'm not ready to fight",
+            "A short note just above the fight panel when something's amiss: a fishing pole "
+                .. "still in your hand, a buff of your class's own not up, no poison or imbue on "
+                .. "your weapon, ammunition running low, gear about to break, or a pet that's away "
+                .. "or unhappy. It's silent, except for a fight begun with a fishing pole in "
+                .. "hand, which plays your alert sound."
+        )
+    end
 
     AddCheckbox(
         category,

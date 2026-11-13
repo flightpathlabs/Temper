@@ -73,3 +73,5 @@ end
 --                                was deleted
 --   PROCS_CHANGED                something worth pressing now came up, or
 --                                went (see Combat\Procs.lua)
+--   READINESS_CHANGED            a warning or a buff on the panel's row
+--                                came or went (see Combat\Readiness.lua)

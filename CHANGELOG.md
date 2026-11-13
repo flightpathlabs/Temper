@@ -44,6 +44,15 @@ First version.
 - A cog on the panel, and one in the window's title bar, opens the
   options. Beside the panel's cog, a stopwatch starts and ends a session:
   grey while none is running, in colour while one is.
+- Along the bottom of the panel, a row of small icons lights for the buffs
+  you have up: rested experience, food, an elixir, a flask, a scroll,
+  something on your weapon, your class's own buffs and buffs from others.
+  Point at one for what it is and how long is left. Just above the panel,
+  a short note says when you're not ready to fight: a fishing pole still
+  in hand, a class buff not up, no poison or imbue on your weapon, low
+  ammunition, gear about to break, or a pet that's away or unhappy. It's
+  silent, except that a fight begun with the fishing pole turns it red and
+  plays your alert sound. Both can be switched off.
 
 **Fights**
 
