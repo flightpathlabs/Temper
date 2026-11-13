@@ -174,6 +174,10 @@ local function GoesTowardsTypical(fight)
     return true
 end
 
+-- Experiments measure how far fights stray from the typical figure, over
+-- the same fights it went by.
+Summary.GoesTowardsTypical = GoesTowardsTypical
+
 --- The average of a list of DPS figures once the extremes are set aside.
 ---@param rates table  one figure per fight; sorted here
 ---@return number|nil dps  nil for an empty list

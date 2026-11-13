@@ -468,13 +468,17 @@ local function RefreshLower()
     end
 
     -- The few fights before the one in the main figures, newest first.
+    -- Between fights the main figures are the newest saved fight, so the
+    -- list starts after it; during one they're the fight in progress, which
+    -- isn't saved yet, so the list starts with the newest.
     local fights = ns.character.fights
     local wanted = RECENT_COUNTS[ns.settings.widgetRecent] or 0
-    local shown = math.min(wanted, #fights - 1)
+    local skipped = fightStart and 0 or 1
+    local shown = math.min(wanted, #fights - skipped)
     if shown > 0 then
         Rule()
         for back = 1, shown do
-            local fight = fights[#fights - back]
+            local fight = fights[#fights + 1 - skipped - back]
             Line(
                 Kit.Colored(ns.FightTitle(fight, "Fight"), MUTED),
                 ns.Rate(fight.damage / fight.length) .. " DPS"

@@ -189,7 +189,8 @@ end)
 
 -- The verdict -----------------------------------------------------------------
 
---- The average and the spread of damage a second across a set of fights.
+--- The average and the spread of damage a second across a set of fights,
+--- and how many fights the spread was measured over.
 local function Spread(fights)
     local damage, seconds = 0, 0
     for _, fight in ipairs(fights) do
@@ -204,20 +205,30 @@ local function Spread(fights)
     -- two sets are compared there, so the verdict and that page agree.
     -- All damage over all time when there's no typical figure to be had.
     local mean = damage / seconds
+    local counted = fights
     local ok, typical = pcall(ns.Summary.Typical, fights)
     if ok and type(typical) == "table" and typical.dps then
         mean = typical.dps
+
+        -- Measured over the fights that figure went by, so a stray critter
+        -- or a fight over in seconds can't make the verdict unsure.
+        counted = {}
+        for _, fight in ipairs(fights) do
+            if ns.Summary.GoesTowardsTypical(fight) then
+                table.insert(counted, fight)
+            end
+        end
     end
 
     -- How much single fights stray from that. With one fight there's no
     -- telling, which the verdict treats as "can't be sure of anything".
     local squares = 0
-    for _, fight in ipairs(fights) do
+    for _, fight in ipairs(counted) do
         squares = squares + (fight.damage / fight.length - mean) ^ 2
     end
-    local variance = #fights > 1 and squares / (#fights - 1) or nil
+    local variance = #counted > 1 and squares / (#counted - 1) or nil
 
-    return mean, variance
+    return mean, variance, #counted
 end
 
 --- What an experiment found.
@@ -233,8 +244,8 @@ end
 function Experiments.Verdict(experiment)
     local was = Experiments.FightsOf(experiment, "before")
     local is = Experiments.FightsOf(experiment, "after")
-    local before, spreadBefore = Spread(was)
-    local after, spreadAfter = Spread(is)
+    local before, spreadBefore, countedBefore = Spread(was)
+    local after, spreadAfter, countedAfter = Spread(is)
     if not before or not after or before == 0 then
         return nil
     end
@@ -262,10 +273,10 @@ function Experiments.Verdict(experiment)
 
     -- How far apart the two averages are, measured in the amount they'd
     -- be expected to wobble by chance.
-    local wobble = math.sqrt(spreadBefore / #was + spreadAfter / #is)
+    local wobble = math.sqrt(spreadBefore / countedBefore + spreadAfter / countedAfter)
     local apart = wobble > 0 and math.abs(difference) / wobble or math.huge
 
-    local clear = math.min(#was, #is) >= FEW_FIGHTS and CLEAR or CLEAR_WITH_FEW
+    local clear = math.min(countedBefore, countedAfter) >= FEW_FIGHTS and CLEAR or CLEAR_WITH_FEW
     local steady = wobble / before <= STEADY
 
     if verdict.direction == "same" then
@@ -281,7 +292,7 @@ function Experiments.Verdict(experiment)
     -- Chance wobble shrinks with the square root of the number of fights,
     -- so getting from where we are to "clear" takes this many in all.
     if verdict.sureness ~= "clear" and apart > 0 then
-        local fights = math.max(#was, #is)
+        local fights = math.max(countedBefore, countedAfter)
         local needed = math.ceil(fights * (clear / apart) ^ 2)
         verdict.more = math.max(FEWEST_MORE, math.min(needed - fights, MOST_MORE))
     end

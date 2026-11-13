@@ -258,7 +258,8 @@ local function CreateRow(timeline)
     row.rule = timeline:CreateTexture(nil, "BACKGROUND")
     row.rule:SetColorTexture(Kit.MUTED[1], Kit.MUTED[2], Kit.MUTED[3], RULE_ALPHA)
 
-    for index = 1, LONGEST_ROW / TICK_SECONDS do
+    -- One more than fits along a line, for the mark at its very end.
+    for index = 1, LONGEST_ROW / TICK_SECONDS + 1 do
         local tick = timeline:CreateTexture(nil, "BACKGROUND")
         tick:SetColorTexture(Kit.MUTED[1], Kit.MUTED[2], Kit.MUTED[3], RULE_ALPHA)
         tick:SetSize(1, TICK_HEIGHT)
@@ -284,7 +285,8 @@ end
 ---@param index number  which line, counting from 0
 ---@param reach number  how far along the line the fight goes
 ---@param scale number  pixels to a second
-local function ShowRow(timeline, row, index, reach, scale)
+---@param isLast boolean  true for the fight's last line
+local function ShowRow(timeline, row, index, reach, scale, isLast)
     local top = index * (ROW_HEIGHT + ROW_GAP)
 
     row.track:ClearAllPoints()
@@ -302,7 +304,10 @@ local function ShowRow(timeline, row, index, reach, scale)
         local x = INSET + seconds * scale
         local time = row.times[place]
 
-        if x <= reach then
+        -- The mark at a line's very end is the next line's first, so it's
+        -- only drawn on the last line, where there's no next.
+        local fits = seconds < rowSeconds or isLast
+        if fits and x <= reach then
             tick:ClearAllPoints()
             tick:SetPoint("TOPLEFT", timeline, "TOPLEFT", x, -(top + AXIS_TOP))
             tick:Show()
@@ -438,7 +443,7 @@ local function Set(self, fight)
             row = CreateRow(self)
             self.rows[index + 1] = row
         end
-        ShowRow(self, row, index, index < last and width - INSET or reach, scale)
+        ShowRow(self, row, index, index < last and width - INSET or reach, scale, index == last)
     end
     for index = last + 2, #self.rows do
         HideRow(self.rows[index])

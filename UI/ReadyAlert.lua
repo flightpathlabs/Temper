@@ -66,7 +66,11 @@ local function PlaySoundOnce()
         return
     end
 
-    -- Only straight after an update, before the game is restarted.
+    -- Only straight after an update, before the game is restarted. The
+    -- first choice of sound is always "No sound", whatever the others.
+    if ns.settings.procSound == 1 then
+        return
+    end
     local kit = SOUNDKIT and SOUNDKIT[FALLBACK_SOUND]
     if kit then
         pcall(PlaySound, kit, "SFX")
