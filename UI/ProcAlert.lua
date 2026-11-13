@@ -356,18 +356,55 @@ local function AurasHidden()
     return ok and hidden == true
 end
 
+--- The looping half of the game's proc glow, made from the same art. The
+--- glow's own template can't be used here: it comes with scripts, and the
+--- game allows none on anything inside its slots.
+local function CreateGlowLoop(button, icon)
+    local layer = CreateFrame("Frame", nil, button)
+    layer:SetAllPoints(button)
+    pcall(layer.SetFrameLevel, layer, button:GetFrameLevel() + 5)
+
+    local loop = layer:CreateTexture(nil, "ARTWORK")
+    loop:SetAtlas("UI-HUD-ActionBar-Proc-Loop-Flipbook")
+    loop:SetSize(ICON_SIZE * GLOW_SCALE, ICON_SIZE * GLOW_SCALE)
+    loop:SetPoint("CENTER", icon)
+
+    -- Unseen until the game plays it, as in the template.
+    loop:SetAlpha(0)
+
+    local group = loop:CreateAnimationGroup()
+    group:SetLooping("REPEAT")
+
+    local appear = group:CreateAnimation("Alpha")
+    appear:SetFromAlpha(1)
+    appear:SetToAlpha(1)
+    appear:SetDuration(0.001)
+    appear:SetOrder(1)
+
+    local flip = group:CreateAnimation("FlipBook")
+    flip:SetFlipBookRows(6)
+    flip:SetFlipBookColumns(5)
+    flip:SetFlipBookFrames(30)
+    flip:SetFlipBookFrameWidth(0)
+    flip:SetFlipBookFrameHeight(0)
+    flip:SetDuration(1)
+    flip:SetOrder(2)
+
+    return loop, group
+end
+
 --- The game's proc glow, played by the game whenever the slot shows its
---- buff. Only the looping part: the burst before it is started by a
---- script of its own, and the game runs no addon scripts on its slots.
+--- buff. Only the looping part: the burst before it would need a script,
+--- and the game runs no addon scripts on its slots.
 local function GlowGameSlot(button, icon)
-    local glow = CreateGlowFrame(button, icon)
-    glow.ProcStartFlipbook:Hide()
-    glow:Show()
-    if pcall(button.AddAuraShownAnimation, button, glow.ProcLoop) then
+    local made, loop, group = pcall(CreateGlowLoop, button, icon)
+    if made and pcall(button.AddAuraShownAnimation, button, group) then
         return
     end
 
-    glow:Hide()
+    if made then
+        loop:Hide()
+    end
     local pulse, throb = CreatePulse(button, icon)
     pulse:SetAlpha(0)
     button:AddAuraShownAnimation(throb)
