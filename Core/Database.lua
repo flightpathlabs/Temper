@@ -83,6 +83,10 @@ ns.DEFAULT_SETTINGS = {
     -- Show "Miss", "Dodge" and the like as small words.
     showMisses = true,
 
+    -- Hits that were most likely somebody else's: 1 small and faint in a
+    -- column of their own, 2 not shown, 3 shown like the player's own.
+    others = 1,
+
     -- Switch Blizzard's own damage numbers off while the lane is showing.
     hideBlizzardNumbers = true,
 

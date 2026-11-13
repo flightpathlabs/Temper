@@ -190,13 +190,15 @@ local function WaitingCasts(school, now)
 end
 
 --- The ability whose effect is most likely still ticking, for a blow that
---- no cast or swing explains.
-local function StillTicking(school)
+--- no cast or swing explains. Only casts recent enough to be ticking still
+--- count: the list isn't trimmed until the player casts again.
+local function StillTicking(school, now)
     local damaging = ns.character.schools
 
     for index = #casts, 1, -1 do
         local spell = casts[index].cast
-        if damaging[spell] and UsualSchool(spell) == school then
+        local recent = now - casts[index].time <= TICKING_SECONDS
+        if recent and damaging[spell] and UsualSchool(spell) == school then
             return spell
         end
     end
@@ -208,7 +210,8 @@ local function StillTicking(school)
     -- own blows will settle what it is.
     for index = #casts, 1, -1 do
         local spell = casts[index].cast
-        if damaging[spell] and UsualSchool(spell) == nil then
+        local recent = now - casts[index].time <= TICKING_SECONDS
+        if recent and damaging[spell] and UsualSchool(spell) == nil then
             Learn(spell, school)
             return spell
         end
@@ -246,6 +249,20 @@ local function StillBleeding(now)
     return nil
 end
 
+--- True if the player has just done something that could have landed a
+--- blow: a cast of theirs is still in the air, or a swing of theirs has
+--- been announced and not yet landed. Hits.lua asks this of blows on an
+--- enemy the player has no threat with.
+function Guess.ActedJustNow()
+    local now = GetTime()
+    local newest = casts[#casts]
+    if newest and now - newest.time <= FLIGHT_SECONDS then
+        return true
+    end
+    local swing = swings[#swings]
+    return swing ~= nil and now - swing <= SWING_SECONDS
+end
+
 --- The ability a blow of this school most likely was.
 ---@param school number|nil  the blow's school of damage
 ---@return number|string|nil spellID  nil when there's no telling; with a
@@ -280,7 +297,7 @@ function Guess.Match(school)
         if unknown then
             return Claim(unknown)
         end
-        local ticking = StillTicking(school)
+        local ticking = StillTicking(school, now)
         -- Only a tick if something was found still ticking. A spell
         -- nothing explains is just an untraced blow.
         return ticking, nil, ticking ~= nil

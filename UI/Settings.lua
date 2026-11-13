@@ -275,6 +275,19 @@ local function AddNumberOptions(layout)
         "As a small grey word in the same column."
     )
 
+    AddDropdown(
+        category,
+        "others",
+        "Other people's hits",
+        "The game reports every hit on an enemy without saying whose it was. A hit on an "
+            .. "enemy that isn't fighting you, when you haven't just swung or cast, is "
+            .. "somebody else's: a stranger's on an enemy you've only selected, say. Those "
+            .. "are never counted in your figures. Set apart, they're small, faint and in a "
+            .. "column beside yours. On an enemy you're fighting too, every hit is taken as "
+            .. "yours: the game gives no way to tell them apart.",
+        { "Set apart", "Hidden", "Shown like mine" }
+    )
+
     AddCheckbox(
         category,
         "hideBlizzardNumbers",

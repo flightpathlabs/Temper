@@ -157,9 +157,41 @@ local function GiveIcon(look, hit)
     look.iconAlpha = FAINT
 end
 
+-- What to do with a blow that was most likely somebody else's, by the
+-- "others" setting.
+local OTHERS_APART, OTHERS_HIDDEN = 1, 2
+
+-- Somebody else's, set apart: small and faint, with no icon or colour,
+-- so the player's own stand out.
+local OTHERS_COLOR = { 0.55, 0.55, 0.55 }
+local OTHERS_SCALE = 0.8
+
+--- How to draw somebody else's blow, set apart from the player's own.
+local function OthersLook(hit)
+    return {
+        r = OTHERS_COLOR[1],
+        g = OTHERS_COLOR[2],
+        b = OTHERS_COLOR[3],
+        scale = OTHERS_SCALE * (hit.avoided and WORD_SCALE or 1),
+        aside = true,
+    }
+end
+
 --- Puts one hit in the lane.
 ---@param stand table|nil  a frame to pin it to instead of a nameplate
 local function Draw(hit, stand)
+    if hit.stranger then
+        local others = ns.settings.others
+        if others == OTHERS_HIDDEN or (hit.avoided and not ns.settings.showMisses) then
+            return
+        elseif others == OTHERS_APART then
+            local word = hit.avoided and CombatFeedbackText and CombatFeedbackText[hit.avoided]
+            ns.Lane.Show(word or hit.avoided or hit.amount, OthersLook(hit), hit.unit, stand)
+            return
+        end
+        -- Otherwise shown like the player's own, below.
+    end
+
     if hit.avoided then
         if ns.settings.showMisses then
             -- The game's own words for these, in the player's language.
@@ -199,6 +231,7 @@ local SAMPLES = {
     { amount = 44, kind = "auto", school = 1, spell = 6603 },
     { amount = 22, kind = "magic", school = 8, tick = true },
     { amount = 31, kind = "magic", school = 32 },
+    { amount = 66, school = 1, stranger = true },
     { amount = 213, kind = "ability", school = 1, spell = 78, crit = true },
 }
 local nextSample = 0

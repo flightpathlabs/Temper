@@ -22,6 +22,10 @@ First version.
   a slider; gold, red or their own colour; and whether they land with a
   small pop, a big pop, a shake or no fuss.
 - Misses, dodges and parries show as small grey words.
+- Hits on an enemy that isn't fighting you, when you haven't just swung or
+  cast, are taken as somebody else's: small, faint and in a column of
+  their own, or hidden, or shown like yours, as you choose. They're never
+  counted in your figures.
 - Optionally, an icon beside every number: the ability's own when Temper
   can tell which it was, a small dot in the school's colour for each tick
   of a bleed or damage over time, and a faint plain picture of the kind

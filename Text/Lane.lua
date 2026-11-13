@@ -91,6 +91,14 @@ local SIDES = {
     { layout = "flushLeft", point = "BOTTOMLEFT", plate = "RIGHT", x = 1, y = 0 },
 }
 
+-- How far other people's numbers sit from the player's own, so that the
+-- two never share a column: to the right of the player's when they're
+-- centred above the nameplate, and further out when they're beside it.
+-- So many times the height of an ordinary number, and never less than the
+-- smallest distance: room for a few digits and an icon at any size.
+local ASIDE_LINES = 4.5
+local LEAST_ASIDE = 56
+
 -- Where numbers go when there's no nameplate to pin them to.
 local SPARE_HEIGHT = 140
 
@@ -305,12 +313,12 @@ end
 --- Asks the numbers already showing to step up, so a new one of the
 --- given height has room. Only numbers pinned to the same thing share a
 --- column; ones still fading over another enemy are left alone.
-local function MakeRoom(anchor, height)
+local function MakeRoom(anchor, aside, height)
     local floor = height
 
     for index = #showing, 1, -1 do
         local number = showing[index]
-        if number.anchor == anchor then
+        if number.anchor == anchor and number.aside == aside then
             local bottom = number.rise + number.liftWanted
             if bottom < floor then
                 number.liftWanted = number.liftWanted + (floor - bottom)
@@ -422,7 +430,8 @@ end
 ---                   iconAlpha how solid either is (for the guesses that
 ---                   should stay in the background), and slot true to keep
 ---                   the icon's place empty when there's neither, so that a
----                   word lines up with the numbers in a column
+---                   word lines up with the numbers in a column; aside true
+---                   for somebody else's, which go in a column of their own
 ---@param unit string|nil  whose nameplate to pin it to; the target's if
 ---                        not given
 ---@param stand table|nil  a frame of our own to pin it to instead of a
@@ -453,9 +462,19 @@ function Lane.Show(value, look, unit, stand)
     end
     Attach(number)
 
-    -- A lane beside the nameplate arcs away from it. One above takes turns.
-    if side.x ~= 0 then
-        number.lean = side.x
+    -- Somebody else's, in a column of its own: further out beside the
+    -- nameplate, or off to the right above it and at the fixed spot.
+    number.aside = look.aside or false
+    local outward = (plate and side.x ~= 0) and side.x or 1
+    if number.aside then
+        local base = tonumber(ns.settings.fontSize) or USUAL_FONT_SIZE
+        number.x = number.x + outward * math.max(LEAST_ASIDE, base * ASIDE_LINES)
+    end
+
+    -- A lane beside the nameplate arcs away from it. One above takes
+    -- turns, but somebody else's always arcs away from the player's own.
+    if side.x ~= 0 or number.aside then
+        number.lean = outward
     else
         number.lean = nextLean
         nextLean = -nextLean
@@ -477,7 +496,7 @@ function Lane.Show(value, look, unit, stand)
     number.rise = 0
     number.lift = 0
     number.liftWanted = 0
-    MakeRoom(number.anchor, number.height)
+    MakeRoom(number.anchor, number.aside, number.height)
 
     -- A spent number was last seen faded to nothing. Made solid here,
     -- while it's pinned to nothing, so it shows even if the client later

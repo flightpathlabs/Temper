@@ -170,6 +170,29 @@ local function IsOurs(unit)
     return ns.settings.allEnemies and Plain(UnitThreatSituation("player", unit), nil) ~= nil
 end
 
+--- True if a blow on this enemy was plainly somebody else's. Only a blow
+--- on the player's target needs asking: any other enemy is only looked at
+--- in the first place if it has the player on its threat list (IsOurs).
+---
+--- The game doesn't say whose a blow was, so this goes by what it does
+--- say. An enemy that has neither the player nor their pet on its threat
+--- list isn't fighting them, and a blow on it that nothing the player has
+--- just done could have landed belongs to whoever is fighting it: a
+--- stranger, on an enemy the player has only selected. The opening blow of
+--- the player's own pull may come before the game puts them on the list,
+--- which is why their own swing or cast just before it keeps it theirs.
+--- Once the player is on the list, every blow is taken as theirs, as
+--- before: in a fight of their own there's no telling one person's blow
+--- from another's.
+local function SomebodyElses(unit)
+    local mine = Plain(UnitThreatSituation("player", unit), true)
+    local pets = UnitExists("pet") and Plain(UnitThreatSituation("pet", unit), true)
+    if mine ~= nil or (pets ~= nil and pets ~= false) then
+        return false
+    end
+    return not ns.Guess.ActedJustNow()
+end
+
 ns.OnEvent("UNIT_COMBAT", function(unit, action, flag, amount, school)
     if IsSecret(unit) or IsSecret(action) or IsSecret(flag) then
         return
@@ -199,6 +222,14 @@ ns.OnEvent("UNIT_COMBAT", function(unit, action, flag, amount, school)
     elseif AVOIDED[action] then
         hit.avoided = action
     else
+        return
+    end
+
+    -- Somebody else's, plainly: drawn as such, if at all, and never
+    -- counted as the player's or traced to one of their abilities.
+    if SomebodyElses(unit) then
+        hit.stranger = true
+        ns.Publish("TARGET_HIT", hit)
         return
     end
 
