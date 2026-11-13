@@ -35,12 +35,14 @@ ns.ProcAlert = ProcAlert
 
 local Kit = ns.Kit
 
--- An action button is 45 across.
+-- An action button is 45 across. Each slot is wide enough for the
+-- ability's name under its icon, with a line of small type for that name.
 local ICON_SIZE = 52
 local SLOT_WIDTH = 84
 local SLOT_GAP = 6
 local NAME_GAP = 4
-local SLOT_HEIGHT = ICON_SIZE + NAME_GAP + 12
+local NAME_HEIGHT = 12
+local SLOT_HEIGHT = ICON_SIZE + NAME_GAP + NAME_HEIGHT
 
 -- The action bar's icon frame is a pixel wider than its icon, and the
 -- cooldown inside it sits three in from each edge.
@@ -134,6 +136,9 @@ local soundChoice
 -- tried once and then left alone. /temper check reads these out.
 ProcAlert.complaints = {}
 
+--- Calls a method the client may refuse, and notes the refusal under
+--- `what` so it isn't tried again.
+---@return boolean ok  false if it failed, now or before
 local function Attempt(what, method, ...)
     if ProcAlert.complaints[what] then
         return false
@@ -146,7 +151,7 @@ local function Attempt(what, method, ...)
     return ok
 end
 
--- Sound ------------------------------------------------------------------------
+-- Sound -----------------------------------------------------------------------
 
 local function PlayChosen()
     ProcAlert.Play(ns.settings.procSound)
@@ -170,7 +175,7 @@ local function Sound(fresh)
     end
 end
 
--- The glow ---------------------------------------------------------------------
+-- The glow --------------------------------------------------------------------
 
 --- The game's own proc glow, the one its action buttons wear. It's a plain
 --- frame of art and animation, borrowed for a frame of ours: nothing about
@@ -183,6 +188,8 @@ local function CreateGlowFrame(parent, icon)
     return glow
 end
 
+--- A soft highlight over an icon that brightens and fades in turn, for
+--- where the game's glow can't be had.
 local function CreatePulse(parent, icon)
     local pulse = parent:CreateTexture(nil, "OVERLAY", nil, 1)
     pulse:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
@@ -198,6 +205,7 @@ local function CreatePulse(parent, icon)
     return pulse, throb
 end
 
+--- The game's glow on one of Temper's own slots, burst and all.
 local function BorrowGlow(slot)
     local glow = CreateGlowFrame(slot, slot.icon)
 
@@ -231,14 +239,18 @@ local function MakePulse(slot)
     }
 end
 
+--- Starts a slot's glow. If the client objects, whatever half of it
+--- started is stopped again rather than left stuck.
 local function StartGlow(slot)
     if not Attempt("glow", slot.glow.Start) then
         pcall(slot.glow.Stop)
     end
 end
 
--- Slots ------------------------------------------------------------------------
+-- Slots -----------------------------------------------------------------------
 
+--- The shadow that sweeps round an icon as a buff's time runs out, set
+--- inside the action bar's frame as the game's own cooldowns are.
 local function CreateSweep(parent, icon)
     local sweep = CreateFrame("Cooldown", nil, parent, "CooldownFrameTemplate")
     sweep:ClearAllPoints()
@@ -278,6 +290,7 @@ local function CreateName(parent, icon)
     return name
 end
 
+--- One alert: the icon in its frame, the sweep, the name and the glow.
 local function CreateSlot()
     local slot = CreateFrame("Frame", nil, holder)
     slot:SetSize(SLOT_WIDTH, SLOT_HEIGHT)
@@ -323,6 +336,7 @@ local function Fill(slot, item)
     SetSweep(slot, item.expires, item.duration)
 end
 
+--- Takes an alert off the screen and keeps its slot for the next one.
 local function Release(key)
     local slot = showing[key]
     showing[key] = nil
@@ -333,7 +347,7 @@ local function Release(key)
     table.insert(spare, slot)
 end
 
--- The game's own display -------------------------------------------------------
+-- The game's own display ------------------------------------------------------
 
 -- The container, once made, and how each buff given to it fared, by name:
 -- "ready" once the game has a slot for it, "failed" if it refused.
@@ -450,6 +464,8 @@ local function AddGameSlot(buff)
     DressGameSlot(button)
 end
 
+--- The container itself, in the alert's place, with a slot for each buff
+--- the game hides. A buff it refuses is put away and noted as failed.
 local function CreateGameDisplay(buffs)
     gameDisplay = CreateFrame("AuraContainer", nil, UIParent, "CustomAuraContainerTemplate")
     gameDisplay:SetFrameStrata("MEDIUM")
@@ -537,7 +553,8 @@ end
 --- How a buff the game hides in a fight fares with the game's display:
 --- "ready", "failed", "waiting" for a fight to end, or nil while the alert
 --- is off and nothing has been tried.
----@param name string
+---@param name string  the buff's name, as Procs.HiddenInFights gives it
+---@return string|nil
 function ProcAlert.GameDrawing(name)
     if not ns.settings.procAlert then
         return nil
@@ -548,8 +565,9 @@ function ProcAlert.GameDrawing(name)
     return gameDrawn[name] or (gameWaiting and "waiting" or nil)
 end
 
--- Drawing ----------------------------------------------------------------------
+-- Drawing ---------------------------------------------------------------------
 
+--- The made-up alert, its time starting again each time it runs out.
 local function SampleItem()
     local now = GetTime()
     if now - sampleStart >= SAMPLE_SECONDS then
@@ -578,6 +596,8 @@ local function Wanted()
     return items
 end
 
+--- Puts on screen what's wanted now, reusing the slots already showing,
+--- and sounds for any alert that has just come on.
 local function Redraw()
     if not holder then
         return
@@ -635,8 +655,9 @@ local function Redraw()
     end
 end
 
--- Building it --------------------------------------------------------------------
+-- Building it -----------------------------------------------------------------
 
+--- Keeps where the alert was dragged to.
 local function SavePlace(self)
     self:StopMovingOrSizing()
 
@@ -653,6 +674,8 @@ local function SavePlace(self)
     self:SetPoint("CENTER", UIParent, "CENTER", ns.db.procAlert.x, ns.db.procAlert.y)
 end
 
+--- The frame the slots sit in, where it was last left, and the hint
+--- shown under the sample.
 local function Create()
     holder = CreateFrame("Frame", "TemperProcAlert", UIParent)
     holder:SetSize(SLOT_WIDTH, SLOT_HEIGHT)
@@ -713,6 +736,8 @@ function ProcAlert.Sample(wanted)
     Redraw()
 end
 
+-- Events ----------------------------------------------------------------------
+
 ns.Subscribe("DATABASE_READY", function()
     Create()
     soundChoice = ns.settings.procSound
@@ -733,9 +758,8 @@ ns.Subscribe("SETTINGS_CHANGED", function()
 end)
 
 -- The alert switched on or off during a fight reaches the game's display
--- once the fight is over.
--- The game can keep buffs hidden for a moment after a fight, or for other
--- reasons altogether, and says when it stops.
+-- once the fight is over. The game can keep buffs hidden for a moment
+-- after a fight, or for other reasons altogether, and says when it stops.
 local function TryAgain()
     if gameWaiting then
         ApplyGameDisplay()

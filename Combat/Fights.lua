@@ -118,7 +118,8 @@ local IsSecret = issecretvalue or function()
     return false
 end
 
--- The fight in progress: { start, at, target, grouped, recording }.
+-- The fight in progress: { start, at, target, enemyLevel, classification,
+-- rest, power, powerKind, grouped, recording }.
 local current
 
 -- When the last fight ended, on GetTime's clock, whether or not it was
@@ -150,6 +151,8 @@ end
 --- rank, and what one use costs. Noted with the fight, since all three
 --- change as the character levels. Healing abilities are described the
 --- same way (see Tallies.lua).
+---@param spell table  a row of a fight's spells; gains icon, rank, and
+---                    cost and power when the game gives them
 function Fights.Describe(spell)
     local id = spell.id
     if id == 0 then
@@ -369,6 +372,9 @@ local function AddMitigation(fight)
     end
 end
 
+--- Keeps a finished fight with the character's others, and lets the rest
+--- of the addon know.
+---@param recording table|nil  the recording that was running when it began
 local function Save(fight, recording)
     if recording and ns.Recorder.StillKept(recording) then
         fight.recording = recording.number
@@ -449,6 +455,8 @@ ns.OnEvent("PLAYER_REGEN_DISABLED", function()
 end)
 
 --- True while a fight that belongs to this recording is still going on.
+---@param recording table
+---@return boolean
 function Fights.BelongsTo(recording)
     return current ~= nil and current.recording == recording
 end

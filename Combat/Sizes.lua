@@ -53,6 +53,10 @@ local CRIT_STRETCH = 3
 -- seen before.
 local LEARNING_RATE = 0.3
 
+-- Room for rounding when sized blows are held up against the game's tally:
+-- a little over the tally is still believed.
+local TALLY_MARGIN = 1.05
+
 local IsSecret = issecretvalue or function()
     return false
 end
@@ -61,6 +65,9 @@ end
 -- { time, gain }.
 local steps = {}
 local lastThreat = 0
+
+-- Steps from before this moment are of no use to the fight in progress.
+local keepFrom = 0
 
 --- The player's threat on their target: nil if the game won't say, 0 if
 --- they have none.
@@ -90,7 +97,7 @@ ns.OnEvent("UNIT_THREAT_LIST_UPDATE", function(unit)
 
     -- Nothing older than a fight's lead-in can matter to the next fight.
     -- (During a fight Begin has already set the cut-off, below.)
-    while steps[1] and steps[1].time < Sizes.keepFrom and steps[1].time < now - LEAD_SECONDS do
+    while steps[1] and steps[1].time < keepFrom and steps[1].time < now - LEAD_SECONDS do
         table.remove(steps, 1)
     end
 end)
@@ -101,14 +108,11 @@ ns.OnEvent("PLAYER_TARGET_CHANGED", function()
     lastThreat = Threat() or 0
 end)
 
--- Steps from before this moment are of no use to the fight in progress.
-Sizes.keepFrom = 0
-
 --- Marks the start of a fight. Steps from the moments just before it are
 --- kept: the opening blow comes before the fight is announced.
 function Sizes.Begin()
-    Sizes.keepFrom = GetTime() - LEAD_SECONDS
-    while steps[1] and steps[1].time < Sizes.keepFrom do
+    keepFrom = GetTime() - LEAD_SECONDS
+    while steps[1] and steps[1].time < keepFrom do
         table.remove(steps, 1)
     end
 end
@@ -226,7 +230,7 @@ function Sizes.Finish(blows, fight)
         end
         local usual = total / (counts[blow.spell] or 1)
         local stretch = blow.crit and CRIT_STRETCH or HIT_STRETCH
-        return math.min(usual * stretch, total * 1.05) + 1
+        return math.min(usual * stretch, total * TALLY_MARGIN) + 1
     end
 
     local sizes = { hits = 0, total = 0, crits = 0, critTotal = 0 }
@@ -256,7 +260,7 @@ function Sizes.Finish(blows, fight)
     -- no one of them to more than everything. If they seem to, threat was
     -- measuring something else and none of it can be trusted.
     local sized = sizes.total + sizes.critTotal
-    if not sizes.biggest or sized > fight.damage * 1.05 + 2 then
+    if not sizes.biggest or sized > fight.damage * TALLY_MARGIN + 2 then
         return nil
     end
     return sizes

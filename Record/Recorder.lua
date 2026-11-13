@@ -12,6 +12,7 @@ local _, ns = ...
 --   number     counts up per character; it's how the player refers to it
 --   startedAt  server time
 --   endedAt    server time, absent while it's still open
+--   note       what the player wrote about it, if anything (see Card.lua)
 --
 -- The fights carry the recording's number, not the other way round.
 
@@ -62,6 +63,7 @@ function Recorder.Before(recording)
     end
 end
 
+--- Starts a new recording, unless one is already open.
 function Recorder.Start()
     if open or not ns.character then
         return
@@ -103,6 +105,7 @@ local function Forget(recording)
     end
 end
 
+--- Closes the open recording, if there is one.
 ---@return table|nil finished  the recording, if it has any fights in it
 function Recorder.Stop()
     if not open then

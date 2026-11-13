@@ -78,6 +78,8 @@ local IsSecret = issecretvalue or function()
     return false
 end
 
+-- The row, its pips, made as they're first wanted, and how many of them
+-- are showing.
 local row
 local pips = {}
 local shown = 0
@@ -85,19 +87,18 @@ local shown = 0
 -- The nameplate the row is pinned to, while it is.
 local pinnedTo
 
+-- How many times in a row the game has refused to pin it.
 local refusals = 0
 
 -- For /temper check: the game's own words when it wouldn't pin the row
 -- often enough to give up, wouldn't give the count at all, or wouldn't
 -- draw it. Any one of them and the row stays hidden for the session.
-ComboPoints.refusal = nil
-ComboPoints.unreadable = nil
-ComboPoints.undrawable = nil
+local pinRefusal, unreadable, undrawable
 
 -- Also for /temper check: whether the plain dots stand in for the game's
 -- art, and whether the game has been seen keeping the count hidden.
-ComboPoints.plainArt = false
-ComboPoints.seenHidden = false
+local plainArt = false
+local seenHidden = false
 
 --- Asks something that may be refused. Nothing if it was, or if the
 --- answer is one we may not read.
@@ -113,7 +114,7 @@ local function Read(method, ...)
     return value
 end
 
--- Who and what -----------------------------------------------------------------------
+-- Who and what ----------------------------------------------------------------
 
 --- The player's class, as the game names it in English, if it will say.
 local function PlayerClass()
@@ -182,16 +183,16 @@ local function Count()
     end
 
     if not asked then
-        ComboPoints.unreadable = tostring(count)
+        unreadable = tostring(count)
     elseif not askedPower then
-        ComboPoints.unreadable = tostring(power)
+        unreadable = tostring(power)
     else
-        ComboPoints.unreadable = "it gave no count"
+        unreadable = "it gave no count"
     end
     return nil
 end
 
--- Building the row -----------------------------------------------------------------------
+-- Building the row ------------------------------------------------------------
 
 local function Scaled(size)
     return size * SCALE
@@ -272,11 +273,11 @@ local function NewDotPip(pip, point)
 end
 
 local function PipSize()
-    return ComboPoints.plainArt and DOT_SIZE or Scaled(PIP_SIZE)
+    return plainArt and DOT_SIZE or Scaled(PIP_SIZE)
 end
 
 local function PipStep()
-    return ComboPoints.plainArt and DOT_SIZE + SPACING or Scaled(PIP_SIZE + SPACING)
+    return plainArt and DOT_SIZE + SPACING or Scaled(PIP_SIZE + SPACING)
 end
 
 local function NewPip(point)
@@ -284,7 +285,7 @@ local function NewPip(point)
     pip:SetSize(PipSize(), PipSize())
     pip:SetPoint("LEFT", (point - 1) * PipStep(), 0)
 
-    if ComboPoints.plainArt then
+    if plainArt then
         NewDotPip(pip, point)
     else
         NewGemPip(pip, point)
@@ -317,10 +318,10 @@ local function Create()
     row:EnableMouse(false)
     row:Hide()
 
-    ComboPoints.plainArt = not HaveArt()
+    plainArt = not HaveArt()
 end
 
--- Pinning ------------------------------------------------------------------------------
+-- Pinning ---------------------------------------------------------------------
 
 local function Unpin()
     pinnedTo = nil
@@ -341,16 +342,16 @@ local function Pin(plate)
     Unpin()
     refusals = refusals + 1
     if refusals >= REFUSALS_ALLOWED then
-        ComboPoints.refusal = tostring(problem)
+        pinRefusal = tostring(problem)
     end
 end
 
--- Drawing ------------------------------------------------------------------------------
+-- Drawing ---------------------------------------------------------------------
 
 --- Hands the count to the pips to draw, and shows the row unless the
 --- points are known to be spent outside a fight.
 local function Draw()
-    if not pinnedTo or ComboPoints.undrawable then
+    if not pinnedTo or undrawable then
         return
     end
 
@@ -364,7 +365,7 @@ local function Draw()
         for _, bar in ipairs(pips[point].bars) do
             local ok, problem = pcall(bar.SetValue, bar, count)
             if not ok then
-                ComboPoints.undrawable = tostring(problem)
+                undrawable = tostring(problem)
                 Unpin()
                 return
             end
@@ -372,7 +373,7 @@ local function Draw()
     end
 
     if IsSecret(count) then
-        ComboPoints.seenHidden = true
+        seenHidden = true
         row:Show()
         return
     end
@@ -386,7 +387,7 @@ local function Refresh()
     end
 
     Unpin()
-    local given = ComboPoints.refusal or ComboPoints.unreadable or ComboPoints.undrawable
+    local given = pinRefusal or unreadable or undrawable
     if given or not ns.settings.comboPoints or not Building() or not FitTarget() then
         return
     end
@@ -442,7 +443,7 @@ local function OnPlateRemoved(unit)
     C_Timer.After(0, Refresh)
 end
 
--- For /temper check ---------------------------------------------------------------------
+-- For /temper check -----------------------------------------------------------
 
 --- How the combo points are getting on with the game, as lines of text
 --- for /temper check. Nothing for a class without combo points.
@@ -464,28 +465,27 @@ function ComboPoints.CheckLines()
         return lines
     end
 
-    if ComboPoints.undrawable then
+    if undrawable then
         table.insert(
             lines,
             "The game wouldn't let Temper draw your combo points, so they aren't shown: "
-                .. ComboPoints.undrawable
+                .. undrawable
         )
-    elseif ComboPoints.unreadable then
+    elseif unreadable then
         table.insert(
             lines,
-            "The game wouldn't give Temper your combo points, so they aren't shown: "
-                .. ComboPoints.unreadable
+            "The game wouldn't give Temper your combo points, so they aren't shown: " .. unreadable
         )
-    elseif ComboPoints.refusal then
+    elseif pinRefusal then
         table.insert(
             lines,
             "The game wouldn't pin your combo points to your target's nameplate, so they "
                 .. "aren't shown: "
-                .. ComboPoints.refusal
+                .. pinRefusal
         )
     else
         local line = "Combo points show under your target's nameplate."
-        if ComboPoints.seenHidden then
+        if seenHidden then
             line = line
                 .. " The game keeps the count from addons at times, so Temper hands it "
                 .. "to the game to draw, and the empty pips stay while you have an enemy "
@@ -497,13 +497,13 @@ function ComboPoints.CheckLines()
         table.insert(lines, line)
     end
 
-    if ComboPoints.plainArt then
+    if plainArt then
         table.insert(lines, "The game's combo point art wasn't found, so plain dots stand in.")
     end
     return lines
 end
 
--- Events -------------------------------------------------------------------------------
+-- Events ----------------------------------------------------------------------
 
 ns.Subscribe("DATABASE_READY", function()
     Create()

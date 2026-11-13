@@ -52,6 +52,17 @@ local NOTE_GAP = 6
 -- the card is filled before the game has worked out its real width.
 local USUAL_WIDTH = 547
 
+-- The scrolling page stops this far short of the card's foot.
+local FOOT_GAP = 8
+
+-- With nothing selected: the logo, and under it a line on what to do,
+-- set a little below the middle of the card and kept to this width.
+local LOGO_WIDTH = 320
+local LOGO_HEIGHT = 160
+local LOGO_GAP = 6
+local EMPTY_WIDTH = 340
+local EMPTY_DROP = 60
+
 -- Space between one section and the next, and between lines of text in
 -- one.
 local SECTION_GAP = Kit.SECTION_GAP
@@ -107,7 +118,7 @@ local NONE_TYPICAL = "None of these fights counts towards a typical figure, so t
 local SIZES_ARE_ESTIMATES = "The game doesn't say how hard a single blow lands, so its size is "
     .. "worked out and may be a little off."
 
--- What the page says ------------------------------------------------------------
+-- What the page says ----------------------------------------------------------
 
 --- "Abilities 62%    Auto attacks 38%", each kind in the colour of its
 --- bars, so the line is also the key to them.
@@ -356,7 +367,7 @@ local function HealingLines(healing)
     return lines
 end
 
--- The figures --------------------------------------------------------------------
+-- The figures -----------------------------------------------------------------
 
 -- Each figure in the row is a table of the kind Kit.StatRow shows: a
 -- label and a value, what lies behind it for its tooltip, and when
@@ -441,6 +452,7 @@ local function DamageStat(summary, comparison)
     return stat
 end
 
+--- How long the fighting took, with the average fight in the tooltip.
 local function TimeStat(summary)
     local stat = {
         label = "Time",
@@ -458,6 +470,7 @@ local function TimeStat(summary)
     return stat
 end
 
+--- The share of hits that were critical, "-" when nothing landed.
 local function CritStat(summary, comparison)
     local stat = {
         label = "Crit",
@@ -593,7 +606,7 @@ local function StatsFor(summary, comparison)
     return stats
 end
 
--- Laying out ---------------------------------------------------------------------
+-- Laying out ------------------------------------------------------------------
 
 --- Notes a piece of the page, so that a fill can start by clearing every
 --- piece away and then show only the ones it places.
@@ -658,6 +671,7 @@ local function ShowNote(box, about)
     box:SetShown(about ~= nil)
 end
 
+--- The box under the title where a session's note is typed.
 local function CreateNoteBox(card)
     local box = CreateFrame("EditBox", nil, card, "InputBoxInstructionsTemplate")
     box:SetHeight(NOTE_HEIGHT)
@@ -696,7 +710,7 @@ local function CreateNoteBox(card)
     return box
 end
 
--- The bars ----------------------------------------------------------------------
+-- The bars --------------------------------------------------------------------
 
 --- What an ability did, in a tooltip of our own: its name and rank, then
 --- the figures the bar has no room for. The game's own tooltip for the
@@ -739,6 +753,7 @@ local function ShowAbilityTooltip(bar)
     GameTooltip:Show()
 end
 
+--- A bar for one ability, with its figures in a tooltip.
 local function CreateBar(parent)
     local bar = Kit.Bar(parent)
     bar:EnableMouse(true)
@@ -757,6 +772,8 @@ local function EverythingElse(summary, first)
     return rest
 end
 
+--- Shows one ability on a bar: its name and rank, its damage and share,
+--- and how it moved when comparing.
 ---@param biggest number  the damage of the biggest ability, which gets a
 ---                       full bar; the others are drawn against it
 ---@param change number|nil  how its DPS moved since the earlier fights
@@ -778,7 +795,7 @@ local function FillBar(bar, ability, biggest, change)
     bar:Set(ability.icon, name, figures, share, color)
 end
 
--- Building ---------------------------------------------------------------------
+-- Building --------------------------------------------------------------------
 
 --- Builds an empty card inside `parent`.
 function Card.Create(parent)
@@ -804,20 +821,20 @@ function Card.Create(parent)
 
     -- Shown in place of everything else when there's nothing to analyse.
     card.empty = card:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    card.empty:SetPoint("CENTER", 0, -60)
-    card.empty:SetWidth(340)
+    card.empty:SetPoint("CENTER", 0, -EMPTY_DROP)
+    card.empty:SetWidth(EMPTY_WIDTH)
     card.empty:SetTextColor(unpack(Kit.MUTED))
 
     card.logo = card:CreateTexture(nil, "ARTWORK")
     card.logo:SetTexture(LOGO)
-    card.logo:SetSize(320, 160)
-    card.logo:SetPoint("BOTTOM", card.empty, "TOP", 0, 6)
+    card.logo:SetSize(LOGO_WIDTH, LOGO_HEIGHT)
+    card.logo:SetPoint("BOTTOM", card.empty, "TOP", 0, LOGO_GAP)
 
     -- The rest scrolls. The template brings its own scroll bar, which
     -- only needs telling to stay out of sight while everything fits.
     card.scroll = CreateFrame("ScrollFrame", nil, card, "ScrollFrameTemplate")
     card.scroll:SetPoint("TOPLEFT", MARGIN, -HEAD_HEIGHT)
-    card.scroll:SetPoint("BOTTOMRIGHT", -SCROLL_BAR_ROOM, 8)
+    card.scroll:SetPoint("BOTTOMRIGHT", -SCROLL_BAR_ROOM, FOOT_GAP)
     card.scroll.ScrollBar:SetHideIfUnscrollable(true)
 
     local page = CreateFrame("Frame", nil, card.scroll)
@@ -868,7 +885,7 @@ function Card.Create(parent)
     return card
 end
 
--- Filling ------------------------------------------------------------------------
+-- Filling ---------------------------------------------------------------------
 
 --- The title, and on the same line, small and to the right, when the
 --- fights were. How long they lasted is in the row of figures.
@@ -994,6 +1011,7 @@ local function PlaceFindings(card, layout, findings, summary)
     PlaceSection(layout, section, inside)
 end
 
+--- What else changed since the earlier fights, a line at a time.
 local function PlaceDifferences(card, layout, comparison)
     local section = card.differencesSection
     local inside = Inside(layout, section)

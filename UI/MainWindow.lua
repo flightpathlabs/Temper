@@ -21,8 +21,21 @@ local addonName, ns = ...
 
 local Kit = ns.Kit
 
+-- The window's size, and how far above the middle of the screen it opens.
 local WIDTH = 900
 local HEIGHT = 720
+local RAISED = 10
+
+-- The strip under the title bar starts this far in, clear of the emblem,
+-- and this far down.
+local BLURB_LEFT = 66
+local BLURB_TOP = 34
+
+-- How far the tabs hang below the window's own edge.
+local TABS_HANG = 30
+
+-- The cog beside the close button, in pixels across.
+local COG_SIZE = 16
 
 local PORTRAIT = "Interface\\AddOns\\Temper\\Media\\portrait"
 
@@ -99,11 +112,13 @@ local TABS = {
     },
 }
 
+-- Places in TABS, for opening the window on a particular tab.
 local FIGHTS, HEALING, EXPERIMENTS = 1, 2, 3
 
 local window
 local currentTab = FIGHTS
 
+--- Redraws the tab that's showing, if the window is open.
 local function Refresh()
     if window and window:IsShown() then
         window.pages[currentTab]:Refresh()
@@ -171,7 +186,7 @@ end
 local function Create()
     local frame = CreateFrame("Frame", "TemperWindow", UIParent, "ButtonFrameTemplate")
     frame:SetSize(WIDTH, HEIGHT)
-    frame:SetPoint("CENTER", 0, 10)
+    frame:SetPoint("CENTER", 0, RAISED)
     frame:SetFrameStrata("HIGH")
     frame:Hide()
 
@@ -188,17 +203,17 @@ local function Create()
 
     -- The tabs hang below the frame's own edge. Count them as part of it,
     -- or the window can be dragged until they're off the screen.
-    frame:SetClampRectInsets(0, 0, 0, -30)
+    frame:SetClampRectInsets(0, 0, 0, -TABS_HANG)
 
     -- The cog, in the title bar beside the close button and level with
     -- it, so the window's border doesn't draw over it.
-    local options = Kit.OptionsButton(frame, 16)
+    local options = Kit.OptionsButton(frame, COG_SIZE)
     options:SetPoint("RIGHT", frame.CloseButton, "LEFT", -2, 0)
     options:SetFrameLevel(frame.CloseButton:GetFrameLevel())
 
     -- The strip under the title bar, clear of the emblem.
     frame.blurb = Kit.Text(frame, "GameFontHighlight")
-    frame.blurb:SetPoint("TOPLEFT", 66, -34)
+    frame.blurb:SetPoint("TOPLEFT", BLURB_LEFT, -BLURB_TOP)
     frame.blurb:SetPoint("RIGHT", -16, 0)
 
     -- Lets Escape close it like any other panel.
@@ -218,6 +233,10 @@ local function Create()
     return frame
 end
 
+--- Opens the window, building it the first time, on the given tab or the
+--- one it was last on.
+---@param tab number|nil  a place in TABS
+---@return boolean opened  false before the character's data has loaded
 local function Open(tab)
     if not ns.character then
         return false
@@ -235,6 +254,7 @@ local function Open(tab)
     return true
 end
 
+--- Opens the window where it was left, or closes it.
 function ns.ToggleWindow()
     if window and window:IsShown() then
         window:Hide()
@@ -347,7 +367,7 @@ function ns.CheckLines()
         end
     end
 
-    -- Whether the combo points above the target can be drawn here.
+    -- Whether the combo points under the target can be drawn here.
     if ns.ComboPoints then
         for _, line in ipairs(ns.ComboPoints.CheckLines()) do
             Add(line)
@@ -401,12 +421,17 @@ SlashCmdList.TEMPER = function(message)
     end
 end
 
+-- The key binding's label in the game's key bindings list. The binding
+-- itself is in Bindings.xml, and calls the global below.
 BINDING_NAME_TEMPER_RECORD = "Start or end a session"
 
+--- Starts or ends a session, for the key binding.
 function Temper_ToggleRecording()
     ns.ToggleRecording()
 end
 
+--- A click on Temper in the game's addon list by the minimap: the window,
+--- or the options with the right button. Named in Temper.toc.
 function Temper_OnAddonCompartmentClick(_, mouseButton)
     if mouseButton == "RightButton" then
         ns.OpenOptions()

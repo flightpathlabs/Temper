@@ -9,9 +9,10 @@ local _, ns = ...
 -- measured either. So a number is only ever moved by changing how far it
 -- sits from the nameplate, never by asking where it is now.
 --
--- New numbers appear at the bottom of the column and rise steadily, so
--- the column reads like a short scrolling log of recent hits. Two that
--- arrive together are kept a line apart.
+-- New numbers appear at the bottom of the column, and those already there
+-- step up to make room, so the column reads like a short scrolling log of
+-- recent hits. How each one moves after that is up to the motion chosen
+-- in the options (see Motion.lua).
 --
 -- An enemy with no nameplate gives us nothing to pin to, and its numbers
 -- appear at a fixed spot above the middle of the screen instead.
@@ -25,6 +26,8 @@ local _, ns = ...
 local Lane = {}
 ns.Lane = Lane
 
+-- The most numbers on screen at once. A new one past this takes the
+-- place of the oldest.
 local MAX_NUMBERS = 24
 
 -- How long a number stays, by the "stay" setting. A critical hit lingers
@@ -55,6 +58,8 @@ local function ChosenFont()
     return file or STANDARD_TEXT_FONT
 end
 
+-- The size to fall back on should the setting be missing, the smallest a
+-- shrinking number is drawn, and the air between lines, all in pixels.
 local USUAL_FONT_SIZE = 13
 local SMALLEST_FONT_SIZE = 6
 local LINE_SPACE = 3
@@ -158,6 +163,7 @@ local function Attempt(what, method, ...)
     return ok
 end
 
+--- Sends a number to the fixed spot above the middle of the screen.
 local function UseFixedSpot(number)
     number.anchor, number.anchorPoint = UIParent, "CENTER"
     number.x, number.y = 0, SPARE_HEIGHT
@@ -197,6 +203,8 @@ local function Shift(number)
     return (number.iconSide + ICON_GAP) / 2
 end
 
+--- Pins a number's lead at this distance from what it's pinned to. May
+--- throw if the nameplate won't have it.
 local function Pin(number, x, y)
     number.lead:SetPoint(number.point, number.anchor, number.anchorPoint, x + Shift(number), y)
 end
@@ -232,11 +240,13 @@ local function Move(number, x, y)
     pcall(Pin, number, number.x + dx, number.y + dy)
 end
 
+--- Hides a number's icon for the rest of its life.
 local function DropIcon(number)
     number.hasIcon = false
     pcall(number.icon.Hide, number.icon)
 end
 
+--- Sizes a number's icon to match a line of text of this size.
 local function SizeIcon(number, fontSize)
     -- In a column beside the nameplate the numbers line up against their
     -- icons, so every icon there is the same size, whatever the size of
@@ -268,6 +278,7 @@ local function Resize(number, scale)
     end
 end
 
+--- Sets how solid a number and its icon are.
 local function Fade(number, alpha)
     Attempt("fade", number.text.SetAlpha, number.text, alpha)
     local iconAlpha = alpha * number.iconAlpha
@@ -301,6 +312,7 @@ local function Place(number, now, elapsed)
     Resize(number, scale)
 end
 
+--- Takes a number off the screen and keeps it for reuse.
 local function Retire(index)
     local number = table.remove(showing, index)
     number.text:Hide()
@@ -350,6 +362,7 @@ holder:SetScript("OnUpdate", function(_, elapsed)
     end
 end)
 
+--- A number to draw with: a piece of text and an icon beside it.
 local function NewNumber()
     local number = {
         text = holder:CreateFontString(nil, "OVERLAY"),
@@ -428,8 +441,8 @@ end
 ---@param value any  what to show. May be an amount the client won't let us
 ---                  read, which is why it goes straight to the text and is
 ---                  never looked at here.
----@param look table  { r, g, b, scale, crit, icon, dot, iconAlpha,
----                   slot }: icon is a texture to show beside the number,
+---@param look table  { r, g, b, scale, crit, icon, dot, iconAlpha, slot,
+---                   aside }: icon is a texture to show beside the number,
 ---                   dot a colour for a small dot to show instead,
 ---                   iconAlpha how solid either is (for the guesses that
 ---                   should stay in the background), and slot true to keep
@@ -539,6 +552,7 @@ end
 --- Draws the numbers in front of the game's windows, or back under them.
 --- In front is for the example in the options, which would otherwise be
 --- hidden behind the Options window.
+---@param forward boolean
 function Lane.BringForward(forward)
     holder:SetFrameStrata(forward and "DIALOG" or "LOW")
 end

@@ -29,6 +29,7 @@ local TOP_AND_BOTTOM = 7
 -- The space between the box and the panel it sits on.
 local GAP = 2
 
+-- The colour of a line: an ordinary one, and the one that turns red.
 local SOFT = { 0.9, 0.9, 0.9 }
 local URGENT = Kit.BAD
 
@@ -43,17 +44,22 @@ local SAMPLE_ITEM = 6256
 -- not be there to ask (straight after an update, before a restart).
 local FALLBACK_SOUND = "MAP_PING"
 
+-- The box, and a line in it for every line it has ever needed, made as
+-- they're first wanted.
 local box
 local rows = {}
+
+-- Whether the sample line is showing, while the options are open.
 local sampleShowing = false
 
 -- The lines that asked for a sound and have had it, so one is played only
 -- as such a line appears.
 local sounded = {}
 
--- Sound -------------------------------------------------------------------------
+-- Sound -----------------------------------------------------------------------
 
 --- Plays the alert sound chosen in the options, unless that's "No sound".
+--- Without the ability alert's file to ask, it's the game's map ping.
 local function PlaySoundOnce()
     if ns.ProcAlert then
         ns.ProcAlert.Play(ns.settings.procSound)
@@ -67,8 +73,9 @@ local function PlaySoundOnce()
     end
 end
 
--- Lines ---------------------------------------------------------------------------
+-- Lines -----------------------------------------------------------------------
 
+--- Makes the line at this place in the box: a small picture and its words.
 local function CreateRow(index)
     local top = TOP_AND_BOTTOM + (index - 1) * LINE_HEIGHT
     local row = {}
@@ -84,6 +91,8 @@ local function CreateRow(index)
     return row
 end
 
+--- Puts one problem on a line, with the warning sign for a picture when
+--- it has none of its own.
 local function Fill(row, item)
     if item.icon then
         Kit.SetSpellIcon(row.icon, item.icon)
@@ -99,6 +108,7 @@ local function Fill(row, item)
     row.text:Show()
 end
 
+--- The made-up line shown while the options are open.
 local function SampleItem()
     local ok, _, _, _, _, icon = pcall(C_Item.GetItemInfoInstant, SAMPLE_ITEM)
     return {
@@ -108,7 +118,7 @@ local function SampleItem()
     }
 end
 
--- Drawing -------------------------------------------------------------------------
+-- Drawing ---------------------------------------------------------------------
 
 --- What's to be shown now: the sample first, while there is one.
 local function Wanted()
@@ -147,6 +157,8 @@ local function Place(height)
     end
 end
 
+--- Fills the box with what's to be shown now, sizes it to fit, and plays
+--- the sound for a line that has just asked for one.
 local function Redraw()
     if not box then
         return
@@ -190,8 +202,9 @@ local function Redraw()
     end
 end
 
--- Building it ----------------------------------------------------------------------
+-- Building it -----------------------------------------------------------------
 
+--- Hangs the box from the fight panel, empty and hidden.
 local function Create()
     local panel = ns.FightPanel and ns.FightPanel()
     if not panel then

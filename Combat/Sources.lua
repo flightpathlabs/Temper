@@ -10,14 +10,8 @@ local _, ns = ...
 local Sources = {}
 ns.Sources = Sources
 
+-- The kinds, in the order a breakdown of a fight lists them.
 Sources.ORDER = { "skill", "auto", "pet", "other" }
-
-Sources.LABELS = {
-    skill = "Abilities",
-    auto = "Auto attacks",
-    pet = "Pet",
-    other = "Items and other effects",
-}
 
 -- Wands fire through a spell called Shoot, which the client files under
 -- skills. To the player it's an auto attack.
@@ -25,6 +19,7 @@ local ALSO_AUTO = {
     [5019] = true,
 }
 
+--- Sorts a spell the game recognises. May throw on one it doesn't.
 local function AskKind(spellID)
     if ALSO_AUTO[spellID] then
         return "auto"

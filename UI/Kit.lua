@@ -12,8 +12,11 @@ local _, ns = ...
 local Kit = {}
 ns.Kit = Kit
 
--- Colours ------------------------------------------------------------------
+-- Colours ---------------------------------------------------------------------
 
+-- Grey for small print, the game's own heading gold, green and red for
+-- better and worse, and a blue that's neither, for marking things out:
+-- the fights being compared with, the columns of the trend.
 Kit.MUTED = { 0.62, 0.62, 0.62 }
 Kit.GOLD = { 1, 0.82, 0 }
 Kit.GOOD = { 0.25, 0.88, 0.25 }
@@ -34,7 +37,7 @@ function Kit.Colored(text, color)
     return ("|cff%02x%02x%02x%s|r"):format(color[1] * 255, color[2] * 255, color[3] * 255, text)
 end
 
--- Icons --------------------------------------------------------------------
+-- Icons -----------------------------------------------------------------------
 
 -- Small pictures by what they mean. An entry is an atlas name, or a file
 -- path where the game keeps that one as a loose texture.
@@ -53,6 +56,15 @@ local ICONS = {
     waiting = { file = "Interface\\FriendsFrame\\StatusIcon-Away" },
     unknown = { file = "Interface\\Icons\\INV_Misc_QuestionMark" },
 }
+
+-- The game draws a border into every spell icon. Showing only this part
+-- of it, across and down, loses the border, as the game's own buttons do.
+local ICON_TRIMMED_FROM = 0.07
+local ICON_TRIMMED_TO = 0.93
+
+-- A change smaller than this rounds to "no change" in Kit.ChangeText, so
+-- it gets no arrow either.
+local NO_CHANGE = 0.005
 
 --- Points a texture at one of the icons above.
 ---@param kind string  a key of ICONS
@@ -90,14 +102,14 @@ function Kit.SetSpellIcon(texture, icon)
     texture:SetDesaturated(false)
     texture:SetVertexColor(1, 1, 1)
     texture:SetTexture(icon or ICONS.unknown.file)
-    texture:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    texture:SetTexCoord(ICON_TRIMMED_FROM, ICON_TRIMMED_TO, ICON_TRIMMED_FROM, ICON_TRIMMED_TO)
 end
 
 --- Turns a texture into an arrow for "better" or "worse": green and up,
 --- red and down. Hidden when there's nothing to say.
 ---@param change number|nil  positive for better
 function Kit.SetArrow(texture, change)
-    if not change or math.abs(change) < 0.005 then
+    if not change or math.abs(change) < NO_CHANGE then
         texture:Hide()
         return
     end
@@ -117,7 +129,7 @@ function Kit.SetArrow(texture, change)
     texture:Show()
 end
 
--- Text ---------------------------------------------------------------------
+-- Text ------------------------------------------------------------------------
 
 --- A piece of text in one of the game's fonts.
 ---@param font string  e.g. "GameFontHighlightSmall"
@@ -166,17 +178,25 @@ function Kit.PointsText(points)
     return Kit.Colored(text, points > 0 and Kit.GOOD or Kit.BAD)
 end
 
--- Bigger pieces ----------------------------------------------------------------
+-- Bigger pieces ---------------------------------------------------------------
+
+-- How tall a bar is, its icon square at the same height.
+local BAR_HEIGHT = 22
+
+-- The game's ordinary buttons, and the "i" that explains things.
+local BUTTON_HEIGHT = 22
+local HELP_SIZE = 18
 
 --- A bar in the style of the game's own damage meter: an icon, then a
 --- bar with a name on the left and figures on the right.
----@return table row  22 high; call row:Set(icon, name, figures, share, color)
+---@return table row  BAR_HEIGHT high; call
+---                   row:Set(icon, name, figures, share, color)
 function Kit.Bar(parent)
     local row = CreateFrame("Frame", nil, parent)
-    row:SetHeight(22)
+    row:SetHeight(BAR_HEIGHT)
 
     row.icon = row:CreateTexture(nil, "ARTWORK")
-    row.icon:SetSize(22, 22)
+    row.icon:SetSize(BAR_HEIGHT, BAR_HEIGHT)
     row.icon:SetPoint("LEFT")
 
     local bar = CreateFrame("StatusBar", nil, row)
@@ -197,9 +217,10 @@ function Kit.Bar(parent)
     row.name:SetPoint("LEFT", 6, 0)
     row.name:SetPoint("RIGHT", row.figures, "LEFT", -8, 0)
 
-    --- @param icon number|string|nil  a spell's texture
-    --- @param share number  how full the bar is, 0 to 1
-    --- @param color table  { r, g, b }
+    --- Fills the bar in and shows it.
+    ---@param icon number|string|nil  a spell's texture
+    ---@param share number  how full the bar is, 0 to 1
+    ---@param color table  { r, g, b }
     function row:Set(icon, name, figures, share, color)
         Kit.SetSpellIcon(self.icon, icon)
         self.name:SetText(name)
@@ -244,9 +265,9 @@ end
 ---@param lines table  list of strings
 function Kit.HelpButton(parent, title, lines)
     local button = CreateFrame("Button", nil, parent)
-    button:SetSize(18, 18)
+    button:SetSize(HELP_SIZE, HELP_SIZE)
 
-    local icon = Kit.Icon(button, 18, "tip")
+    local icon = Kit.Icon(button, HELP_SIZE, "tip")
     icon:SetAllPoints()
 
     Kit.Tooltip(button, title, function()
@@ -256,9 +277,10 @@ function Kit.HelpButton(parent, title, lines)
 end
 
 --- One of the game's ordinary buttons.
+---@param onClick function  the button's OnClick script
 function Kit.Button(parent, text, width, onClick)
     local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    button:SetSize(width, 22)
+    button:SetSize(width, BUTTON_HEIGHT)
     button:SetText(text)
     button:SetScript("OnClick", onClick)
     return button
@@ -305,8 +327,10 @@ function Kit.Tooltip(frame, title, lines)
     frame:SetScript("OnLeave", GameTooltip_Hide)
 end
 
--- "Are you sure?" ---------------------------------------------------------------
+-- "Are you sure?" -------------------------------------------------------------
 
+-- One dialog does for every question. Its text and what to do on "Yes"
+-- are passed in each time it's shown.
 local CONFIRM = "TEMPER_CONFIRM"
 
 StaticPopupDialogs[CONFIRM] = {
@@ -330,7 +354,7 @@ function Kit.Confirm(question, onAccept)
     StaticPopup_Show(CONFIRM, question, nil, onAccept)
 end
 
--- Boxes ------------------------------------------------------------------------
+-- Boxes -----------------------------------------------------------------------
 
 -- A box sets one part of a page apart without shouting about it: a shade
 -- darker than what's round it, with a hairline for an edge. A page of
@@ -421,14 +445,14 @@ function Kit.Section(parent, title)
     return section
 end
 
--- Pages -------------------------------------------------------------------------
+-- Pages -----------------------------------------------------------------------
 
 -- Every page in the window is built from the same pieces and laid out the
--- same way, so they read as one. A page that scrolls can't
--- size itself from its anchors, and text only wraps once it's told how
--- wide it may be. So a page is laid out by hand each time it's filled:
--- every piece is given a width and a place under the piece before it, and
--- the page ends where the last piece does.
+-- same way, so they read as one. A page that scrolls can't size itself
+-- from its anchors, and text only wraps once it's told how wide it may
+-- be. So a page is laid out by hand each time it's filled: every piece is
+-- given a width and a place under the piece before it, and the page ends
+-- where the last piece does.
 --
 -- A layout is a table that keeps track of that: { frame, left, width, y }.
 -- The frame is what the pieces are pinned to (the page, or one section of
@@ -438,13 +462,19 @@ end
 -- Space between one section of a page and the next.
 Kit.SECTION_GAP = 8
 
+-- Extra space between the lines of a paragraph, which the game's fonts
+-- set rather tight for reading at length.
+local LINE_SPACING = 3
+
 --- Text that runs on to as many lines as it needs. Give it a width, or
 --- anchor its left and right edges, so it knows where to wrap.
+---@param font string  e.g. "GameFontHighlight"
+---@param justify string|nil  "LEFT" unless given
 function Kit.Paragraph(parent, font, justify)
     local text = Kit.Text(parent, font, justify)
     text:SetWordWrap(true)
     text:SetJustifyV("TOP")
-    text:SetSpacing(3)
+    text:SetSpacing(LINE_SPACING)
     return text
 end
 
@@ -495,7 +525,7 @@ function Kit.PlaceSection(layout, section, inside)
     Kit.Place(layout, section, layout.y > 0 and Kit.SECTION_GAP or 0, height)
 end
 
--- A row of figures ----------------------------------------------------------------
+-- A row of figures ------------------------------------------------------------
 
 -- The row across the top of a page: one thin box of cells divided by
 -- rules, each cell a small label with its figure under it and, when the
@@ -672,7 +702,7 @@ function Kit.StatRow(parent)
     return strip
 end
 
--- Findings ------------------------------------------------------------------------
+-- Findings --------------------------------------------------------------------
 
 -- A finding is a picture and a sentence, the sentence starting this far
 -- in to clear the picture.
@@ -680,6 +710,7 @@ local FINDING_ICON = 16
 local FINDING_INDENT = FINDING_ICON + 8
 local FINDING_GAP = 8
 
+--- An empty row for one finding: its picture, and its sentence beside it.
 local function CreateFindingRow(section)
     local row = CreateFrame("Frame", nil, section)
 
@@ -723,10 +754,16 @@ function Kit.PlaceFindings(inside, rows, findings)
     end
 end
 
--- Links -----------------------------------------------------------------------------
+-- Links -----------------------------------------------------------------------
+
+-- How far a link's clickable area reaches beyond its words, side to side
+-- in all, and how tall it is.
+local LINK_PADDING = 8
+local LINK_HEIGHT = 18
 
 --- A few words that go somewhere when clicked. They're grey until the
 --- mouse is on them, so they don't shout over what they sit beside.
+---@param onClick function  the link's OnClick script
 function Kit.Link(parent, text, onClick)
     local link = CreateFrame("Button", nil, parent)
 
@@ -737,7 +774,7 @@ function Kit.Link(parent, text, onClick)
     link:SetFontString(label)
     link:SetNormalFontObject("GameFontDisableSmall")
     link:SetHighlightFontObject("GameFontHighlightSmall")
-    link:SetSize(label:GetStringWidth() + 8, 18)
+    link:SetSize(label:GetStringWidth() + LINK_PADDING, LINK_HEIGHT)
     link:SetScript("OnClick", onClick)
 
     return link

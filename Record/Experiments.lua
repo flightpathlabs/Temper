@@ -11,19 +11,22 @@ local _, ns = ...
 -- Under the hood an experiment is two recordings and a note of which is
 -- which. It looks like this:
 --
---   number    counts up per character
---   question  what the player said they were testing
---   size      how many fights each set is meant to have
---   before    the number of the first recording
---   after     the number of the second, once it's begun
---   state     "before"  recording the first set
---             "change"  first set done; waiting for the player
---             "after"   recording the second set
---             "done"
+--   number      counts up per character
+--   question    what the player said they were testing
+--   size        how many fights each set is meant to have
+--   before      the number of the first recording
+--   after       the number of the second, once it's begun
+--   state       "before"  recording the first set
+--               "change"  first set done; waiting for the player
+--               "after"   recording the second set
+--               "done"
+--   startedAt   server time it began
+--   finishedAt  server time the second set ended, once it's done
 
 local Experiments = {}
 ns.Experiments = Experiments
 
+-- Fights in each set, unless the player asks for another number.
 Experiments.DEFAULT_SIZE = 5
 
 -- How many standard errors apart the two sides have to be before the
@@ -37,6 +40,14 @@ local LIKELY = 1
 -- For "no real difference" to be trusted, the chance wobble has to be
 -- small beside the damage itself.
 local STEADY = 0.05
+
+-- A change smaller than this share of before is no change at all.
+local SAME_WITHIN = 0.01
+
+-- However the sums come out, a verdict that isn't clear asks for at least
+-- this many more fights in each set, and never more than this.
+local FEWEST_MORE = 2
+local MOST_MORE = 30
 
 --- The experiment that isn't finished yet, or nil. There's only ever one.
 function Experiments.Running()
@@ -127,6 +138,8 @@ local function Advance(experiment)
     Changed()
 end
 
+--- Forgets an experiment, and stops the recording behind it if one is
+--- open. Its fights are kept.
 function Experiments.Delete(experiment)
     local experiments = ns.character.experiments
     for index, candidate in ipairs(experiments) do
@@ -174,7 +187,7 @@ ns.Subscribe("DATABASE_READY", function()
     end
 end)
 
--- The verdict --------------------------------------------------------------
+-- The verdict -----------------------------------------------------------------
 
 --- The average and the spread of damage a second across a set of fights.
 local function Spread(fights)
@@ -214,7 +227,8 @@ end
 ---   direction       "better", "worse" or "same"
 ---   sureness        "clear", "likely" or "unsure"
 ---   more            roughly how many more fights each side would settle
----                   it, when it's unsure; nil otherwise
+---                   it, when it isn't clear; nil otherwise
+---   fightsBefore, fightsAfter   how many fights each side has
 --- nil until both sides have a fight.
 function Experiments.Verdict(experiment)
     local was = Experiments.FightsOf(experiment, "before")
@@ -234,7 +248,7 @@ function Experiments.Verdict(experiment)
     }
 
     local difference = after - before
-    if math.abs(verdict.change) < 0.01 then
+    if math.abs(verdict.change) < SAME_WITHIN then
         verdict.direction = "same"
     else
         verdict.direction = difference > 0 and "better" or "worse"
@@ -269,7 +283,7 @@ function Experiments.Verdict(experiment)
     if verdict.sureness ~= "clear" and apart > 0 then
         local fights = math.max(#was, #is)
         local needed = math.ceil(fights * (clear / apart) ^ 2)
-        verdict.more = math.max(2, math.min(needed - fights, 30))
+        verdict.more = math.max(FEWEST_MORE, math.min(needed - fights, MOST_MORE))
     end
 
     return verdict

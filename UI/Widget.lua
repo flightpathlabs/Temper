@@ -5,13 +5,13 @@ local _, ns = ...
 --
 -- Click it for the full window, right-click for a short menu, drag it
 -- anywhere. In its top corner, a stopwatch starts and ends a session and
--- a cog opens the options. It's on to begin
--- with and can be turned off. Under the main figures it can carry three
--- more things, each of which can be switched off from its menu or the
--- options: the last few fights, a few figures for the session so far, and
--- a row of small icons for the buffs worth having up, each lit while it's
--- on (what's on is Combat\Readiness.lua's to say). The warning box that
--- sits above the panel is a frame of its own (see ReadyAlert.lua).
+-- a cog opens the options. It's on to begin with and can be turned off.
+-- Under the main figures it can carry three more things, each of which
+-- can be switched off from its menu or the options: the last few fights,
+-- a few figures for the session so far, and a row of small icons for the
+-- buffs worth having up, each lit while it's on (what's on is
+-- Combat\Readiness.lua's to say). The warning box that sits above the
+-- panel is a frame of its own (see ReadyAlert.lua).
 --
 -- The panels come in two sizes, normal and large, one setting for both.
 -- Large is the same panel drawn a quarter bigger with SetScale, rather
@@ -28,6 +28,7 @@ local _, ns = ...
 
 local Kit = ns.Kit
 
+-- The panel's width, and how often its figures are redrawn in a fight.
 local WIDTH = 220
 local LIVE_REFRESH_SECONDS = 0.5
 
@@ -55,6 +56,11 @@ local BLOCK_GAP = 8
 local RECENT_COUNTS = { 0, 3, 5 }
 local MOST_RECENT = 5
 
+-- The most lines the session's figures take (its name, the average and
+-- the biggest hit), and the most ruled lines: one over each block.
+local SESSION_LINES = 3
+local MOST_RULES = 3
+
 -- The buff icons along the bottom: how big, how far apart, how many there
 -- can be, and how faint one is while its buff isn't on. A full row is
 -- 8 x 18 + 7 x 5 = 179 wide, inside the 200 between the panel's margins.
@@ -69,6 +75,7 @@ local BUFF_DIM = 0.35
 local REFERENCE_FIGHTS = 10
 local FEWEST_TO_GO_BY = 3
 
+-- The grey of the labels and the time, and our mark in the corner.
 local MUTED = { 0.65, 0.65, 0.65 }
 local ICON = "Interface\\AddOns\\Temper\\Media\\icon"
 
@@ -101,6 +108,7 @@ local reference, referenceHow
 -- nil when it's a plain average or isn't showing.
 local sessionHow
 
+--- The fight saved last, if there's been one.
 local function LastFight()
     local fights = ns.character.fights
     return fights[#fights]
@@ -162,8 +170,8 @@ end
 -- Something to read the last fight against ------------------------------------
 
 --- The typical DPS over some fights, by the rule in Record\Summary.lua:
---- extremes and quick fights against critters left out. It's asked
---- carefully, being new: if it's missing or goes wrong, the panel falls
+--- the extremes, very short fights and fights against critters left out.
+--- It's asked carefully: if it's missing or goes wrong, the panel falls
 --- back on a plain average rather than going blank.
 ---@return table|nil  { dps, counted, left, how }; nil when there's none
 local function TypicalOf(fights)
@@ -272,7 +280,7 @@ local function HowOf(typical)
     return nil
 end
 
--- The main figures -----------------------------------------------------------
+-- The main figures ------------------------------------------------------------
 
 -- The game's running figures for this fight are passed to the text
 -- without being looked at. Each is run under pcall on its own: if the
@@ -304,6 +312,7 @@ local function PutLiveRate()
     error("not in the fight's list yet")
 end
 
+--- The fight in progress, as far as the game will let it be shown.
 local function ShowLive()
     widget.title:SetText("|cffff4040In combat|r")
     widget.time:SetText(ns.Duration(GetTime() - fightStart))
@@ -329,6 +338,7 @@ local function ShowLive()
     end
 end
 
+--- The last fight, from what was saved of it, and how it compares.
 local function ShowLast()
     local fight = LastFight()
     if not fight then
@@ -377,7 +387,7 @@ local function RefreshMain()
     widget.stopwatch:SetAlpha(running and 1 or STOPWATCH_IDLE)
 end
 
--- Under the main figures -------------------------------------------------------
+-- Under the main figures ------------------------------------------------------
 
 --- The fights the "session" figures cover, and what to call them: the
 --- session in progress if the player started one, otherwise everything
@@ -543,7 +553,7 @@ local function RefreshLower()
     widget:SetHeight(top > MAIN_HEIGHT and top + 6 or MAIN_HEIGHT)
 end
 
--- The size of the panels --------------------------------------------------------
+-- The size of the panels ------------------------------------------------------
 
 -- Both panels go by these, so they're shared from here; the healing panel
 -- is made after this one.
@@ -620,6 +630,7 @@ local function RefreshBranding()
     widget.title:SetPoint("RIGHT", widget.time, "LEFT", -6, 0)
 end
 
+--- Redraws the whole panel, or hides it if it's switched off.
 local function Refresh()
     if not widget then
         return
@@ -640,9 +651,10 @@ local function Refresh()
     RefreshLower()
 end
 
--- Menu and tooltip -----------------------------------------------------------
+-- Menu and tooltip ------------------------------------------------------------
 
---- Adds a tick box to the menu for one of the panel's own settings.
+--- Adds a tick box to the menu for one of the panel's own settings, which
+--- is ticked unless the setting is at `off`, and goes to `on` when ticked.
 local function AddToggle(root, label, key, on, off)
     root:CreateCheckbox(label, function()
         return ns.settings[key] ~= off
@@ -652,6 +664,7 @@ local function AddToggle(root, label, key, on, off)
     end)
 end
 
+--- The right-click menu.
 local function ShowMenu(self)
     MenuUtil.CreateContextMenu(self, function(_, root)
         root:CreateTitle(ns.TITLE)
@@ -720,8 +733,9 @@ local function ShowTooltip(self)
     GameTooltip:Show()
 end
 
--- Building it -------------------------------------------------------------------
+-- Building it -----------------------------------------------------------------
 
+--- A line of text on the panel that's cut short rather than wrapped.
 local function Label(font, justify)
     local label = widget:CreateFontString(nil, "ARTWORK", font)
     label:SetJustifyH(justify or "LEFT")
@@ -807,6 +821,7 @@ local function CreateBuff()
     return icon
 end
 
+--- Builds the panel where it was last left, with every line it can need.
 local function Create()
     -- The game's own tooltip border, so it looks like it belongs.
     widget = CreateFrame("Button", "TemperWidget", UIParent, "TooltipBackdropTemplate")
@@ -896,15 +911,15 @@ local function Create()
     widget.counts:SetTextColor(unpack(MUTED))
 
     -- Lines for the lower part, made once and filled as needed: the most
-    -- recent fights there can be, and three for the session.
+    -- recent fights there can be, and the session's.
     widget.lines, widget.rules = {}, {}
-    for index = 1, MOST_RECENT + 3 do
+    for index = 1, MOST_RECENT + SESSION_LINES do
         widget.lines[index] = {
             left = Label("GameFontHighlightSmall"),
             right = Label("GameFontHighlightSmall", "RIGHT"),
         }
     end
-    for index = 1, 3 do
+    for index = 1, MOST_RULES do
         local rule = widget:CreateTexture(nil, "ARTWORK")
         rule:SetColorTexture(1, 1, 1, 0.12)
         rule:SetHeight(1)

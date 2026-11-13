@@ -609,7 +609,7 @@ function Healing.StoppedWays(stopped)
     return ways
 end
 
--- Saying what it shows ------------------------------------------------------------
+-- Saying what it shows --------------------------------------------------------
 
 --- True if a heal's healing for its cost is worth comparing: the player
 --- paid for it, and it's been used often enough to go by. One lucky

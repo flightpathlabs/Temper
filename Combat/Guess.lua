@@ -51,6 +51,12 @@ local TICKING_SECONDS = 30
 -- out to be something else.
 local SURE_AFTER = 3
 
+-- An ability is taken to tick once it's been seen doing so this often.
+-- Once could be a mistake, and would stick: from then on it isn't allowed
+-- to claim a blow that comes a little after its cast.
+local TICKS_AFTER = 2
+
+-- The school of an ordinary blow, as the game reports it.
 local PHYSICAL = 1
 
 -- The spell behind an ordinary melee swing.
@@ -87,6 +93,7 @@ local function UsualSchool(spell)
     return usual, most
 end
 
+--- Counts one more blow of this school against an ability.
 local function Learn(spell, school)
     local seen = ns.character.schools[spell]
     seen[school] = (seen[school] or 0) + 1
@@ -102,11 +109,7 @@ local function Ticking()
     return character.ticking
 end
 
--- An ability is taken to tick once it's been seen doing so this often.
--- Once could be a mistake, and would stick: from then on it isn't allowed
--- to claim a blow that comes a little after its cast.
-local TICKS_AFTER = 2
-
+--- True if an ability has been seen ticking often enough to be sure.
 local function Ticks(spell)
     return (Ticking()[spell] or 0) >= TICKS_AFTER
 end

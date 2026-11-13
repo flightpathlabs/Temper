@@ -38,7 +38,7 @@ local SKILL_GAP_WORTH_MENTIONING = 15
 
 -- The spell behind an ordinary melee swing. Any other auto attack is a
 -- bow, gun or wand.
-local MELEE_SWING = 6603
+local MELEE_SWING = ns.Guess.MELEE_SWING
 
 -- Shares of attacks at which a way of failing is worth pointing out.
 local MANY_MISSES = 0.1
@@ -60,6 +60,14 @@ local MUCH_TIME_WITHOUT_AN_ABILITY = 0.3
 local PLENTY_LEFT = 0.4
 local NEARLY_EMPTY = 0.15
 local EMPTY = 0.1
+
+-- Reaching for an ability without the mana for it this many times is a
+-- habit worth knowing about; once or twice is just a fight.
+local STARVED_OFTEN = 3
+
+-- Enemies this many levels above the player miss and resist noticeably
+-- more, which is worth saying.
+local LEVELS_ABOVE_WORTH_MENTIONING = 3
 
 -- How much more one ability has to give for its cost than another before
 -- it's worth suggesting the cost be spent there instead, and how many
@@ -100,10 +108,6 @@ end
 local function RoundPercent(share)
     return ("%d%%"):format(math.floor(share * 20 + 0.5) * 5)
 end
-
--- Reaching for an ability without the mana or energy for it this many
--- times is a habit worth knowing about; once or twice is just a fight.
-local STARVED_OFTEN = 3
 
 --- True if an ability's damage for its cost is worth comparing: it costs
 --- something, and it's been used often enough to go by.
@@ -186,8 +190,9 @@ end
 
 --- The weapon in use whose skill is furthest behind what these enemies
 --- call for, if it could still be trained higher.
----@return table|nil  { name, rank, wanted, cost }, cost being roughly the
----                   share of attacks it's losing
+---@return table|nil  { name, rank, wanted, gap, use, cost }: gap is how
+---                   many points short it is, use "melee" or "ranged", and
+---                   cost roughly the share of attacks it's losing
 local function WeakestWeapon(summary)
     if not summary.enemyLevel then
         return nil
@@ -412,12 +417,13 @@ function Findings.For(summary, comparison)
         )
     end
 
-    if summary.enemyLevel and summary.level and summary.enemyLevel - summary.level >= 3 then
+    local above = summary.enemyLevel and summary.level and summary.enemyLevel - summary.level
+    if above and above >= LEVELS_ABOVE_WORTH_MENTIONING then
         Say(
             "tip",
             "These enemies were %d levels above you. Expect misses and resists to ease "
                 .. "off as that gap closes.",
-            summary.enemyLevel - summary.level
+            above
         )
     end
 

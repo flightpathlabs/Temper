@@ -16,20 +16,21 @@ local POWER_WORDS = {
     FOCUS = "focus",
 }
 
---- The everyday word for a resource: "mana" for "MANA".
-function Summary.PowerWord(power)
-    return POWER_WORDS[power] or (power and power:lower()) or "resource"
-end
-
 -- How long one use of a skill keeps the player busy, when we can't know
 -- better: the pause the game enforces between most abilities.
 local BUSY_SECONDS = 1.5
 
--- The most entries a timeline holds (see Hits.lua).
+-- The most entries a timeline holds (see Combat\Hits.lua).
 local FULL_TIMELINE = 120
 
 -- Outcomes of a cast, as the timeline records them, that count as landing.
 local LANDED = { HIT = true, CRIT = true, GLANCE = true }
+
+--- The everyday word for a resource: "mana" for "MANA".
+---@param power string|nil  the game's token for it
+function Summary.PowerWord(power)
+    return POWER_WORDS[power] or (power and power:lower()) or "resource"
+end
 
 --- How long one use of a spell takes: the length of its cast bar if it
 --- has one, and the usual pause between abilities if not. Remembered, so
@@ -98,6 +99,8 @@ local function ReadTimeline(fight, outcomes)
     return busy, presses
 end
 
+-- A split is the fights against one enemy, or those against several, added
+-- up apart from the rest so the two can be set side by side.
 local function NewSplit()
     return { fights = 0, damage = 0, seconds = 0, dps = 0 }
 end
@@ -114,7 +117,7 @@ local function FinishSplit(split)
     end
 end
 
--- The typical fight ---------------------------------------------------------
+-- The typical fight -----------------------------------------------------------
 
 -- All the damage over all the time is a fair figure for one fight, but
 -- over many it's easily thrown. A few seconds on a critter can do more
@@ -140,6 +143,9 @@ local FEWEST_TO_TRIM = 3
 
 -- The share set aside from each end, once that comes to more than one.
 local TRIMMED_FROM_EACH_END = 0.1
+
+-- Fewer fights than this and "the earlier half" is one or two fights.
+local FEWEST_FOR_A_TREND = 6
 
 --- The rule in a sentence, for a tooltip beside any typical figure.
 Summary.TYPICAL_RULE = "Very short fights, fights won mostly by an item, fights against "
@@ -241,9 +247,6 @@ function Summary.DpsOf(summary)
     return summary.dps, false
 end
 
--- Fewer fights than this and "the earlier half" is one or two fights.
-local FEWEST_FOR_A_TREND = 6
-
 --- Typical DPS in the earlier and the later half of a set of fights. Only
 --- the fights that go towards a typical figure are halved, so that a run
 --- of critters at one end can't make a trend of its own.
@@ -301,9 +304,6 @@ end
 ---   presses     skills used in that time
 ---   power       { kind, finish, fights }: how full mana, energy or rage
 ---               was at the end of a fight, on average; nil if unknown
----   rested      { fights, rest, seconds, damage, perMinute }: for fights
----               whose rest beforehand is known, the damage a minute once
----               that rest is counted
 ---   resource    what the player fights with: "MANA", "ENERGY"...
 ---   typical     from Summary.Typical: a DPS that leaves out flukes and
 ---               easy fights; dps is the plain total over the total time
@@ -353,7 +353,6 @@ function Summary.Of(fights)
     local outcomes = {}
     local sizes = { hits = 0, total = 0, crits = 0, critTotal = 0 }
     local power = { finish = 0, fights = 0 }
-    local rested = { fights = 0, rest = 0, seconds = 0, damage = 0 }
 
     for _, fight in ipairs(fights or {}) do
         summary.fights = summary.fights + 1
@@ -411,13 +410,6 @@ function Summary.Of(fights)
             end
         end
 
-        if fight.rest then
-            rested.fights = rested.fights + 1
-            rested.rest = rested.rest + fight.rest
-            rested.seconds = rested.seconds + fight.length
-            rested.damage = rested.damage + fight.damage
-        end
-
         if fight.enemies and #fight.enemies > 1 then
             AddToSplit(summary.several, fight)
         else
@@ -472,10 +464,6 @@ function Summary.Of(fights)
     if power.fights > 0 then
         power.finish = power.finish / power.fights
         summary.power = power
-    end
-    if rested.fights > 0 then
-        rested.perMinute = rested.damage / ((rested.seconds + rested.rest) / 60)
-        summary.rested = rested
     end
 
     summary.typical = Summary.Typical(fights)

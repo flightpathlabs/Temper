@@ -9,8 +9,11 @@ local _, ns = ...
 local Feed = {}
 ns.Feed = Feed
 
+-- The game's setting for its own damage numbers over enemies.
 local BLIZZARD_DAMAGE_TEXT = "floatingCombatTextCombatDamage_v2"
 
+-- How large a glancing blow, and a word such as "Dodge", are drawn against
+-- an ordinary hit.
 local GLANCING_SCALE = 0.85
 local WORD_SCALE = 0.85
 
@@ -18,8 +21,12 @@ local WORD_SCALE = 0.85
 -- setting for it is missing, as a percentage.
 local USUAL_CRIT_SIZE = 140
 
+-- Plain white for an uncoloured number, and grey for the words.
 local WHITE = { 1, 1, 1 }
 local GREY = { 0.72, 0.72, 0.72 }
+
+-- The school of an ordinary blow, as the game reports it.
+local PHYSICAL = 1
 
 -- The colorBy setting.
 local BY_KIND, MAGIC_ONLY = 1, 2
@@ -66,7 +73,7 @@ local function KindOf(hit)
     if hit.pet then
         return "pet"
     end
-    if hit.school and hit.school ~= 1 then
+    if hit.school and hit.school ~= PHYSICAL then
         return "magic"
     end
 
@@ -83,6 +90,7 @@ local function KindOf(hit)
     return "auto"
 end
 
+--- The colour a hit is drawn in, by the colorBy setting.
 local function ColorFor(hit)
     local scheme = ns.settings.colorBy
     if scheme ~= BY_KIND and scheme ~= MAGIC_ONLY then
@@ -96,6 +104,7 @@ local function ColorFor(hit)
     return scheme == BY_KIND and KIND_COLORS[kind] or WHITE
 end
 
+--- How to draw one of the player's own hits: its colour and size.
 local function LookFor(hit)
     local color = ColorFor(hit)
 
@@ -134,7 +143,7 @@ local function GiveIcon(look, hit)
     end
 
     if hit.tick then
-        look.dot = SCHOOL_COLORS[hit.school] or (hit.school == 1 and BLEED) or MAGIC
+        look.dot = SCHOOL_COLORS[hit.school] or (hit.school == PHYSICAL and BLEED) or MAGIC
         return
     end
 
@@ -234,6 +243,8 @@ local SAMPLES = {
     { amount = 66, school = 1, stranger = true },
     { amount = 213, kind = "ability", school = 1, spell = 78, crit = true },
 }
+
+-- The sample shown last.
 local nextSample = 0
 
 --- Shows the next made-up hit.
@@ -243,7 +254,7 @@ function Feed.ShowSample(stand)
     Draw(SAMPLES[nextSample], stand)
 end
 
--- Blizzard's numbers ---------------------------------------------------------
+-- Blizzard's numbers --------------------------------------------------------
 
 -- True while it's us holding Blizzard's numbers off, this session.
 local hiding = false

@@ -136,6 +136,7 @@ local function TimesDone(tally, me)
     return times > 0 and times or nil
 end
 
+--- For sorting rows by amount, the largest first.
 local function BiggestFirst(a, b)
     return a.amount > b.amount
 end
@@ -187,17 +188,17 @@ local function AddHeals(heals, rows, fromPet, casts)
     end
 end
 
---- Who a row of healing landed on, as far as the game says.
----@return string|nil name  nil when the game won't give it
----@return boolean isPet  true if the game says it landed on a pet
----@return number amount  how much of the row landed on them (see the
----                       header); nil if the row itself can't be read
 --- A character's name without the realm the game sometimes adds to it
 --- ("Name-Realm"), so that one way of writing it matches the other.
 local function ShortName(name)
     return name and (name:match("^[^-]+") or name)
 end
 
+--- Who a row of healing landed on, as far as the game says.
+---@return string|nil name  nil when the game won't give it
+---@return boolean isPet  true if the game says it landed on a pet
+---@return number|nil amount  how much of the row landed on them (see the
+---                           header); nil if that can't be read
 local function Target(row)
     local total = Readable(row.totalAmount)
     if not total then
@@ -325,7 +326,7 @@ local function Healing(me, casts)
     return healing
 end
 
--- Healing from other people ----------------------------------------------------
+-- Healing from other people -------------------------------------------------
 
 --- How much of one other healer's healing landed on the player.
 ---@param source table  the healer's entry in the game's list of everyone

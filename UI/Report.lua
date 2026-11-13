@@ -25,7 +25,18 @@ local Kit = ns.Kit
 -- Where reports go.
 local ISSUES_URL = "https://github.com/flightpathlabs/Temper/issues/new/choose"
 
+-- The window's size, and how far down its header runs: two lines of
+-- instruction and the address.
 local WIDTH, HEIGHT = 640, 480
+local HEADER_HEIGHT = 92
+
+-- The inset the report sits in keeps this far in from the window's sides.
+-- The report's box keeps this far in from the inset's left and right, and
+-- leaves this much for the box's own scroll bar.
+local INSET_EDGE = 8
+local REPORT_LEFT = 10
+local REPORT_RIGHT = 28
+local SCROLL_BAR_ROOM = 18
 
 -- Other addons that draw combat text, measure damage or dress up
 -- nameplates: the ones most likely to be behind numbers in the wrong place,
@@ -58,7 +69,7 @@ local GAME_SETTINGS = {
     "scriptErrors",
 }
 
--- Gathering the facts -----------------------------------------------------------
+-- Gathering the facts ---------------------------------------------------------
 
 --- A value as text, or "hidden" if the game won't let it be read.
 local function Plain(value)
@@ -68,7 +79,7 @@ local function Plain(value)
     return tostring(value)
 end
 
--- Settings the player has changed, since the defaults are known.
+--- Settings the player has changed, since the defaults are known.
 local function ChangedSettings()
     if not ns.settings then
         return "not loaded"
@@ -85,6 +96,7 @@ local function ChangedSettings()
     return #changed > 0 and table.concat(changed, ", ") or "none"
 end
 
+--- The game's own settings in GAME_SETTINGS, as they stand.
 local function GameSettings()
     local parts = {}
     for _, name in ipairs(GAME_SETTINGS) do
@@ -93,6 +105,8 @@ local function GameSettings()
     return table.concat(parts, ", ")
 end
 
+--- Which of the COMPANIONS are loaded, with their versions where they
+--- give one.
 local function LoadedCompanions()
     local loaded = {}
     for _, name in ipairs(COMPANIONS) do
@@ -111,6 +125,7 @@ local function LoadedCompanions()
     return #loaded > 0 and table.concat(loaded, ", ") or "none of the ones Temper looks for"
 end
 
+--- The whole report, as it goes in the box.
 local function ReportText()
     local version, build, _, interface = GetBuildInfo()
     local _, class = UnitClass("player")
@@ -150,13 +165,12 @@ local function ReportText()
     return table.concat(lines, "\n")
 end
 
--- The window ------------------------------------------------------------------------
+-- The window ------------------------------------------------------------------
 
--- How far down the header runs: two lines of instruction and the address.
-local HEADER_HEIGHT = 92
-
+-- Made the first time it's asked for.
 local window
 
+--- Builds the window, hidden and with nothing in its box yet.
 local function Create()
     local frame = CreateFrame("Frame", "TemperReport", UIParent, "ButtonFrameTemplate")
     frame:SetSize(WIDTH, HEIGHT)
@@ -180,8 +194,8 @@ local function Create()
 
     -- The panel the report sits in, below the header and above the buttons.
     frame.Inset:ClearAllPoints()
-    frame.Inset:SetPoint("TOPLEFT", 8, -HEADER_HEIGHT)
-    frame.Inset:SetPoint("BOTTOMRIGHT", -8, 32)
+    frame.Inset:SetPoint("TOPLEFT", INSET_EDGE, -HEADER_HEIGHT)
+    frame.Inset:SetPoint("BOTTOMRIGHT", -INSET_EDGE, 32)
 
     local first = Kit.Text(frame, "GameFontHighlight")
     first:SetPoint("TOPLEFT", 16, -30)
@@ -209,15 +223,17 @@ local function Create()
     -- Blizzard's own scrolling text box. It keeps the cursor in view and
     -- takes the keyboard when clicked, which a bare edit box doesn't.
     local scroll = CreateFrame("ScrollFrame", nil, frame.Inset, "InputScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", 10, -10)
-    scroll:SetPoint("BOTTOMRIGHT", -28, 10)
+    scroll:SetPoint("TOPLEFT", REPORT_LEFT, -10)
+    scroll:SetPoint("BOTTOMRIGHT", -REPORT_RIGHT, 10)
     -- It's built for typing a short note, and counts the letters left.
     scroll.CharCount:Hide()
 
+    -- The text is as wide as what's left of the window once all that is
+    -- taken off.
     local report = scroll.EditBox
     report:SetMaxLetters(0)
     report:SetFontObject("GameFontHighlightSmall")
-    report:SetWidth(WIDTH - 16 - 10 - 28 - 18)
+    report:SetWidth(WIDTH - 2 * INSET_EDGE - REPORT_LEFT - REPORT_RIGHT - SCROLL_BAR_ROOM)
     report:SetAutoFocus(false)
     -- The report isn't for editing either.
     report:HookScript("OnTextChanged", function(self, byPlayer)

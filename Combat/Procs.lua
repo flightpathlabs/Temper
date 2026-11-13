@@ -56,7 +56,7 @@ local IsSecret = issecretvalue or function()
     return false
 end
 
--- What to watch ------------------------------------------------------------
+-- What to watch -------------------------------------------------------------
 
 -- By class, as the game names classes in English whatever the language.
 -- Each entry is one of:
@@ -167,7 +167,7 @@ local WATCH = {
     -- nothing that's opened by a dodge, so there's nothing to watch.
 }
 
--- State ------------------------------------------------------------------------
+-- State ---------------------------------------------------------------------
 
 -- The class's entries, each with what's been worked out about it:
 --
@@ -183,6 +183,9 @@ local WATCH = {
 --   expires, duration  a buff's timing, when it can be read
 --   windowUntil when a window we opened ourselves closes
 local entries = {}
+
+-- The class the entries were made for, so they're only made afresh when
+-- that changes.
 local className
 
 -- Abilities the game has lit up, by spell ID, and every one it has lit
@@ -192,6 +195,7 @@ local glowSince = {}
 local glowSeen = {}
 local glowsSeen = 0
 
+-- Whether a fight is on, and when the last one ended.
 local fighting = false
 local lastFightEnd = -math.huge
 
@@ -229,10 +233,12 @@ local function Ask(method, ...)
     return unpack(result, 2)
 end
 
+--- True when the ability alert is switched on.
 local function Enabled()
     return ns.settings ~= nil and ns.settings.procAlert
 end
 
+--- True if the player knows any of these spells.
 local function KnowsAny(ids)
     for _, id in ipairs(ids or {}) do
         if Ask(C_SpellBook.IsSpellKnownOrInSpellBook, id) or Ask(C_SpellBook.IsSpellKnown, id) then
@@ -254,7 +260,7 @@ local function NameOf(ids, english)
     return english, nil
 end
 
--- Working out what each entry can do -----------------------------------------------
+-- Working out what each entry can do ----------------------------------------
 
 --- How a buff can be read: "always", or "outside" a fight only.
 local function AuraHow(ids)
@@ -289,6 +295,8 @@ local function Quiet()
     return not fighting and GetTime() - lastFightEnd >= SETTLE_SECONDS
 end
 
+--- Settles whether the player has a reactive ability, and how its window
+--- can be told.
 local function WorkOutAbility(entry)
     -- Looked up by name, which finds the rank the player has.
     local own = entry.name and Ask(C_Spell.GetSpellIDForSpellIdentifier, entry.name)
@@ -317,6 +325,7 @@ local function WorkOutAbility(entry)
     entry.how = entry.opens and "window" or "unknown"
 end
 
+--- Works out one entry's name, icon and how it can be read.
 local function WorkOut(entry)
     if entry.aura then
         entry.name = NameOf(entry.aura, entry.english)
@@ -351,8 +360,9 @@ local function Rebuild()
     end
 end
 
--- Reading ---------------------------------------------------------------------------
+-- Reading -------------------------------------------------------------------
 
+--- The buff, if it's on the player and the game will show it.
 local function FindAura(entry)
     for _, id in ipairs(entry.aura) do
         local aura = Ask(C_UnitAuras.GetPlayerAuraBySpellID, id)
@@ -388,6 +398,7 @@ local function ReadAura(entry)
     return true, expires, duration
 end
 
+--- Whether a reactive ability's window is open.
 local function ReadAbility(entry, now)
     if entry.how == "usable" then
         local open = ReadsOpen(entry)
@@ -413,6 +424,7 @@ local function LitByName(name)
     return false
 end
 
+--- Whether an entry is on, and a buff's timing when that can be read.
 local function Read(entry, now)
     if not entry.name then
         return false
@@ -427,11 +439,13 @@ local function Read(entry, now)
     return on or LitByName(entry.name), expires, duration
 end
 
--- Looking ---------------------------------------------------------------------------
+-- Looking -------------------------------------------------------------------
 
+-- Shown only while there's a reason to look, so it costs nothing otherwise.
 local poller = CreateFrame("Frame")
 poller:Hide()
 
+-- Seconds since the last look, and whether a look has been asked for.
 local sinceLook = 0
 local wanted = false
 
@@ -501,12 +515,12 @@ poller:SetScript("OnUpdate", function(_, elapsed)
     end
 end)
 
--- What the alert is told ------------------------------------------------------------
+-- What the alert is told ----------------------------------------------------
 
 --- What's on, oldest first.
----@return table  list of { key, name, icon, expires, duration }, where
----               expires and duration are a buff's timing when it can be
----               read, for a sweep
+---@return table  list of { key, name, icon, expires, duration, since },
+---               where expires and duration are a buff's timing when it
+---               can be read, for a sweep, and since is when it came on
 function Procs.Active()
     local active = {}
     if not Enabled() then
@@ -553,8 +567,9 @@ end
 
 --- The buffs the game hides in a fight, for the game's own display to
 --- draw instead.
----@return table  list of { name, ids }, where ids are the spell IDs the
----               buff can carry
+---@return table  list of { name, ids, known }, where ids are the spell IDs
+---               the buff can carry and known is whether the player has
+---               what grants it
 function Procs.HiddenInFights()
     local hidden = {}
     for _, entry in ipairs(entries) do
@@ -565,7 +580,7 @@ function Procs.HiddenInFights()
     return hidden
 end
 
--- For /temper check -------------------------------------------------------------------
+-- For /temper check ---------------------------------------------------------
 
 -- What's said of a buff the game hides in a fight, by how the game's own
 -- display fares with it (see ProcAlert.GameDrawing).
@@ -581,6 +596,7 @@ local HIDDEN_BUFF_LINES = {
         .. "game draws it itself in the alert's place.",
 }
 
+--- One entry's line for /temper check.
 local function EntryLine(entry)
     local name = entry.name or entry.english
 
@@ -669,7 +685,7 @@ function Procs.CheckLines()
     return lines
 end
 
--- Events ------------------------------------------------------------------------------
+-- Events --------------------------------------------------------------------
 
 ns.Subscribe("DATABASE_READY", function()
     -- A reload in the middle of a fight brings no word that one began.

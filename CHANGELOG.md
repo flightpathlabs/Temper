@@ -106,22 +106,20 @@ First version.
   parried or blocked are counted too.
 - The fight page has a short "Healing and defence" section, with a link
   that opens the Healing and defence tab on the same fights.
-- A Healing and defence tab breaks it all down for the last fight, the session, the
-  last ten fights or everything on record: healing and HPS, damage taken
+- A Healing and defence tab breaks it all down for the last fight, the
+  session, the last ten fights or everything on record: healing and HPS, damage taken
   and how much of it you healed back, a bar for each healing ability and
   each thing that hurt you, and a few plain sentences on what to work on.
 - A healing panel, a twin of the fight panel, shows your healing and HPS
   live during a fight and the last fight's figures in between. It's on
   to begin with, and can be put away from the fight panel's right-click
   menu or the options.
-- Only healing done during a fight is counted. Fights recorded before
-  this version have no healing on record.
+- Only healing done during a fight is counted.
 - **Who healed you.** The tab shows a bar each for you, your pet and
   anyone outside your group who healed you, and says how much of your
-  own healing went on you, your pet and others. Healed back now counts
-  the healing that landed on you, yours and theirs. The fight page names
-  who else healed you.
-
+  own healing went on you, your pet and others. Healed back counts the
+  healing that landed on you, yours and theirs. The fight page names who
+  else healed you.
 - **How much was stopped.** An estimate of the damage coming at you that
   never landed: how much your armour kept off, what your dodges, parries
   and blocks saved, and what your own shields absorbed, as a share of it
@@ -131,7 +129,6 @@ First version.
   you're fighting, with the crits and crushing blows it's letting through;
   a resistance worth having when most of the damage was one kind of
   magic; and how much of the physical damage your armour is stopping.
-- The tab is now called Healing and defence.
 
 **Alerts**
 
@@ -154,7 +151,7 @@ First version.
 
 **Your enemies**
 
-- Each fight now keeps who you fought: the target's level and whether it
+- Each fight keeps who you fought: the target's level and whether it
   was elite, rare or a boss, and every enemy you struck.
 - The list of fights names each by its boss, its enemy or its group
   ("Greater Tarantula ×3", "Group of 4"), with the level and a mark for
@@ -165,9 +162,9 @@ First version.
 
 - Wherever fights are averaged (several fights on the Fights page,
   comparisons, experiments' verdicts, the day-by-day chart, the panel's
-  session average and its arrow), the figure is a typical one: fights against critters and grey
-  enemies, very short ones and the highest and lowest are left out, and
-  it says how many it went by.
+  session average and its arrow), the figure is a typical one: fights
+  against critters and grey enemies, very short ones and the highest and
+  lowest are left out, and it says how many it went by.
 
 **About and problems**
 
@@ -207,6 +204,8 @@ First version.
 - It's about your own fighting and nobody else's. Nothing is posted to chat,
   sent to other players or shared anywhere; your fights stay in your own
   saved data.
-- Solo only. In a group the column steps aside and nothing is recorded.
+- Solo only. In a group the column steps aside, nothing is recorded and
+  the game's own numbers come back. The ability alert and the combo
+  points still show, since they're only about your own next move.
 - The game's own damage numbers are switched off while the column is
   showing and put back afterwards. This can be turned off.

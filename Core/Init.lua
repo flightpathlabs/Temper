@@ -1,4 +1,4 @@
-local addonName, ns = ...
+local _, ns = ...
 
 -- Temper
 --
@@ -6,8 +6,9 @@ local addonName, ns = ...
 -- addon (ns). Nothing here is global except the saved-variables table, the
 -- slash command, the key binding and the addon-list click handler, which
 -- the client needs to find by name.
-
-ns.name = addonName
+--
+-- This file holds what the rest lean on: the addon's name, and the few
+-- ways it puts figures, times and notes into words.
 
 -- What the addon is called wherever a player reads it.
 ns.TITLE = "Temper"
@@ -54,7 +55,9 @@ end
 --- What to call a fight: its boss, its enemy, or its group of enemies,
 --- as the Fights list names it (see Record\Foes.lua), or else what the
 --- player had targeted.
+---@param fight table  a saved fight (see Combat\Fights.lua)
 ---@param otherwise string  for a fight with nothing to go by
+---@return string
 function ns.FightTitle(fight, otherwise)
     if not fight.target and not fight.foes then
         return otherwise
@@ -93,7 +96,10 @@ function ns.Change(before, after)
 end
 
 --- Prints a line to chat with the addon's name in front.
---- Used for slash-command replies only. Temper doesn't narrate in chat.
+--- Kept for replies to what the player did, and the odd one-off note
+--- such as how to get the numbers following nameplates. Temper doesn't
+--- narrate in chat.
+---@param text string  formatted with whatever follows it, if anything does
 function ns.Print(text, ...)
     if select("#", ...) > 0 then
         text = text:format(...)

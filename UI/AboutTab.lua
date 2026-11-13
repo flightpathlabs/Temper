@@ -28,6 +28,7 @@ local BULLET = "Interface\\QuestFrame\\UI-Quest-BulletPoint"
 -- the right-hand side for the scroll bar, as on the Healing page.
 local MARGIN = 14
 local TOP_MARGIN = 10
+local BOTTOM_MARGIN = 8
 local SCROLL_BAR_ROOM = 24
 
 -- How wide the page is when the window is its usual size. Only used if
@@ -40,6 +41,11 @@ local LOGO_WIDTH = 288
 local LOGO_HEIGHT = 144
 local LOGO_GAP = 18
 
+-- Beside the logo: the space under the version, and above the button.
+local PITCH_GAP = 6
+local BUTTON_GAP = 14
+
+-- The button for reporting a problem.
 local BUTTON_WIDTH = 150
 local BUTTON_HEIGHT = 22
 
@@ -57,7 +63,7 @@ local POINT_INDENT = 18
 -- How wide the column of commands is, beside what each one does.
 local COMMAND_WIDTH = 150
 
--- What the page says ------------------------------------------------------------
+-- What the page says ----------------------------------------------------------
 
 --- A point that opens with a few words in gold, so a list of them can be
 --- skimmed by those words alone.
@@ -65,6 +71,7 @@ local function Lead(lead, rest)
     return Kit.Colored(lead, Kit.GOLD) .. " " .. rest
 end
 
+-- The few words beside the logo, a paragraph each.
 local PITCH = {
     "Understand your own damage: where it comes from, what's holding it back, and "
         .. "whether a change helped.",
@@ -116,9 +123,11 @@ local function Sections()
             points = {
                 Lead(
                     "Fight.",
-                    "There's nothing to set up. Fight something on your own, and the panel "
+                    (
+                        "There's nothing to set up. Fight something on your own, and the panel "
                         .. "shows the fight as it goes and its exact figures once it's over. "
-                        .. "Every solo fight is kept."
+                        .. "Your last %d solo fights are kept."
+                    ):format(ns.MAX_FIGHTS)
                 ),
                 Lead(
                     "Read a fight.",
@@ -129,11 +138,11 @@ local function Sections()
                 ),
                 Lead(
                     "Sessions and comparing.",
-                    "Start session, the stopwatch on the panel, marks a run of fights to "
-                        .. "select with one click. To compare, select some fights, press "
-                        .. "Compare with..., click the ones to set them against and press "
-                        .. "Done. The older set is always the before, so green means you "
-                        .. "improved."
+                    "Start session on the Fights tab, or the stopwatch on the panel, marks "
+                        .. "a run of fights to select with one click. To compare, select some "
+                        .. "fights, press Compare with..., click the ones to set them against "
+                        .. "and press Done. The older set is always the before, so green means "
+                        .. "you improved."
                 ),
                 Lead(
                     "Experiments.",
@@ -183,8 +192,10 @@ local function Sections()
                     "In a group the game doesn't say whose blow was whose, so any figure "
                         .. "would be a guess about other people. Temper steps aside instead: no "
                         .. "numbers of its own and no record, and the game's own numbers come "
-                        .. "back. The ability alert and the combo points still show, since "
-                        .. "they're only about your own next move.",
+                        .. "back. The panels still show the game's running figures while a "
+                        .. "fight lasts, but nothing is kept. The ability alert and the "
+                        .. "combo points still show, since they're only about your own next "
+                        .. "move.",
                 },
                 {
                     "Why are my numbers in the middle of the screen?",
@@ -234,10 +245,10 @@ local function Sections()
                 },
                 {
                     "How do I forget everything?",
-                    "Press Forget everything at the bottom of the Progress tab. After asking, "
-                        .. "it deletes every fight, session and experiment kept for this "
-                        .. "character. A single fight can be deleted from the Fights tab with "
-                        .. "a right-click.",
+                    "Press Forget everything at the bottom of the Progress tab, or on "
+                        .. "Temper's page in the Options. After asking, it deletes every "
+                        .. "fight, session and experiment kept for this character. A single "
+                        .. "fight can be deleted from the Fights tab with a right-click.",
                 },
                 {
                     "What is /temper check for?",
@@ -294,6 +305,7 @@ end
 
 -- Making the pieces -----------------------------------------------------------
 
+-- The tab, once it's made.
 local tab
 
 --- A point in a list: the game's marker, and the words beside it.
@@ -390,7 +402,7 @@ local function CreateMasthead(page)
     head.version:SetText("Version " .. (C_AddOns.GetAddOnMetadata(addonName, "Version") or "?"))
 
     head.pitch = Kit.Paragraph(words, "GameFontHighlight")
-    head.pitch:SetPoint("TOPLEFT", head.version, "BOTTOMLEFT", 0, -6)
+    head.pitch:SetPoint("TOPLEFT", head.version, "BOTTOMLEFT", 0, -PITCH_GAP)
     head.pitch:SetText(table.concat(PITCH, "\n\n"))
 
     local report = Kit.Button(words, "Report a problem", BUTTON_WIDTH, function()
@@ -409,20 +421,23 @@ end
 
 -- Laying it out ---------------------------------------------------------------
 
+--- How wide the page is, by the scroll frame it sits in.
 local function PageWidth()
     local width = tab.scroll:GetWidth()
     return width > 0 and width or USUAL_WIDTH
 end
 
+--- Sizes the box at the top to the words beside the logo, or to the logo
+--- when that's the taller.
 local function PlaceMasthead(layout)
     local head = tab.masthead
     local wordsWidth = layout.width - 2 * Kit.SECTION_PADDING - LOGO_WIDTH - LOGO_GAP
 
     head.pitch:SetWidth(wordsWidth)
     local wordsHeight = head.version:GetStringHeight()
-        + 6
+        + PITCH_GAP
         + head.pitch:GetStringHeight()
-        + 14
+        + BUTTON_GAP
         + BUTTON_HEIGHT
     head.words:SetSize(wordsWidth, wordsHeight)
 
@@ -431,6 +446,7 @@ local function PlaceMasthead(layout)
     Kit.Place(layout, head, 0, height)
 end
 
+--- Places one section's pieces down its box, each as tall as its words.
 local function PlaceSection(layout, built)
     local inside = Kit.Inside(layout, built.section)
 
@@ -450,6 +466,7 @@ local function PlaceSection(layout, built)
     Kit.PlaceSection(layout, built.section, inside)
 end
 
+--- Lays the page out afresh, while it's showing.
 local function Refresh()
     if not tab or not tab:IsVisible() then
         return
@@ -478,7 +495,7 @@ function AboutTab.Create(parent)
     -- stay out of sight while everything fits.
     tab.scroll = CreateFrame("ScrollFrame", nil, tab, "ScrollFrameTemplate")
     tab.scroll:SetPoint("TOPLEFT", MARGIN, -TOP_MARGIN)
-    tab.scroll:SetPoint("BOTTOMRIGHT", -SCROLL_BAR_ROOM, 8)
+    tab.scroll:SetPoint("BOTTOMRIGHT", -SCROLL_BAR_ROOM, BOTTOM_MARGIN)
     tab.scroll.ScrollBar:SetHideIfUnscrollable(true)
 
     tab.page = CreateFrame("Frame", nil, tab.scroll)

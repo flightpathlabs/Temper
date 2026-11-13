@@ -83,14 +83,16 @@ function Compare.Between(before, after)
         comparison.abilities[key] = Pair(earlier[key] or nil, now)
     end
 
-    local then_, now = Latest(before), Latest(after)
-    local gearThen = then_ and ns.Gear.Set(then_.gear)
-    local gearNow = now and ns.Gear.Set(now.gear)
+    local lastBefore, lastAfter = Latest(before), Latest(after)
+    local gearThen = lastBefore and ns.Gear.Set(lastBefore.gear)
+    local gearNow = lastAfter and ns.Gear.Set(lastAfter.gear)
     comparison.gearKnown = gearThen ~= nil and gearNow ~= nil
     comparison.gear = ns.Gear.Diff(gearThen, gearNow)
 
-    if then_ and now and then_.level and now.level and then_.level ~= now.level then
-        comparison.levels = { before = then_.level, after = now.level }
+    local levelThen = lastBefore and lastBefore.level
+    local levelNow = lastAfter and lastAfter.level
+    if levelThen and levelNow and levelThen ~= levelNow then
+        comparison.levels = { before = levelThen, after = levelNow }
     end
 
     return comparison

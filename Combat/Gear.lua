@@ -44,9 +44,9 @@ function Gear.Snapshot()
 end
 
 --- What makes an item the item it is, for telling whether a slot changed.
--- A link also carries the wearer's level and other things that change on
--- their own, so two links to the same sword needn't match. The item's
--- number and its enchantment are the first two fields, and are enough.
+--- A link also carries the wearer's level and other things that change on
+--- their own, so two links to the same sword needn't match. The item's
+--- number and its enchantment are the first two fields, and are enough.
 local function Identity(link)
     if not link then
         return nil
@@ -66,6 +66,8 @@ end
 
 --- Files a snapshot with a character's gear sets, reusing the latest one
 --- when nothing has changed.
+---@param character table  the character's saved data
+---@param snapshot table  as from Gear.Snapshot
 ---@return number  the set's place in character.gearSets
 function Gear.Keep(character, snapshot)
     local sets = character.gearSets
@@ -84,6 +86,8 @@ function Gear.Current()
 end
 
 --- A gear set by its number, or nil.
+---@param number number|nil  as a fight's `gear` holds it
+---@return table|nil  a snapshot, as from Gear.Snapshot
 function Gear.Set(number)
     return number and ns.character.gearSets[number]
 end

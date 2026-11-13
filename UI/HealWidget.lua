@@ -41,9 +41,12 @@ local UNDER_FIGHT_PANEL = 118
 -- The session's figures take at most this many lines.
 local SESSION_LINES = 2
 
+-- The grey of the labels and the time, as on the fight panel, and our
+-- mark in the corner.
 local MUTED = { 0.65, 0.65, 0.65 }
 local ICON = "Interface\\AddOns\\Temper\\Media\\icon"
 
+-- The panel's title, and what follows it while a fight is on.
 local TITLE = "Healing"
 local IN_COMBAT = "|cffff4040In combat|r"
 
@@ -58,6 +61,7 @@ local widget
 local fightStart
 local ticker
 
+--- The fight saved last, if there's been one.
 local function LastFight()
     local fights = ns.character.fights
     return fights[#fights]
@@ -78,7 +82,7 @@ local function InterruptsText(interrupts)
     return interrupts > 0 and ns.Count(interrupts, "interrupt") or ""
 end
 
--- The main figures -----------------------------------------------------------
+-- The main figures ------------------------------------------------------------
 
 -- The game's running figures for this fight are passed to the text
 -- without being looked at, as the fight panel passes its damage. Each is
@@ -112,6 +116,7 @@ local function PutLiveRate()
     error("not in the fight's list yet")
 end
 
+--- The fight in progress, as far as the game will let it be shown.
 local function ShowLive()
     widget.title:SetText(TitleText(IN_COMBAT))
     widget.time:SetText(ns.Duration(GetTime() - fightStart))
@@ -138,6 +143,7 @@ local function ShowNoFigures(why)
     widget.note:SetText(why)
 end
 
+--- The last fight, from what was saved of it.
 local function ShowLast()
     local fight = LastFight()
     if not fight then
@@ -180,7 +186,7 @@ local function RefreshMain()
     end
 end
 
--- Under the main figures -------------------------------------------------------
+-- Under the main figures ------------------------------------------------------
 
 --- Fills the session's figures, when they're switched on, and sets the
 --- panel's height to fit them. The one setting governs this panel and the
@@ -246,6 +252,7 @@ local function RefreshBranding()
     widget.title:SetPoint("RIGHT", widget.time, "LEFT", -6, 0)
 end
 
+--- Redraws the whole panel, or hides it if it's switched off.
 local function Refresh()
     if not widget then
         return
@@ -266,7 +273,7 @@ local function Refresh()
     RefreshSession()
 end
 
--- Menu and tooltip -----------------------------------------------------------
+-- Menu and tooltip ------------------------------------------------------------
 
 --- What a click on the panel opens. Looked up when it's clicked, since the
 --- window is defined after this file.
@@ -274,6 +281,7 @@ local function OpenWindow()
     ns.ShowHealing()
 end
 
+--- The right-click menu.
 local function ShowMenu(self)
     MenuUtil.CreateContextMenu(self, function(_, root)
         root:CreateTitle(TITLE)
@@ -319,8 +327,9 @@ local function ShowTooltip(self)
     GameTooltip:Show()
 end
 
--- Building it -------------------------------------------------------------------
+-- Building it -----------------------------------------------------------------
 
+--- Builds the panel where it was last left, with every line it can need.
 local function Create()
     -- The game's own tooltip border, as on the fight panel.
     widget = CreateFrame("Button", "TemperHealWidget", UIParent, "TooltipBackdropTemplate")

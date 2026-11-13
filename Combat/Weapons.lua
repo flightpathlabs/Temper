@@ -18,6 +18,8 @@ ns.Weapons = Weapons
 Weapons.SKILL_PER_LEVEL = 5
 Weapons.COST_PER_POINT = 0.04
 
+-- The weapon slots, by the game's own numbering, and what each is used
+-- for.
 local MAIN_HAND, OFF_HAND, RANGED = 16, 17, 18
 
 local SLOTS = {
@@ -26,6 +28,8 @@ local SLOTS = {
     { RANGED, "ranged" },
 }
 
+-- The skill for fighting with bare hands, which is what an empty main
+-- hand trains.
 local UNARMED = 162
 
 -- A druid in an animal form fights with a skill of its own, whatever
@@ -55,11 +59,14 @@ local function SkillFor(subclass)
     return skills[subclass]
 end
 
+--- True for a druid in any shapeshift form.
 local function InAnimalForm()
     local _, class = UnitClass("player")
     return class == "DRUID" and GetShapeshiftForm() ~= 0
 end
 
+--- The skill behind each weapon in hand, as the game reports it. May
+--- throw on a client without weapon skills.
 local function Read()
     local skills = {}
     local feral = InAnimalForm()

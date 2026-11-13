@@ -49,6 +49,9 @@ local MOST_BESTS = 4
 local CARD_HEIGHT = 62
 local CARD_GAP = 6
 
+-- How wide the words run when there's no best to show yet.
+local EMPTY_WIDTH = 440
+
 -- The line on which fights count starts clear of the "i" before it, and
 -- the trend's clear of its arrow.
 local HELP_SIZE = 18
@@ -122,10 +125,6 @@ local tab
 
 -- What to call things ---------------------------------------------------------
 
-local function FightsText(count)
-    return count == 1 and "1 fight" or count .. " fights"
-end
-
 --- How many of the character's fights are being left out, in a sentence.
 --- Only shown when at least one fight counts, so there are always two or
 --- more fights to talk about once any is left out.
@@ -164,12 +163,15 @@ end
 --- DPS and how that was reached.
 local function DayLines(day)
     local lines = {
-        FightsText(day.fights),
+        ns.Count(day.fights, "fight"),
         ns.Duration(day.seconds) .. " of fighting",
         ("%s DPS, typical (%s)"):format(ns.Rate(day.dps), day.how),
     }
     if day.left > 0 then
-        table.insert(lines, ("%s against easy enemies not counted"):format(FightsText(day.left)))
+        table.insert(
+            lines,
+            ("%s against easy enemies not counted"):format(ns.Count(day.left, "fight"))
+        )
     end
     if day.level then
         table.insert(lines, "Level " .. day.level)
@@ -226,7 +228,7 @@ local function Trend(days)
     return text, change
 end
 
--- The bests ---------------------------------------------------------------------
+-- The bests -------------------------------------------------------------------
 
 local function LeaveOut(fight)
     ns.Progress.SetIgnored(fight, true)
@@ -339,7 +341,7 @@ local function PlaceBests(layout, bests)
     PlaceSection(layout, section, inside)
 end
 
--- Which fights count -------------------------------------------------------------
+-- Which fights count ----------------------------------------------------------
 
 --- How many fights are left out, with the rules that leave them out a
 --- mouse-over away on the "i" before it.
@@ -355,6 +357,7 @@ local function CreateCountedRow(section)
     return row
 end
 
+--- The line on which fights count, as tall as the words run to.
 local function PlaceCounted(layout, fights)
     local section = tab.countedSection
     local inside = Inside(layout, section)
@@ -368,7 +371,7 @@ local function PlaceCounted(layout, fights)
     PlaceSection(layout, section, inside)
 end
 
--- Day by day -------------------------------------------------------------------
+-- Day by day ------------------------------------------------------------------
 
 --- The chart's ground: a faint backing for the columns to stand in, and
 --- the line they stand on, with room under it for the days.
@@ -543,7 +546,7 @@ local function PlaceDays(layout, days)
     PlaceSection(layout, section, inside)
 end
 
--- The tab -------------------------------------------------------------------------
+-- The tab ---------------------------------------------------------------------
 
 --- The width there is for the page.
 local function PageWidth()
@@ -551,6 +554,7 @@ local function PageWidth()
     return width > 0 and width or USUAL_WIDTH
 end
 
+--- Redraws the tab, if it's showing.
 local function Refresh()
     if not tab or not tab:IsVisible() then
         return
@@ -580,6 +584,8 @@ local function Refresh()
     tab.page:SetHeight(layout.y)
 end
 
+--- Asks before forgetting every fight, session and experiment kept for
+--- the character.
 local function AskToForget()
     local name = ns.character.name or "this character"
     Kit.Confirm(FORGET_QUESTION:format(name), ns.Recorder.ForgetEverything)
@@ -607,7 +613,7 @@ local function CreateEmptyState()
 
     empty.text = Kit.Paragraph(empty, "GameFontHighlight", "CENTER")
     empty.text:SetPoint("TOP", icon, "BOTTOM", 0, -14)
-    empty.text:SetWidth(440)
+    empty.text:SetWidth(EMPTY_WIDTH)
     empty.text:SetTextColor(unpack(Kit.MUTED))
 
     return empty

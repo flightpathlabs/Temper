@@ -18,8 +18,8 @@ local _, ns = ...
 -- on the right, so one can be weighed against the other at a glance. Then
 -- comes who healed the player, when anyone but they did: themselves, their
 -- pet and anyone else, a bar each. Then how much was stopped, by armour,
--- by blows that didn't land and by the shield, a bar for each; then the
--- counts of blows and heals, and the advice.
+-- by blows that didn't land, by the shield and by absorbs, a bar for
+-- each; then the counts of blows and heals, and the advice.
 --
 -- All the reckoning is in Record\Healing.lua. This file only draws it.
 
@@ -32,6 +32,7 @@ local LOGO = "Interface\\AddOns\\Temper\\Media\\logo"
 
 -- The strip under the window's title bar, which starts clear of the
 -- emblem in the corner: the menu, and beside it what its choice came to.
+local STRIP_TOP = 24
 local STRIP_HEIGHT = 34
 local STRIP_LEFT = 66
 local STRIP_EDGE = 10
@@ -47,6 +48,13 @@ local SCROLL_BAR_ROOM = 24
 -- How wide the page is when the window is its usual size. Only used if
 -- the tab is filled before the game has worked out its real width.
 local USUAL_WIDTH = 852
+
+-- With nothing to show, the logo, and under it the reason in a column
+-- this wide, a little below the middle.
+local LOGO_WIDTH = 320
+local LOGO_HEIGHT = 160
+local EMPTY_WIDTH = 400
+local EMPTY_DROP = 60
 
 -- Space between the two columns of bars, between one bar and the next,
 -- and between lines of text in a section.
@@ -151,8 +159,8 @@ local WHO_NOTES = {
 
 -- What lies behind the estimate of what was stopped, for its tooltips.
 local STOPPED_NOTE = "An estimate: the game counts the damage you took, but not what never "
-    .. "reached you. It's worked out from your armour, the blows that didn't land and your "
-    .. "shield. The section below shows each."
+    .. "reached you. It's worked out from your armour, the blows that didn't land, your "
+    .. "shield and your absorbs. The section below shows each."
 local ARMOUR_NOTE = "Worked out from what the character sheet says your armour takes off a "
     .. "physical blow from an enemy of the level you fought, put to the physical damage you took."
 local SWINGS_ONLY = "Spells hit you too, and the game doesn't say which damage was which, so "
@@ -196,7 +204,7 @@ local chosen
 
 local Refresh
 
--- Which fights ------------------------------------------------------------------
+-- Which fights ----------------------------------------------------------------
 
 --- The fights one of the menu's choices covers.
 ---@param choice string  a key of SCOPES
@@ -224,12 +232,9 @@ local function FightsIn(choice)
     return latest
 end
 
--- What the page says ------------------------------------------------------------
+-- What the page says ----------------------------------------------------------
 
-local function FightsText(count)
-    return count == 1 and "1 fight" or count .. " fights"
-end
-
+--- "this fight" or "these fights", for the middle of a sentence.
 local function These(count)
     return count == 1 and "this fight" or "these fights"
 end
@@ -245,7 +250,7 @@ local function CameToText(fights, name, summary)
         for _, fight in ipairs(fights) do
             seconds = seconds + fight.length
         end
-        text = ("%s, %s of fighting"):format(FightsText(#fights), ns.Duration(seconds))
+        text = ("%s, %s of fighting"):format(ns.Count(#fights, "fight"), ns.Duration(seconds))
     end
     if name then
         text = ("%s: %s"):format(name, text)
@@ -442,7 +447,7 @@ local function DefenceLines(summary)
     return lines
 end
 
--- The figures --------------------------------------------------------------------
+-- The figures -----------------------------------------------------------------
 
 -- Each figure in the row is a table of the kind Kit.StatRow shows: a
 -- label and a value, and what lies behind it for its tooltip.
@@ -459,6 +464,7 @@ local function PerFight(summary, total)
     }
 end
 
+--- All the healing the player did, wherever it landed.
 local function HealingStat(summary)
     return {
         label = "Healing",
@@ -480,6 +486,8 @@ local function RateStat(summary)
     }
 end
 
+--- The damage that reached the player, and how much of it the game says
+--- could have been avoided.
 local function TakenStat(summary)
     local stat = {
         label = "Damage taken",
@@ -536,6 +544,7 @@ local function HealedBackStat(summary)
     return stat
 end
 
+--- How many of the heals that landed on the player were critical.
 local function CritStat(summary)
     local stat = {
         label = "Heal crit",
@@ -545,7 +554,7 @@ local function CritStat(summary)
     }
 
     if summary.heals > 0 then
-        local heals = summary.heals == 1 and "1 heal" or summary.heals .. " heals"
+        local heals = ns.Count(summary.heals, "heal")
         table.insert(stat.figures, { "Critical", ("%d of %s"):format(summary.healCrits, heals) })
         stat.note = EVERY_HEAL
     end
@@ -582,7 +591,7 @@ local function StatsFor(summary)
     return stats
 end
 
--- The bars ----------------------------------------------------------------------
+-- The bars --------------------------------------------------------------------
 
 --- The icon of an enemy's ability. What hurt the player is recorded
 --- without one, so the game is asked, once for each ability. It can
@@ -889,7 +898,7 @@ local function PlaceBars(column, inside)
     end
 end
 
--- Laying out ---------------------------------------------------------------------
+-- Laying out ------------------------------------------------------------------
 
 --- Notes a piece of the page, so that a fill can start by clearing every
 --- piece away and then show only the ones it places.
@@ -1098,14 +1107,14 @@ local function PlaceFindings(layout, summary)
     Kit.PlaceSection(layout, section, inside)
 end
 
--- Building ---------------------------------------------------------------------
+-- Building --------------------------------------------------------------------
 
 --- The menu of which fights to cover and the line beside it, in the
 --- window's own strip under the title bar. They belong to this tab and go
 --- when the tab does.
 local function CreateStrip(window)
     local strip = CreateFrame("Frame", nil, tab)
-    strip:SetPoint("TOPLEFT", window, "TOPLEFT", STRIP_LEFT, -24)
+    strip:SetPoint("TOPLEFT", window, "TOPLEFT", STRIP_LEFT, -STRIP_TOP)
     strip:SetPoint("RIGHT", window, "RIGHT", -6, 0)
     strip:SetHeight(STRIP_HEIGHT)
 
@@ -1136,6 +1145,7 @@ local function CreateStrip(window)
     return strip
 end
 
+--- A bar that explains itself in a tooltip when the mouse is on it.
 local function CreateBar(section, ShowTooltip)
     local bar = Kit.Bar(section)
     bar:EnableMouse(true)
@@ -1182,13 +1192,13 @@ function HealingTab.Create(parent, window)
     -- Shown in place of everything else when there's nothing to put on
     -- the page, as on the Fights page.
     tab.empty = Kit.Paragraph(tab, "GameFontHighlight", "CENTER")
-    tab.empty:SetPoint("CENTER", 0, -60)
-    tab.empty:SetWidth(400)
+    tab.empty:SetPoint("CENTER", 0, -EMPTY_DROP)
+    tab.empty:SetWidth(EMPTY_WIDTH)
     tab.empty:SetTextColor(unpack(Kit.MUTED))
 
     tab.logo = tab:CreateTexture(nil, "ARTWORK")
     tab.logo:SetTexture(LOGO)
-    tab.logo:SetSize(320, 160)
+    tab.logo:SetSize(LOGO_WIDTH, LOGO_HEIGHT)
     tab.logo:SetPoint("BOTTOM", tab.empty, "TOP", 0, 6)
 
     -- The rest scrolls. The template brings its own scroll bar, which
@@ -1251,7 +1261,7 @@ function HealingTab.Create(parent, window)
     return tab
 end
 
--- Filling ------------------------------------------------------------------------
+-- Filling ---------------------------------------------------------------------
 
 --- The tab with nothing to show: the logo, and a line on why.
 local function ShowEmpty(words)
@@ -1264,6 +1274,8 @@ local function ShowEmpty(words)
     tab.logo:Show()
 end
 
+--- The figures across the top and the sections under them, laid out
+--- afresh for a summary.
 local function ShowPage(summary)
     tab.empty:Hide()
     tab.logo:Hide()
@@ -1318,6 +1330,7 @@ function HealingTab.Cover(fights)
     end
 end
 
+--- Redraws the tab, if it's showing, for the set of fights chosen.
 function Refresh()
     if not tab or not tab:IsVisible() then
         return

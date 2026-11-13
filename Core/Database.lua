@@ -11,7 +11,8 @@ local addonName, ns = ...
 --                 fights      every fight on record, oldest first (see
 --                             Combat\Fights.lua)
 --                 recordings  the stretches the player chose to record;
---                             a label on a run of fights (see Recorder)
+--                             a label on a run of fights (see
+--                             Record\Recorder.lua)
 --                 experiments questions put to a pair of recordings (see
 --                             Record\Experiments.lua)
 --                 gearSets    each different set of gear a fight was
@@ -20,7 +21,10 @@ local addonName, ns = ...
 --                             seen to do (see Combat\Guess.lua)
 --                 ticking     how often each ability has been seen ticking
 --                             after its cast, like a bleed (also Guess.lua)
+--                 threatRatio how this character's damage compares with
+--                             the threat it earns (see Combat\Sizes.lua)
 --                 nextNumber  the number the next recording will carry
+--                 nextExperiment  the same for the next experiment
 --   widget      where the last-fight panel was dragged to, as it would be
 --               at the normal size whatever size it's drawn at (see
 --               ns.PlacePanel in UI\Widget.lua)
@@ -92,8 +96,8 @@ ns.DEFAULT_SETTINGS = {
     -- Switch Blizzard's own damage numbers off while the lane is showing.
     hideBlizzardNumbers = true,
 
-    -- For rogues and druids in cat form, a row of pips by the target's
-    -- nameplate, lit as combo points build (see UI\ComboPoints.lua). Shown
+    -- For rogues and druids in cat form, a row of pips under the
+    -- target's nameplate, lit as combo points build (see UI\ComboPoints.lua). Shown
     -- in a group too: it's only about the player's own next press.
     comboPoints = true,
 
@@ -123,8 +127,9 @@ ns.DEFAULT_SETTINGS = {
     -- fight panel's menu or the options.
     healWidget = true,
 
-    -- A small Record button on the screen. Off unless asked for: the window
-    -- and the panel's menu both record, and there's a key binding.
+    -- A small Start session button on the screen. Off unless asked for:
+    -- the window and the panel's stopwatch both start one, and there's a
+    -- key binding.
     recordButton = false,
 
     -- An ability's icon below the middle of the screen when something has
@@ -139,6 +144,7 @@ ns.DEFAULT_SETTINGS = {
 -- How many fights to keep for each character. The oldest go first.
 ns.MAX_FIGHTS = 200
 
+--- Copies into `target` every default it doesn't already have a value for.
 local function FillIn(target, defaults)
     for key, value in pairs(defaults) do
         if target[key] == nil then

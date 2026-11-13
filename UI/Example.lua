@@ -24,6 +24,14 @@ local BAR_HEIGHT = 10
 -- Seconds between one made-up hit and the next.
 local HIT_EVERY = 0.7
 
+-- Where it stands until it's dragged: a little way off the Options
+-- window's right-hand side and below its middle, or, with that window
+-- shut, this far above the middle of the screen.
+local BESIDE_OPTIONS_X = 24
+local BESIDE_OPTIONS_Y = -40
+local ABOVE_MIDDLE = 100
+
+-- The stand-in nameplate, and what plays the hits on it while it shows.
 local stand
 local ticker
 
@@ -39,12 +47,13 @@ local function PutInPlace()
     if type(place) == "table" and place.point then
         stand:SetPoint(place.point, UIParent, place.relativePoint or place.point, place.x, place.y)
     elseif SettingsPanel and SettingsPanel:IsShown() then
-        stand:SetPoint("LEFT", SettingsPanel, "RIGHT", 24, -40)
+        stand:SetPoint("LEFT", SettingsPanel, "RIGHT", BESIDE_OPTIONS_X, BESIDE_OPTIONS_Y)
     else
-        stand:SetPoint("CENTER", UIParent, "CENTER", 0, 100)
+        stand:SetPoint("CENTER", UIParent, "CENTER", 0, ABOVE_MIDDLE)
     end
 end
 
+--- Starts the made-up hits, one at once and then one every so often.
 local function StartHits()
     -- The numbers live under the game's windows as a rule. While the
     -- example is up they have to be in front, or the Options window
@@ -57,6 +66,7 @@ local function StartHits()
     end)
 end
 
+--- Stops the hits and clears away any still on screen.
 local function StopHits()
     if ticker then
         ticker:Cancel()
@@ -66,6 +76,8 @@ local function StopHits()
     ns.Lane.BringForward(false)
 end
 
+--- Builds the stand-in nameplate, hidden. The hits start and stop as it
+--- shows and hides.
 local function Create()
     stand = CreateFrame("Frame", "TemperExample", UIParent)
     stand:SetSize(WIDTH, HEIGHT)

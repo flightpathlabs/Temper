@@ -68,7 +68,7 @@ local IsSecret = issecretvalue or function()
     return false
 end
 
--- What to look for ------------------------------------------------------------
+-- What to look for ----------------------------------------------------------
 
 -- The spell and item IDs below are the classic game's, as known from it,
 -- and couldn't be checked against this client's source. A wrong one costs
@@ -139,6 +139,7 @@ local ELIXIRS = {
     look = { item = 13452, spell = 17538 },
 }
 
+-- The five flasks, by ID for the same reason.
 local FLASKS = {
     ids = {
         17624, -- Flask of Petrification
@@ -337,8 +338,9 @@ local COATINGS = {
 -- Call Pet: a hunter who has it has a pet to call.
 local CALL_PET = { 883 }
 
--- State -------------------------------------------------------------------------
+-- State ---------------------------------------------------------------------
 
+-- The player's class, as the game names it in English.
 local className
 
 -- The class's own buffs the player has learned, each with its name and
@@ -369,6 +371,8 @@ local rested
 -- in an inn or a city, where buffs are let lapse.
 local standing = {}
 
+-- Whether a fight is on, and whether something learned during it means
+-- working out afresh what to look for once it's over.
 local fighting = false
 local rebuildAfterFight = false
 
@@ -411,6 +415,7 @@ local function Enabled()
     return ns.character ~= nil and (ns.settings.readyAlert or ns.settings.widgetBuffs)
 end
 
+--- True if the player knows a spell, at this rank or another.
 local function Knows(id)
     if Read(C_SpellBook.IsSpellKnownOrInSpellBook, id) or Read(C_SpellBook.IsSpellKnown, id) then
         return true
@@ -447,7 +452,7 @@ local function Picture(look)
     return icon or look.file
 end
 
--- Working out what to look for ----------------------------------------------------
+-- Working out what to look for ----------------------------------------------
 
 --- Fills in the names a kind of buff is found by.
 local function Prepare(kind)
@@ -504,7 +509,7 @@ local function Rebuild()
     hasPet = class == "HUNTER" and FirstKnown(CALL_PET) ~= nil
 end
 
--- Reading ----------------------------------------------------------------------------
+-- Reading -------------------------------------------------------------------
 
 --- The player's buffs. Only ever called outside a fight.
 local function ReadAuras()
@@ -675,6 +680,7 @@ local function ReadAmmo()
     return { count = count, icon = Read(GetInventoryItemTexture, "player", AMMO) or icon }
 end
 
+--- Reads both hands, their coatings, the worst-worn item and the ammunition.
 local function ReadGear()
     local weaponSlots = Enum.WeaponSlot or {}
     gear = {
@@ -687,6 +693,7 @@ local function ReadGear()
     }
 end
 
+--- Whether a hunter's pet is away, dead or unhappy.
 local function ReadPet()
     pet = nil
     if not hasPet then
@@ -718,6 +725,7 @@ local function ReadPet()
     end
 end
 
+--- How much rested experience the player has, if there's any to earn.
 local function ReadRested()
     rested = nil
 
@@ -746,6 +754,7 @@ local function ReadRested()
     }
 end
 
+--- Whether the player is dead or on a flight, and whether they're resting.
 local function ReadStanding()
     standing = {
         away = Read(UnitIsDeadOrGhost, "player") == true or Read(UnitOnTaxi, "player") == true,
@@ -765,7 +774,7 @@ local function Attempt(what, method)
     end
 end
 
--- Finding buffs ------------------------------------------------------------------------
+-- Finding buffs -------------------------------------------------------------
 
 --- Every buff of a kind the player has on, as last read.
 local function FindAll(kind)
@@ -800,13 +809,14 @@ local function FindFromOthers()
     return found
 end
 
+--- True if the player has a living enemy targeted.
 local function HostileTarget()
     return Read(UnitExists, "target") == true
         and Read(UnitCanAttack, "player", "target") == true
         and Read(UnitIsDead, "target") ~= true
 end
 
--- Working out what to say ------------------------------------------------------------
+-- Working out what to say ---------------------------------------------------
 
 --- "No poison on your off hand", or nil when the weapon is seen to.
 local function CoatingProblem()
@@ -831,12 +841,14 @@ local function CoatingProblem()
     return ("No %s on your %s"):format(coating.word, where)
 end
 
+-- What the warning says of the pet, by how it stands.
 local PET_WORDS = {
     away = "Your pet isn't out",
     dead = "Your pet is dead",
     unhappy = "Your pet is unhappy",
 }
 
+--- What's amiss, most pressing first, for the warning box.
 local function ComposeProblems()
     local list = {}
     local function Add(key, text, icon, urgent)
@@ -896,6 +908,7 @@ local function ComposeProblems()
     return list
 end
 
+--- The buff icons for the fight panel, in the order they're drawn.
 local function ComposeSlots()
     local list = {}
     local function Add(slot)
@@ -969,6 +982,7 @@ local function Said()
     return table.concat(parts, "|")
 end
 
+--- Works out what the screens are given, and tells them if it changed.
 local function Compose()
     if Enabled() then
         problems = ComposeProblems()
@@ -984,7 +998,7 @@ local function Compose()
     end
 end
 
--- Looking --------------------------------------------------------------------------------
+-- Looking -------------------------------------------------------------------
 
 --- Reads everything that can be read now, and says so if anything changed.
 local function Look()
@@ -1002,6 +1016,7 @@ local function Look()
     Compose()
 end
 
+-- Set while a look is on its way.
 local lookPending = false
 
 --- Asks for a look in a moment rather than straight away: some news comes
@@ -1024,7 +1039,7 @@ local function LookSoonIfCalm()
     end
 end
 
--- What the screens are told --------------------------------------------------------------
+-- What the screens are told -------------------------------------------------
 
 --- What's amiss, most pressing first.
 ---@return table  list of { key, text, icon, urgent, sound }, where sound is
@@ -1034,7 +1049,8 @@ function Readiness.Problems()
 end
 
 --- The buff icons for the bottom of the fight panel, in order.
----@return table  list of { key, label, icon, lit }
+---@return table  list of { key, label, icon, lit, found }, where found is
+---               the buffs that lit it, for the kinds that have them
 function Readiness.Slots()
     return slots
 end
@@ -1051,6 +1067,7 @@ local function TimeLeft(expires)
     elseif left < 60 then
         return "under a minute left"
     elseif left >= 90 * 60 then
+        -- From an hour and a half, minutes are more than anyone needs.
         return ("about %s left"):format(ns.Count(left / 3600, "hour"))
     end
     return ns.Count(math.floor(left / 60), "minute") .. " left"
@@ -1067,6 +1084,7 @@ end
 local LINE_ICON = "|T%s:16:16:0:0:64:64:5:59:5:59|t "
 local GREY_LINE_ICON = "|T%s:16:16:0:0:64:64:5:59:5:59:110:110:110|t "
 
+--- A tooltip line with its icon in front, greyed out when `missing`.
 local function WithIcon(icon, text, missing)
     if not icon then
         return text
@@ -1118,9 +1136,10 @@ local HINTS = {
         .. "Intellect, a Blessing and the like.",
 }
 
-local function WeaponLines(add)
+--- The weapon icon's tooltip lines: what's on each hand, and for how long.
+local function WeaponLines(Add)
     if gear.main and gear.main.fishing then
-        add("A fishing pole is in your hand.", true)
+        Add("A fishing pole is in your hand.", true)
         return
     end
 
@@ -1131,7 +1150,7 @@ local function WeaponLines(add)
             if coat.charges then
                 line = ("%s, %s"):format(line, ns.Count(coat.charges, "charge"))
             end
-            add(line)
+            Add(line)
         end
     end
 end
@@ -1192,7 +1211,7 @@ function Readiness.Tooltip(key)
     return slot.label, lines
 end
 
--- Events -----------------------------------------------------------------------------------
+-- Events --------------------------------------------------------------------
 
 ns.Subscribe("DATABASE_READY", function()
     -- A reload in the middle of a fight brings no word that one began.

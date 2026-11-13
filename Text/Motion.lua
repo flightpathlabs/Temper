@@ -59,12 +59,13 @@ Motions[3] = {
 
 Motions[4] = {
     label = "Shrink away",
+    -- Drifts up a little and dwindles to half its size as it fades.
     move = function(progress)
         return 0, 14 * progress, Fade(progress, 0.5), 1 - 0.5 * progress
     end,
 }
 
--- How a critical hit lands ------------------------------------------------------
+-- How a critical hit lands --------------------------------------------------
 --
 -- On top of whichever motion is chosen, a critical hit can make an
 -- entrance. Each of these is a function of how long ago the number
@@ -82,6 +83,8 @@ local function Pop(extra, seconds)
     end
 end
 
+-- The shake: how long it lasts, how far it swings either way in pixels at
+-- the start, and how fast.
 local SHAKE_SECONDS = 0.35
 local SHAKE_WIDTH = 5
 local SHAKE_SPEED = 55

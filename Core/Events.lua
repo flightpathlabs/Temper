@@ -66,7 +66,8 @@ end
 --   SETTINGS_CHANGED             the player changed an option
 --   TARGET_HIT        hit        something landed on, or missed, the
 --                                player's target (see Combat\Hits.lua)
---   PLAYER_CAST       spellID    the player or their pet cast something
+--   PLAYER_CAST       spellID    the player cast something (see
+--                                Combat\Hits.lua)
 --   FIGHTS_CHANGED               a fight was saved or deleted, or a
 --                                recording started or stopped
 --   EXPERIMENTS_CHANGED          an experiment began, moved on a step or

@@ -73,6 +73,7 @@ local MARKS = {
 -- The strip under the window's title bar, which starts clear of the
 -- emblem in the corner, and the buttons on its right: one wide one as a
 -- rule, two narrow ones while fights are being picked.
+local STRIP_TOP = 24
 local STRIP_HEIGHT = 34
 local STRIP_LEFT = 66
 local STRIP_EDGE = 10
@@ -117,7 +118,7 @@ local searchFor
 
 local Refresh
 
--- Sets of fights -------------------------------------------------------------
+-- Sets of fights --------------------------------------------------------------
 
 local function Count(set)
     local count = 0
@@ -178,7 +179,7 @@ local function Prune(set)
     end
 end
 
--- Comparing --------------------------------------------------------------------
+-- Comparing -------------------------------------------------------------------
 
 --- Starts the choosing of fights to compare with. The last fight clicked
 --- was one of those being read, so a Shift-click mustn't run from it.
@@ -216,6 +217,7 @@ local function OnCompareClick()
     Refresh()
 end
 
+--- Cancel, beside Done: backs out of the picking and of the comparison.
 local function OnCancelClick()
     other = nil
     StopPicking()
@@ -254,10 +256,6 @@ local function FiguresText(fight)
     return dps .. "   " .. Kit.Colored(rest, Kit.MUTED)
 end
 
-local function FightsText(count)
-    return count == 1 and "1 fight" or count .. " fights"
-end
-
 --- The session a list of fights makes up, if they're exactly one whole
 --- session and nothing else.
 local function WholeSession(fights)
@@ -285,7 +283,7 @@ local function SetName(fights, earlier)
     if session then
         return "Session " .. session.number
     elseif not earlier then
-        return FightsText(#fights)
+        return ns.Count(#fights, "fight")
     end
     return #fights == 1 and "1 earlier" or #fights .. " earlier"
 end
@@ -333,7 +331,7 @@ local function Heading(fights)
     return heading
 end
 
--- Searching --------------------------------------------------------------------
+-- Searching -------------------------------------------------------------------
 
 --- True if a name has the search in it, whatever its case.
 local function Contains(name)
@@ -364,8 +362,9 @@ local function Matches(fight, described)
     return false
 end
 
--- The list ---------------------------------------------------------------------
+-- The list --------------------------------------------------------------------
 
+--- The right-click menu on a fight: compare, count or don't, delete.
 local function ShowFightMenu(row, fight)
     MenuUtil.CreateContextMenu(row, function(_, root)
         -- Acting on the whole selection when the fight is part of it, and
@@ -374,7 +373,7 @@ local function ShowFightMenu(row, fight)
         local count = Count(target)
         local one = count == 1
 
-        root:CreateTitle(one and Describe(fight).title or FightsText(count))
+        root:CreateTitle(one and Describe(fight).title or ns.Count(count, "fight"))
 
         local compare = one and "Compare with this"
             or ("Compare with these %d fights"):format(count)
@@ -410,6 +409,7 @@ local function FightsUnder(data)
     return data.shown or ns.Recorder.FightsOf(data.recording)
 end
 
+--- The right-click menu on a session's heading: compare or delete.
 local function ShowSessionMenu(row, data)
     local session = data.recording
     local fights = FightsUnder(data)
@@ -459,6 +459,8 @@ local function AfterClick(set, fight, keepOne)
     return { [fight] = true }
 end
 
+--- A click on a row: a heading selects its session's fights, a fight is
+--- chosen as AfterClick says, and a right-click opens the row's menu.
 local function OnRowClick(row, mouseButton)
     local data = row.data
 
@@ -533,6 +535,9 @@ local function ShowFoesTooltip(row)
     GameTooltip:Show()
 end
 
+--- Makes what goes in a row, the first time the list hands it out. The
+--- same row serves for a fight or a heading, so it has the pieces of
+--- both, and FillRow shows the ones it needs.
 local function CreateRowWidgets(row)
     row.created = true
     row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
@@ -627,7 +632,7 @@ local function FillHeading(row, data)
     end
     row.title:SetText(title)
 
-    local count = FightsText(#ns.Recorder.FightsOf(session))
+    local count = ns.Count(#ns.Recorder.FightsOf(session), "fight")
     if data.shown then
         count = ("%d of %s"):format(#data.shown, count)
     end
@@ -651,6 +656,9 @@ local function ShowMark(texture, mark)
     texture:Show()
 end
 
+--- Fills a row in. A heading is left to FillHeading. A fight has its name
+--- with the enemy's level and mark, how long it lasted, and its figures
+--- under that.
 local function FillRow(row, data)
     row.data = data
     row.title:ClearAllPoints()
@@ -826,7 +834,7 @@ local function CreateSearchBox(panel)
     return box
 end
 
--- The strip under the title bar -------------------------------------------------
+-- The strip under the title bar -----------------------------------------------
 
 --- Says where the player is in reading or comparing, and what to do next.
 ---@param selected table  the fights being read, as a list
@@ -890,6 +898,8 @@ local function ShowStripButtons(canCompare)
     tab.strip.next:SetPoint("RIGHT", leftmost, "LEFT", -STRIP_EDGE, 0)
 end
 
+-- The tab ---------------------------------------------------------------------
+
 --- Builds the tab.
 ---@param parent table  the window's inset, which the tab fills
 ---@param window table  the window itself, whose bottom edge the buttons sit on
@@ -942,7 +952,7 @@ function FightsTab.Create(parent, window)
     -- and the button that takes the next step. It belongs to this tab and
     -- goes when the tab does.
     local strip = CreateFrame("Frame", nil, tab)
-    strip:SetPoint("TOPLEFT", window, "TOPLEFT", STRIP_LEFT, -24)
+    strip:SetPoint("TOPLEFT", window, "TOPLEFT", STRIP_LEFT, -STRIP_TOP)
     strip:SetPoint("RIGHT", window, "RIGHT", -6, 0)
     strip:SetHeight(STRIP_HEIGHT)
     tab.strip = strip
@@ -994,6 +1004,7 @@ function FightsTab.Create(parent, window)
     return tab
 end
 
+--- Redraws the tab, if it's showing: the list, the page and the strip.
 function Refresh()
     if not tab or not tab:IsVisible() then
         return

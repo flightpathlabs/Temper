@@ -37,6 +37,8 @@ local rowSeconds = LONGEST_ROW
 -- was cut short, and says so.
 local MOST_ITEMS = 120
 
+-- How big an ability's icon is, and an auto attack's. Auto attacks are
+-- also drawn a little faded, so the eye goes to the abilities.
 local SKILL_SIZE = 20
 local SWING_SIZE = 12
 local SWING_ALPHA = 0.85
@@ -65,13 +67,28 @@ local ROW_GAP = 6
 -- Icons stop this far short of either end, again for the gold edge.
 local INSET = CRIT_EDGE
 
+-- How strongly the track behind the skills shows, and the rule and ticks
+-- of the times under it.
+local TRACK_ALPHA = 0.05
+local RULE_ALPHA = 0.6
+
+-- The key under the last line: the space above it, its height (and that
+-- of each line of small print under it), and the space between the
+-- marks it explains. Each sample stands this far from its words.
 local LEGEND_GAP = 8
 local LEGEND_HEIGHT = 12
 local LEGEND_SPACE = 14
+local SAMPLE_GAP = 4
+
+-- The key's sample of a critical hit: a gold edge round a dark square.
+local SAMPLE_SIZE = 10
+local SAMPLE_FILL = { 0.15, 0.15, 0.15 }
 
 -- Space above each line of small print under the key.
 local SMALL_PRINT_GAP = 4
 
+-- The small print: always the first, and the second when a fight was too
+-- long for all of it to be kept.
 local MATCHED_BY_TIMING = "Critical hits and misses are matched to abilities by timing, "
     .. "so the odd one may be wrong."
 local CUT_SHORT = ("Only the first %d attacks and abilities of a long fight are kept."):format(
@@ -139,6 +156,7 @@ local function OutcomeText(result)
     return OUTCOMES[result] or "Didn't land", Kit.BAD
 end
 
+--- What an icon stands for: the spell, when it was used, and how it went.
 local function ShowTooltip(frame)
     local item = frame.item
     local outcome, color = OutcomeText(item.r)
@@ -150,8 +168,9 @@ local function ShowTooltip(frame)
     GameTooltip:Show()
 end
 
--- Icons -------------------------------------------------------------------------
+-- Icons -----------------------------------------------------------------------
 
+--- An icon with nothing in it yet, ready to be dressed for one use.
 local function CreateIcon(timeline)
     local frame = CreateFrame("Frame", nil, timeline)
     frame:EnableMouse(true)
@@ -225,21 +244,23 @@ local function Seat(lane, t, scale, width)
     return lane.row, x
 end
 
--- The line under the icons --------------------------------------------------------
+-- The line under the icons ----------------------------------------------------
 
+--- The pieces of one line, other than its icons: the track, the rule, and
+--- a tick and a time for every mark a line can have.
 local function CreateRow(timeline)
     local row = { ticks = {}, times = {} }
 
     -- A faint track behind the skills, so a gap in them reads as a gap.
     row.track = timeline:CreateTexture(nil, "BACKGROUND")
-    row.track:SetColorTexture(1, 1, 1, 0.05)
+    row.track:SetColorTexture(1, 1, 1, TRACK_ALPHA)
 
     row.rule = timeline:CreateTexture(nil, "BACKGROUND")
-    row.rule:SetColorTexture(Kit.MUTED[1], Kit.MUTED[2], Kit.MUTED[3], 0.6)
+    row.rule:SetColorTexture(Kit.MUTED[1], Kit.MUTED[2], Kit.MUTED[3], RULE_ALPHA)
 
     for index = 1, LONGEST_ROW / TICK_SECONDS do
         local tick = timeline:CreateTexture(nil, "BACKGROUND")
-        tick:SetColorTexture(Kit.MUTED[1], Kit.MUTED[2], Kit.MUTED[3], 0.6)
+        tick:SetColorTexture(Kit.MUTED[1], Kit.MUTED[2], Kit.MUTED[3], RULE_ALPHA)
         tick:SetSize(1, TICK_HEIGHT)
         row.ticks[index] = tick
 
@@ -249,6 +270,7 @@ local function CreateRow(timeline)
     return row
 end
 
+--- Puts away a line left over from a longer fight.
 local function HideRow(row)
     row.track:Hide()
     row.rule:Hide()
@@ -313,22 +335,22 @@ local function CreateLegend(timeline)
     -- A gold-edged square, standing for any icon that was a critical hit.
     local gold = legend:CreateTexture(nil, "BACKGROUND")
     gold:SetColorTexture(Kit.GOLD[1], Kit.GOLD[2], Kit.GOLD[3], 1)
-    gold:SetSize(10, 10)
+    gold:SetSize(SAMPLE_SIZE, SAMPLE_SIZE)
     gold:SetPoint("LEFT", INSET, 0)
 
     local inside = legend:CreateTexture(nil, "ARTWORK")
-    inside:SetColorTexture(0.15, 0.15, 0.15, 1)
+    inside:SetColorTexture(SAMPLE_FILL[1], SAMPLE_FILL[2], SAMPLE_FILL[3], 1)
     inside:SetPoint("TOPLEFT", gold, "TOPLEFT", CRIT_EDGE, -CRIT_EDGE)
     inside:SetPoint("BOTTOMRIGHT", gold, "BOTTOMRIGHT", -CRIT_EDGE, CRIT_EDGE)
 
     local critical = Words("Critical hit")
-    critical:SetPoint("LEFT", gold, "RIGHT", 4, 0)
+    critical:SetPoint("LEFT", gold, "RIGHT", SAMPLE_GAP, 0)
 
-    local cross = Kit.Icon(legend, 12, "bad")
+    local cross = Kit.Icon(legend, LEGEND_HEIGHT, "bad")
     cross:SetPoint("LEFT", critical, "RIGHT", LEGEND_SPACE, 0)
 
     local failed = Words("Didn't land")
-    failed:SetPoint("LEFT", cross, "RIGHT", 4, 0)
+    failed:SetPoint("LEFT", cross, "RIGHT", SAMPLE_GAP, 0)
 
     -- The rest gives way first if the line is ever too long for its width.
     local rest = Words("Small icons are auto attacks.")
@@ -338,7 +360,7 @@ local function CreateLegend(timeline)
     return legend
 end
 
--- The whole thing ------------------------------------------------------------------
+-- The whole thing -------------------------------------------------------------
 
 --- How long a stretch of the fight the timeline accounts for. A timeline
 --- that was cut short says nothing about the time after its last entry,

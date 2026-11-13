@@ -8,9 +8,13 @@ local _, ns = ...
 -- and says how many fights it has so far, which is all the feedback there
 -- is. Nothing goes to chat. It's off unless asked for in the options.
 
+-- The button's size, and where it starts out: this far below the middle
+-- of the screen.
 local WIDTH = 130
 local HEIGHT = 24
+local BELOW_MIDDLE = 220
 
+-- What the tooltip says, with no session running and with one.
 local IDLE_HELP = "Click to start a session. Your fights are kept together until you click "
     .. "again to end it."
 local IN_PROGRESS_HELP = "A session is in progress. The number is how many fights it has so far. "
@@ -18,6 +22,7 @@ local IN_PROGRESS_HELP = "A session is in progress. The number is how many fight
 
 local button
 
+--- Shows the button if it's wanted, and says what a click on it would do.
 local function Refresh()
     if not button then
         return
@@ -44,7 +49,9 @@ local function ShowTooltip(self)
 end
 
 --- Starts or stops a recording, and shows the analysis of one that has
---- just been stopped. Shared by the button, the key binding and /temper.
+--- just been stopped. Shared by everything that starts or ends a session:
+--- this button, the fight panel's stopwatch and menu, the Fights tab, the
+--- key binding and /temper session.
 function ns.ToggleRecording()
     if not ns.character then
         return
@@ -57,6 +64,8 @@ function ns.ToggleRecording()
     end
 end
 
+--- Builds the button where it was last left. Whether it shows is for
+--- Refresh to say.
 local function Create()
     button = CreateFrame("Button", "TemperRecordButton", UIParent, "UIPanelButtonTemplate")
     button:SetSize(WIDTH, HEIGHT)
@@ -68,7 +77,7 @@ local function Create()
     if type(place) == "table" and place.point then
         button:SetPoint(place.point, UIParent, place.relativePoint or place.point, place.x, place.y)
     else
-        button:SetPoint("CENTER", UIParent, "CENTER", 0, -220)
+        button:SetPoint("CENTER", UIParent, "CENTER", 0, -BELOW_MIDDLE)
     end
 
     button:SetMovable(true)

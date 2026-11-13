@@ -85,7 +85,7 @@ local function Readable(value)
     return value
 end
 
--- Reading the character's figures ---------------------------------------------------
+-- Reading the character's figures -------------------------------------------
 
 --- What the player's armour takes off a physical blow from an enemy of
 --- the given level.
@@ -180,7 +180,7 @@ function Mitigation.Read(fight)
     return found
 end
 
--- Working it out ---------------------------------------------------------------------
+-- Working it out ------------------------------------------------------------
 
 --- True if a row of the tally of damage taken is an enemy's melee swing.
 local function IsSwing(source)
@@ -291,10 +291,11 @@ function Mitigation.Estimate(fight)
     return estimate
 end
 
--- Defence skill and resistance ----------------------------------------------------------
+-- Defence skill and resistance ----------------------------------------------
 
 --- The chance of a crushing blow from an enemy of one level against a
 --- player of another, by the character sheet's sum.
+---@param defence number  the player's Defence skill, with gear and race
 ---@return number  a share, 0 to 1
 function Mitigation.CrushingChance(enemyLevel, playerLevel, defence)
     local counted = math.min(defence, playerLevel * Mitigation.SKILL_PER_LEVEL)
@@ -308,12 +309,15 @@ end
 --- What a school of magic is called, or nil for one of two schools at
 --- once, which has no plain name.
 ---@param mask number  the school as a blow reports it
+---@return string|nil  e.g. "fire"
 function Mitigation.SchoolWord(mask)
     local school = SCHOOLS[mask]
     return school and school.word
 end
 
 --- True if the player can wear resistance to a school.
+---@param mask number  the school as a blow reports it
+---@return boolean
 function Mitigation.Resistible(mask)
     local school = SCHOOLS[mask]
     return school ~= nil and school.resistance ~= nil
@@ -321,6 +325,7 @@ end
 
 --- How much of a spell a resistance turns aside on average, by the
 --- character sheet's sum.
+---@param resistance number  the player's resistance to the spell's school
 ---@param casterLevel number  the level of whoever cast it
 ---@return number  a share, 0 to 1
 function Mitigation.ResistedShare(resistance, casterLevel)

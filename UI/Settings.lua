@@ -13,8 +13,15 @@ local _, ns = ...
 -- sits in the middle of the screen, where the fighting happens, so this
 -- file also lets it be dragged aside by its title bar.
 
+-- Each setting is registered with the game under a name of its own: this,
+-- followed by its key in the saved settings.
 local PREFIX = "Temper_"
 
+-- How often, while the Options window is open, to look at which page
+-- it's on.
+local LOOK_EVERY = 0.2
+
+--- Lets the rest of the addon know a setting has changed.
 local function OnChanged()
     ns.Publish("SETTINGS_CHANGED")
 end
@@ -34,14 +41,14 @@ local function Register(category, key, kind, label)
     return setting
 end
 
--- Adds a tick box bound to one key of the saved settings.
+--- Adds a tick box bound to one key of the saved settings.
 local function AddCheckbox(category, key, label, tooltip)
     local setting = Register(category, key, Settings.VarType.Boolean, label)
     Settings.CreateCheckbox(category, setting, tooltip)
 end
 
--- Adds a dropdown bound to one numeric key of the saved settings.
--- `choices` is a list of labels; a choice's place in the list is its value.
+--- Adds a dropdown bound to one numeric key of the saved settings.
+--- `choices` is a list of labels; a choice's place in the list is its value.
 local function AddDropdown(category, key, label, tooltip, choices)
     local setting = Register(category, key, Settings.VarType.Number, label)
 
@@ -54,7 +61,7 @@ local function AddDropdown(category, key, label, tooltip, choices)
     end, tooltip)
 end
 
--- Adds a slider bound to one numeric key of the saved settings.
+--- Adds a slider bound to one numeric key of the saved settings.
 ---@param range table  { lowest, highest, step }
 ---@param unit string  what follows the figure beside the slider, e.g. "%"
 local function AddSlider(category, key, label, tooltip, range, unit)
@@ -67,8 +74,8 @@ local function AddSlider(category, key, label, tooltip, range, unit)
     Settings.CreateSlider(category, setting, options, tooltip)
 end
 
--- Adds a heading over the options that follow it, as the game's own pages
--- have.
+--- Adds a heading over the options that follow it, as the game's own pages
+--- have.
 local function AddHeader(layout, title)
     layout:AddInitializer(CreateSettingsListSectionHeaderInitializer(title))
 end
@@ -103,6 +110,7 @@ function ns.OpenOptions()
     end
 end
 
+--- True if the page the Options window is showing is ours.
 local function OnOurPage()
     local current = SettingsPanel:GetCurrentCategory()
     return current ~= nil and current:GetID() == category:GetID()
@@ -120,11 +128,7 @@ function ns.OptionsPageShowing()
     return ok and showing
 end
 
--- The Options window itself --------------------------------------------------
-
--- How often, while the Options window is open, to look at which page
--- it's on.
-local LOOK_EVERY = 0.2
+-- The Options window itself ---------------------------------------------------
 
 --- Lays a strip of our own over the Options window's title bar. Dragging
 --- it moves the window, and while the window is open it keeps an eye on
@@ -174,8 +178,9 @@ local function WatchOptionsWindow()
     end)
 end
 
--- The page -----------------------------------------------------------------------
+-- The page --------------------------------------------------------------------
 
+--- The damage numbers, and how a critical hit stands out among them.
 local function AddNumberOptions(layout)
     AddHeader(layout, "Damage numbers")
 
@@ -337,6 +342,7 @@ local function AddNumberOptions(layout)
     )
 end
 
+--- The panels, the warning above the fight panel and the session button.
 local function AddScreenOptions(layout)
     AddHeader(layout, "On screen")
 
@@ -363,8 +369,8 @@ local function AddScreenOptions(layout)
         "Session figures on the panels",
         "How many fights, your average DPS, how often you crit and your biggest hit, for "
             .. "the session you started or else since you logged in. The average leaves out "
-            .. "quick fights against critters and the odd fight far off the rest. The healing "
-            .. "panel shows its own: how much you healed and your average HPS."
+            .. "very short fights, fights against critters and the odd fight far off the "
+            .. "rest. The healing panel shows its own: how much you healed and your average HPS."
     )
 
     AddCheckbox(
@@ -395,9 +401,9 @@ local function AddScreenOptions(layout)
             "Warn me when I'm not ready to fight",
             "A short note just above the fight panel when something's amiss: a fishing pole "
                 .. "still in your hand, a buff of your class's own not up, no poison or imbue on "
-                .. "your weapon, ammunition running low, gear about to break, or a pet that's away "
-                .. "or unhappy. It's silent, except for a fight begun with a fishing pole in "
-                .. "hand, which plays your alert sound."
+                .. "your weapon, ammunition running low, gear about to break, or a pet that's "
+                .. "away, dead or unhappy. It's silent, except for a fight begun with a fishing "
+                .. "pole in hand, which plays your alert sound."
         )
     end
 
@@ -428,6 +434,7 @@ local function AddScreenOptions(layout)
     )
 end
 
+--- The ability alert and its sound.
 local function AddAlertOptions(layout)
     AddHeader(layout, "Alerts")
 
@@ -448,8 +455,8 @@ local function AddAlertOptions(layout)
         "procSound",
         "Alert sound",
         "Played once as an alert appears, at your Master Volume, so it's heard even with "
-            .. "sound effects turned down. These are the "
-            .. "game's own alert sounds; each plays as you choose it.",
+            .. "sound effects turned down. These are the game's own alert sounds; each plays "
+            .. "as you choose it.",
         Labels(ns.ProcAlert.SOUNDS)
     )
 end
@@ -462,7 +469,7 @@ local function AddDataOptions(layout)
     layout:AddInitializer(
         CreateSettingsButtonInitializer(
             "Start again from nothing",
-            "Forget all fights",
+            "Forget everything",
             function()
                 ns.AskToForget()
             end,

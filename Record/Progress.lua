@@ -22,9 +22,14 @@ local MOST_BESTS = 4
 -- abilities do their damage through an effect the game files separately.
 local MOSTLY_NOT_OURS = 0.5
 
+-- A crit rate only means something over at least this many hits.
+local FEWEST_HITS_FOR_CRIT_RATE = 8
+
+-- The trend goes back over this many days that had fights in them.
 local MOST_DAYS = 14
 
 --- Why a fight doesn't count towards bests and trends, or nil if it does.
+---@param fight table  a saved fight
 ---@return string|nil reason  fit to show the player
 function Progress.WhyNotCounted(fight)
     if fight.ignored then
@@ -47,6 +52,7 @@ function Progress.WhyNotCounted(fight)
 end
 
 --- Marks a fight to be left out of bests and trends, or puts it back.
+---@param ignored boolean  true to leave it out
 function Progress.SetIgnored(fight, ignored)
     fight.ignored = ignored or nil
     ns.Publish("FIGHTS_CHANGED")
@@ -110,8 +116,7 @@ function Progress.Bests()
                 biggest = fight
             end
 
-            -- Crit rate only means something over a fair number of hits.
-            if (fight.hits or 0) >= 8 then
+            if (fight.hits or 0) >= FEWEST_HITS_FOR_CRIT_RATE then
                 local rate = fight.crits / fight.hits
                 if not sharpest or rate > sharpest.crits / sharpest.hits then
                     sharpest = fight
@@ -147,9 +152,6 @@ function Progress.Bests()
         table.insert(bests, { title = title, value = value, detail = detail, fight = fight })
     end
 
-    if fastest then
-        Add("Highest DPS", ns.Rate(fastest.damage / fastest.length), fastest)
-    end
     -- Sizes of single blows are worked out, not read, so they say "about".
     local function Blow(size, spell)
         local name = spell and ns.Sources.Name(spell)
@@ -157,6 +159,10 @@ function Progress.Bests()
             return ("About %s with %s"):format(ns.Number(size), name)
         end
         return "About " .. ns.Number(size)
+    end
+
+    if fastest then
+        Add("Highest DPS", ns.Rate(fastest.damage / fastest.length), fastest)
     end
     if hardestCrit then
         local sizes = hardestCrit.sizes

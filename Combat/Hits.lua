@@ -78,6 +78,8 @@ local fighting = false
 -- When the last fight was counted up.
 local lastFinish = 0
 
+--- Adds an entry to the log, stamped with the time.
+---@return table  the entry
 local function Remember(entry)
     entry.time = GetTime()
     table.insert(log, entry)
@@ -91,7 +93,7 @@ local function Remember(entry)
     return entry
 end
 
--- What lands on the player -------------------------------------------------
+-- What lands on the player --------------------------------------------------
 
 --- Logs a heal or an enemy's attack on the player, as "HEAL", "WOUND",
 --- "MAGIC" or the way the attack was avoided. Anything else reported about
@@ -123,7 +125,7 @@ local function NoteOnPlayer(action, flag, school)
     end
 end
 
--- Whose blow is it? --------------------------------------------------------
+-- Whose blow is it? ---------------------------------------------------------
 
 --- An answer from the game that may be withheld: the value, or `otherwise`.
 local function Plain(value, otherwise)
@@ -171,7 +173,7 @@ local function IsOurs(unit)
     return ns.settings.allEnemies and Plain(UnitThreatSituation("player", unit), nil) ~= nil
 end
 
--- Who the player fought ------------------------------------------------------
+-- Who the player fought -----------------------------------------------------
 
 -- Each enemy is looked up once, on the first of the player's blows to land
 -- on it, and not on every blow after. This is what has been looked up so
@@ -184,6 +186,7 @@ local lookedUp = {}
 -- times it has changed hands are what tell one enemy from the next.
 local handedOn = {}
 
+--- Notes that a unit token now stands for another enemy, or may soon.
 local function HandOn(unit)
     if type(unit) == "string" and not IsSecret(unit) then
         lookedUp[unit] = nil
@@ -395,7 +398,7 @@ ns.OnEvent("UI_ERROR_MESSAGE", function(errorType)
     end
 end)
 
--- Counting up -----------------------------------------------------------------
+-- Counting up ---------------------------------------------------------------
 
 --- How far back a fight's count reaches: a little before it was announced,
 --- but never into the tail of the fight before.
@@ -598,6 +601,7 @@ end
 
 --- The count so far for a fight that's still going on.
 ---@param startTime number  when the fight began, on GetTime's clock
+---@return table tally, table casts  as from Count
 function Hits.Live(startTime)
     return Count(Earliest(startTime), startTime - LEAD_SECONDS, startTime)
 end

@@ -29,14 +29,20 @@ local Paragraph = Kit.Paragraph
 local Place, PlaceText = Kit.Place, Kit.PlaceText
 local Inside, PlaceSection = Kit.Inside, Kit.PlaceSection
 
--- The list sits in a sunken panel with its scroll bar, laid out as on the
--- Fights tab so the two don't jump when switching between them. The panel
--- shares the window's own edge on three sides, so only its right-hand
--- edge is new: a line between the list and the page.
+-- The list sits in a sunken panel with its scroll bar, as wide as the
+-- Fights tab's so the page beside it doesn't jump when switching between
+-- them. The panel shares the window's own edge on three sides, so only
+-- its right-hand edge is new: a line between the list and the page.
 local LIST_WIDTH = 270
 local LIST_EDGE = 4
 local PANEL_WIDTH = 292
 local ROW_HEIGHT = 40
+
+-- Inside a row: where its words start, and the arrow before its standing
+-- with the gap after it.
+local ROW_LEFT = 10
+local ROW_ARROW = 12
+local ROW_ARROW_GAP = 3
 
 -- Space between the right-hand side's edge and what's on it, and the room
 -- kept clear down its right for the scroll bar. Both as on the Fights page.
@@ -171,10 +177,8 @@ local Refresh
 
 -- What to call things ---------------------------------------------------------
 
-local function FightsText(count)
-    return count == 1 and "1 fight" or count .. " fights"
-end
-
+--- What an experiment is called: what the player said they were trying,
+--- or else its number.
 local function Question(experiment)
     return experiment.question or ("Experiment %d"):format(experiment.number)
 end
@@ -292,6 +296,7 @@ end
 
 -- Starting and deleting -------------------------------------------------------
 
+--- Starts an experiment from what's on the form, and turns to its page.
 local function StartExperiment()
     local question = ns.CleanNote(tab.form.question:GetText())
         or ("Experiment %d"):format(ns.character.nextExperiment)
@@ -308,6 +313,7 @@ local function StartExperiment()
     Refresh()
 end
 
+--- Asks before deleting an experiment. Its fights are kept either way.
 local function ConfirmDelete(experiment)
     local question = (
         'Delete the experiment "%s"?\n\n'
@@ -323,8 +329,9 @@ local function ConfirmDelete(experiment)
     end)
 end
 
--- The list ---------------------------------------------------------------------
+-- The list --------------------------------------------------------------------
 
+--- Left-click shows an experiment's page. Right-click offers to delete it.
 local function OnRowClick(row, mouseButton)
     local experiment = row.data.experiment
 
@@ -343,6 +350,8 @@ local function OnRowClick(row, mouseButton)
     Refresh()
 end
 
+--- Makes what goes in a row, the first time the list hands it out: the
+--- question, when it was started, and where it stands.
 local function CreateRowWidgets(row)
     row.created = true
     row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
@@ -357,11 +366,11 @@ local function CreateRowWidgets(row)
     row.when:SetTextColor(unpack(Kit.MUTED))
 
     row.title = Kit.Text(row, "GameFontNormal")
-    row.title:SetPoint("TOPLEFT", 10, -6)
+    row.title:SetPoint("TOPLEFT", ROW_LEFT, -6)
     row.title:SetPoint("TOPRIGHT", row.when, "TOPLEFT", -6, 1)
 
-    row.arrow = Kit.Icon(row, 12)
-    row.arrow:SetPoint("BOTTOMLEFT", 10, 5)
+    row.arrow = Kit.Icon(row, ROW_ARROW)
+    row.arrow:SetPoint("BOTTOMLEFT", ROW_LEFT, 5)
 
     row.detail = Kit.Text(row, "GameFontHighlightSmall")
 end
@@ -379,7 +388,8 @@ local function FillRow(row, data)
 
     -- The words start where the arrow would be when there isn't one.
     row.detail:ClearAllPoints()
-    row.detail:SetPoint("BOTTOMLEFT", row.arrow:IsShown() and 25 or 10, 6)
+    local indent = row.arrow:IsShown() and ROW_LEFT + ROW_ARROW + ROW_ARROW_GAP or ROW_LEFT
+    row.detail:SetPoint("BOTTOMLEFT", indent, 6)
     row.detail:SetPoint("BOTTOMRIGHT", -6, 6)
 
     row.chosen:SetShown(experiment == selected)
@@ -395,7 +405,7 @@ local function BuildRows()
     return rows
 end
 
--- Laying out ---------------------------------------------------------------------
+-- Laying out ------------------------------------------------------------------
 
 --- Notes a piece of the page, so that a fill can start by clearing every
 --- piece away and then show only the ones it places.
@@ -435,7 +445,7 @@ local function PlaceIndented(layout, text, gap, words)
     layout.y = indented.y
 end
 
--- The steps --------------------------------------------------------------------
+-- The steps -------------------------------------------------------------------
 
 --- One line of the checklist: an icon for how far along it is, what to
 --- do, and a note underneath.
@@ -488,7 +498,7 @@ local function FillStep(step, state, title, note, width, button)
     step:SetHeight(math.max(STEP_ICON, height))
 end
 
--- The verdict ------------------------------------------------------------------
+-- The verdict -----------------------------------------------------------------
 
 --- The verdict in a line of large type, after an arrow when it has one.
 local function CreateHeadline(section)
@@ -599,9 +609,10 @@ local function FillHeadline(headline, words, verdict, firm)
     headline.text:SetTextColor(unpack(color))
 end
 
+--- The average DPS of each set, and the change between them.
 local function FillFigures(figures, verdict, firm)
-    FillFigure(figures.before, ns.Rate(verdict.before), FightsText(verdict.fightsBefore))
-    FillFigure(figures.after, ns.Rate(verdict.after), FightsText(verdict.fightsAfter))
+    FillFigure(figures.before, ns.Rate(verdict.before), ns.Count(verdict.fightsBefore, "fight"))
+    FillFigure(figures.after, ns.Rate(verdict.after), ns.Count(verdict.fightsAfter, "fight"))
 
     -- The change is held to the same rule as the headline: the percentage
     -- is always there to read, but only a firm one is coloured.
@@ -615,6 +626,9 @@ end
 
 -- The page for one experiment -------------------------------------------------
 
+--- The page for one experiment: its title, and under it the steps and
+--- the verdict in a scrolling body. Everything but the title is a piece,
+--- shown only when FillPage places it.
 local function CreatePage(parent)
     local page = CreateFrame("Frame", nil, parent)
     page.pieces = {}
@@ -690,7 +704,7 @@ local function ShowTitle(page, experiment, width)
     page.subtitle:SetText(
         ("Started %s   %s in each set"):format(
             date("%d %b %H:%M", experiment.startedAt),
-            FightsText(experiment.size)
+            ns.Count(experiment.size, "fight")
         )
     )
 
@@ -768,6 +782,7 @@ local function PlaceVerdict(page, layout, experiment)
     PlaceSection(layout, section, inside)
 end
 
+--- Lays the page out afresh for an experiment.
 local function FillPage(page, experiment)
     local width = WidthOf(page.scroll)
     ShowTitle(page, experiment, width)
@@ -852,6 +867,8 @@ local function CreateAdvice(section)
     return advice
 end
 
+--- The form that starts an experiment: how it works, what's being tried,
+--- how many fights in each set, and the button.
 local function CreateForm(parent)
     local form = CreateFrame("Frame", nil, parent)
 
@@ -922,6 +939,7 @@ local function PlaceStart(form, layout, reason)
     PlaceSection(layout, form.startSection, inside)
 end
 
+--- Lays the form out afresh, saying whether an experiment can start now.
 local function FillForm(form)
     local layout = { frame = form.body, left = 0, width = WidthOf(form.body), y = 0 }
 
@@ -1019,6 +1037,7 @@ function ExperimentsTab.Create(parent, window)
     return tab
 end
 
+--- Redraws the tab, if it's showing: the list, and the page or the form.
 function Refresh()
     if not tab or not tab:IsVisible() then
         return
