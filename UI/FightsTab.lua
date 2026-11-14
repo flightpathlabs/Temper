@@ -82,7 +82,7 @@ local NARROW_BUTTON = 64
 local BUTTON_GAP = 6
 
 local NO_FIGHTS = "No fights on record yet.\n\n"
-    .. "Fight something on your own and it will appear in the list. "
+    .. "Fight something and it will appear in the list. "
     .. "Press Start session first if you want a run of fights kept together.\n\n"
     .. "Your fights are kept on this computer and never shared."
 
@@ -249,6 +249,12 @@ local function FiguresText(fight)
         rest = rest .. "   " .. ns.Percent(fight.crits / fight.hits) .. " crit"
     end
 
+    -- A fight in a group says so: its counts are worked out, and it's
+    -- left out of the bests.
+    if fight.grouped then
+        rest = rest .. "   group"
+    end
+
     -- A fight left out of the bests is set back altogether.
     if fight.ignored then
         return Kit.Colored(dps .. "   " .. rest, Kit.MUTED)
@@ -328,6 +334,9 @@ local function Heading(fights)
     if newest.level then
         heading.subtitle = heading.subtitle .. "   level " .. newest.level
     end
+    if #fights == 1 and newest.grouped then
+        heading.subtitle = heading.subtitle .. "   in a group"
+    end
     return heading
 end
 
@@ -382,7 +391,8 @@ local function ShowFightMenu(row, fight)
         end)
 
         -- Leaving a fluke out of the bests and trends is a one-fight thing.
-        if one then
+        -- A fight in a group is left out of them already.
+        if one and not fight.grouped then
             if fight.ignored then
                 root:CreateButton("Count towards my bests again", function()
                     ns.Progress.SetIgnored(fight, false)

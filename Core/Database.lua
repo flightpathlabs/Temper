@@ -96,6 +96,11 @@ ns.DEFAULT_SETTINGS = {
     -- Switch Blizzard's own damage numbers off while the lane is showing.
     hideBlizzardNumbers = true,
 
+    -- Keep the lane in a group, where whose each hit was is worked out from
+    -- what the player did (see Combat\Guess.lua). Unticked, the game's own
+    -- numbers take over in a group.
+    groupNumbers = true,
+
     -- For rogues and druids in cat form, a row of pips under the
     -- target's nameplate, lit as combo points build (see UI\ComboPoints.lua). Shown
     -- in a group too: it's only about the player's own next press.

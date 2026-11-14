@@ -9,10 +9,12 @@ local _, ns = ...
 -- else. It can't be read, compared, added up or saved.
 --
 -- The event doesn't say who struck the blow. Alone, it can only have been
--- the player or their pet, which is why Temper keeps to solo play. Even
--- alone there may be strangers fighting nearby, so a blow is only taken
--- as ours if it lands on the player's target or on an enemy that has the
--- player on its threat list.
+-- the player or their pet. Even alone there may be strangers fighting
+-- nearby, so a blow is only taken as ours if it lands on the player's
+-- target or on an enemy that has the player on its threat list. In a
+-- group, where other people's blows land on the same enemies, a blow is
+-- only taken as ours if something the player did explains it (see
+-- Guess.lua). The rest are passed on as somebody else's.
 --
 -- This file passes each blow on for the lane to draw, and keeps a log of
 -- blows and casts from which a finished fight gets its counts and its
@@ -312,12 +314,21 @@ ns.OnEvent("UNIT_COMBAT", function(unit, action, flag, amount, school)
         return
     end
 
+    -- In a group, a blow nothing the player did explains is somebody
+    -- else's, and goes the same way as a stranger's.
+    local grouped = IsInGroup()
+    local spell, cast, tick = ns.Guess.Match(hit.school, grouped)
+    if grouped and spell == nil then
+        hit.stranger = true
+        ns.Publish("TARGET_HIT", hit)
+        return
+    end
+
     NoteFoe(unit)
 
     -- How it went, in one word, for the cast it's traced to.
     local outcome = hit.avoided or (hit.crit and "CRIT") or (hit.glancing and "GLANCE") or "HIT"
 
-    local spell, cast, tick = ns.Guess.Match(hit.school)
     hit.spell = spell
     hit.tick = tick
     if cast then

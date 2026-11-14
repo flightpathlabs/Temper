@@ -23,6 +23,11 @@ local _, ns = ...
 --   level     the player's level at the time
 --   weapons   the player's skill with each weapon in hand (see Weapons.lua)
 --   recording the number of the recording it belongs to, if any
+--   grouped   true if it was fought in a group. The damage is still the
+--             player's own, from the game's tally, but the counts of hits
+--             and crits rest on working out which blows were theirs (see
+--             Guess.lua). Such a fight is left out of bests and typical
+--             figures, which are about the player on their own
 --   gear      which of the character's gear sets it was fought in
 --   timeline  what the player did, in order (see Hits.lua). Only kept
 --             for the latest fights, since it's the bulk of a record
@@ -55,9 +60,9 @@ local _, ns = ...
 --             player, and how much of their healing landed on them; the
 --             eight biggest, biggest first. name is "Someone" when the
 --             game wouldn't give it, and class is the game's word for
---             theirs ("PRIEST"), when it has one. Fights in a group aren't
---             saved, so this is a passer-by, or a friend from outside the
---             group, healing a player fighting on their own
+--             theirs ("PRIEST"), when it has one. In a group, the group's
+--             healers; on their own, a passer-by or a friend outside the
+--             group
 --   absorbed  damage soaked up by the player's own shields
 --   taken     { total, avoidable, sources }: the damage the player took.
 --             sources is a list of { id, name, amount, avoidable, from },
@@ -480,10 +485,10 @@ ns.OnEvent("PLAYER_REGEN_ENABLED", function()
 
     local tally, casts, timeline, blows, foes = ns.Hits.Finish(began.start)
 
-    -- With anyone else around, the hits on the target aren't all ours.
-    -- The game still made a tally for the fight, so note its number: a
-    -- later fight in which nothing is hurt mustn't be mistaken for it.
-    if began.grouped or IsInGroup() or not ns.character then
+    -- Nothing to save to before login. The game still made a tally for the
+    -- fight, so note its number: a later fight in which nothing is hurt
+    -- mustn't be mistaken for it.
+    if not ns.character then
         NoteLatestTally()
         return
     end
@@ -522,19 +527,26 @@ ns.OnEvent("PLAYER_REGEN_ENABLED", function()
         rest = began.rest and math.floor(began.rest + 0.5),
         power = PowerSpent(began),
         spells = spells,
-        enemies = enemies,
+        -- In a group the game's list of enemies hurt is everyone's doing,
+        -- so it says nothing of what the player fought.
+        enemies = not (began.grouped or IsInGroup()) and enemies or nil,
         -- Kept even when every count is nothing. Its being there is what
         -- marks a fight as one in which healing was looked for.
         defence = tally.defence,
+        grouped = (began.grouped or IsInGroup()) or nil,
     }
 
     AddOtherTallies(fight, casts)
     AddMitigation(fight)
 
     -- Sizing the blows is a nicety built on a figure the game might stop
-    -- sharing. Whatever goes wrong with it mustn't cost the fight.
-    local sized, sizes = pcall(ns.Sizes.Finish, blows, fight)
-    fight.sizes = sized and sizes or nil
+    -- sharing. Whatever goes wrong with it mustn't cost the fight. Not in
+    -- a group: which blows were the player's is worked out there, and a
+    -- wrong one would teach Sizes.lua a wrong measure for every fight after.
+    if not fight.grouped then
+        local sized, sizes = pcall(ns.Sizes.Finish, blows, fight)
+        fight.sizes = sized and sizes or nil
+    end
 
     Save(fight, began.recording)
 end)

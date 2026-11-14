@@ -207,8 +207,12 @@ First version.
 - It's about your own fighting and nobody else's. Nothing is posted to chat,
   sent to other players or shared anywhere; your fights stay in your own
   saved data.
-- Solo only. In a group the column steps aside, nothing is recorded and
-  the game's own numbers come back. The ability alert and the combo
-  points still show, since they're only about your own next move.
+- In a group, Temper works out which blows were yours from what you did:
+  a blow your swing, your cast or your bleed explains is yours, and the
+  rest are other people's, set apart like a stranger's. Group fights are
+  recorded, marked "group" in the list, and left out of bests, typical
+  figures and experiments. Your damage in them is exact, from the game's own tally; the
+  counts of hits and crits are as good as the working out. A tick in the
+  options gives the game's own numbers back in a group instead.
 - The game's own damage numbers are switched off while the column is
   showing and put back afterwards. This can be turned off.

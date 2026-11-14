@@ -168,6 +168,12 @@ local function RecordingText()
     local fights = #ns.Recorder.FightsOf(recording)
     local experiment = ns.Experiments.Running()
     if experiment then
+        -- Counted as the experiment counts them, which leaves out fights
+        -- in a group.
+        local side = experiment.state
+        if side == "before" or side == "after" then
+            fights = #ns.Experiments.FightsOf(experiment, side)
+        end
         return ("|cffff4040REC|r %d of %d"):format(fights, experiment.size)
     end
     return ("|cffff4040REC|r %d"):format(fights)
@@ -345,13 +351,10 @@ local function ShowLive()
     widget.arrow:Hide()
     reference, referenceHow = nil, nil
 
-    -- With other people about, the hits on the target aren't all ours.
-    if IsInGroup() then
-        widget.counts:SetText("")
-    else
-        local tally = ns.Hits.Live(fightStart)
-        widget.counts:SetText(CountsText(tally.hits, tally.crits, tally.avoided, true))
-    end
+    -- In a group these are the blows worked out to be the player's (see
+    -- Combat\Guess.lua), which is as near as the game lets anyone get.
+    local tally = ns.Hits.Live(fightStart)
+    widget.counts:SetText(CountsText(tally.hits, tally.crits, tally.avoided, true))
 end
 
 --- The last fight, from what was saved of it, and how it compares.

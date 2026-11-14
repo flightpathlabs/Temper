@@ -29,10 +29,9 @@ local _, ns = ...
 --
 -- That's how the healing the player gave themselves is told from what
 -- they gave their pet or anyone else, and how healing from other people is
--- found: it's in their rows, against the player's name. Fights in a group
--- aren't saved at all (see Fights.lua), so the other people are a
--- passer-by, or a friend outside the group, healing a player fighting on
--- their own.
+-- found: it's in their rows, against the player's name. In a group those
+-- are the group's healers; on their own, a passer-by or a friend outside
+-- the group.
 
 local Tallies = {}
 ns.Tallies = Tallies

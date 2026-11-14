@@ -35,6 +35,9 @@ function Progress.WhyNotCounted(fight)
     if fight.ignored then
         return "You asked for this one to be left out."
     end
+    if fight.grouped then
+        return "Fought in a group. Bests and averages are about you on your own."
+    end
     if fight.length < SHORTEST_COUNTED then
         return "Too short to mean much."
     end

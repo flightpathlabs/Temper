@@ -20,8 +20,8 @@ settled into is any good, whether that new sword is really better than
 the old one, or if the talent I swapped into was worth it.
 
 The answer to those questions is all there in the fight, but nothing lays
-it out for you. So Temper keeps a quiet record of every fight you have on
-your own, and turns it into something you can read and act on:
+it out for you. So Temper keeps a quiet record of every fight you have,
+and turns it into something you can read and act on:
 
 - **Your rotation, laid bare.** Every ability's share of the damage, what
   each press and each point of mana or energy bought, a strip of what you
@@ -40,8 +40,8 @@ the enemy's nameplate, each with the icon of the ability that dealt it, so
 a glance tells you what hit and how hard without your screen filling up.
 
 **It's about you, and it stays with you.** Temper looks only at your own
-fighting. It doesn't rank you against anyone, it doesn't measure other
-players, and it has nothing to say about a group. It never posts to chat,
+fighting. It doesn't rank you against anyone and it doesn't measure other
+players, in a group or out of one. It never posts to chat,
 never sends anything to other players or to any server, and has no way to
 share or export what it records. Your fights are kept in your own saved
 game data and nowhere else.
@@ -147,7 +147,8 @@ small pips under your target's nameplate, lit as you build them.
 
 ### Fights
 
-Every solo fight is kept, the latest 200 for each character. The list on the left names each by what it was
+Every fight is kept, the latest 200 for each character, with those fought
+in a group marked "group". The list on the left names each by what it was
 against: the boss if there was one, otherwise the enemy, or the kind of
 enemy for a pull of several ("Webwood Spider ×4"). Elites and rares are
 marked, and each shows the enemy's level (an average, for a pull of mixed
@@ -260,7 +261,7 @@ game still offers. That shapes what it shows.
 |---|---|
 | Your running damage during a fight | The game lets an addon show it but not read it. The panel shows it; the exact figures arrive when the fight ends |
 | How much mana or energy you have left | Hidden. Temper counts the times the game says you hadn't enough |
-| Whose hit it was, in a group | The game doesn't say, which is why Temper keeps to solo play |
+| Whose hit it was, in a group | The game doesn't say. Temper works it out from your own swings and casts (see [In a group](#in-a-group)) |
 | Some buffs, in a fight | The game hides them from addons in a fight. For the ability alert, Temper asks the game to draw those itself, which it can do without telling Temper anything |
 
 Numbers are drawn above your target and any other enemy that is fighting
@@ -270,11 +271,21 @@ appear in the middle of the screen.
 
 ## In a group
 
-Temper is for playing on your own. In a group the game no longer lets it
-tell your hits from anyone else's, so it steps aside: no numbers of its
-own and no record, and the game's own damage numbers come back. The
-ability alert and the combo points still show, since they're only about
-your own next move.
+The game doesn't say whose blow was whose, so in a group Temper works it
+out from what you did. A blow that your swing, your cast, or a tick of
+your bleed or other effect on its usual beat explains is yours; the rest are other people's, drawn small and faint
+beside your column, or not at all if you'd rather. Tried in a party with a
+mage, it set every one of the mage's blows aside and kept nearly all of
+the player's own. It will be wrong more often beside someone doing the same
+kind of damage as you, two warriors say.
+
+Group fights are recorded and marked "group" in the list. Your damage in
+them is exact, from the game's own tally, and the counts of hits and crits
+are as good as the working out. They're left out of your bests, your
+typical figures and your experiments, which are about you on your own.
+
+If you'd rather have the game's own numbers in a group, untick **Show my
+hits in a group too** in the options.
 
 ## Blizzard's damage numbers
 

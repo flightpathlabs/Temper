@@ -29,6 +29,18 @@ local _, ns = ...
 -- their school, so anything built on this says "about" and "probably".
 -- It's used for the icon beside a number, for saying whether each cast in
 -- a fight landed, and for putting a name to the hardest blows.
+--
+-- In a group it also decides whose a blow was. Other people's blows land
+-- on the same enemies, and the game doesn't say whose is whose, so there a
+-- blow is only the player's if something they did explains it: a cast of
+-- theirs still in the air, a swing of theirs on its way, or a tick of an
+-- effect of theirs, landing on that effect's beat. Anything else is
+-- somebody else's, and nothing is learned from it. The beat is learned
+-- alone: how far apart an effect's ticks come, every two seconds or three.
+-- Matching blows to casts and swings like this was tried on fights
+-- recorded in a party of two, where it put every one of the other
+-- player's blows aside and kept nearly all of the player's own (see
+-- docs/research/combat-data-on-forever.md in the workshop).
 
 local Guess = {}
 ns.Guess = Guess
@@ -58,6 +70,19 @@ local TICKS_AFTER = 2
 
 -- The school of an ordinary blow, as the game reports it.
 local PHYSICAL = 1
+
+-- How often an effect ticks until it's been seen to: most do every three
+-- seconds. Two ticks of one effect closer than the first of these or
+-- further apart than the second aren't neighbours, so say nothing of its
+-- beat; between them, nearer two seconds than three means every two.
+local USUAL_TICK_SECONDS = 3
+local CLOSEST_TICKS = 1.5
+local FURTHEST_TICKS = 3.5
+local TWO_OR_THREE = 2.5
+
+-- In a group, how far off its beat a tick can land and still be taken for
+-- one of the player's.
+local BEAT_LEEWAY = 0.35
 
 -- The spell behind an ordinary melee swing.
 Guess.MELEE_SWING = 6603
@@ -117,6 +142,83 @@ end
 -- The last blow traced to a cast, so that the other enemies caught by
 -- the same strike (Cleave, Whirlwind, Swipe) can be put down to it too.
 local lastClaim = { time = 0 }
+
+-- The last tick put down to each effect: when it landed, and when the cast
+-- it came from was, for learning its beat.
+local lastTick = {}
+
+--- One of the tables kept with the character for what's learned about
+--- ticking, made the first time it's wanted:
+---   spellTicks   how many times each spell has been seen to tick: a blow
+---                put down to it a beat after another from the same cast
+---   tickPeriods  how far apart each effect's ticks come: 2 or 3 seconds
+local function Learned(key)
+    local character = ns.character
+    if type(character[key]) ~= "table" then
+        character[key] = {}
+    end
+    return character[key]
+end
+
+--- Notes a blow put down to an effect of the player's still ticking, on
+--- their own, so that in a group its beat is known. Only two from the same
+--- cast a beat apart prove it ticks. A spell that never does, a Frostbolt
+--- landing late from long range, has a new cast before each of its blows.
+---@param castTime number  when the cast it's put down to was
+---@param isSpell boolean  a spell's tick, which is counted here; a bleed's
+---                        is counted by Ticking()
+local function NoteTick(spell, castTime, now, isSpell)
+    local last = lastTick[spell]
+    lastTick[spell] = { at = now, from = castTime }
+    if not last or last.from ~= castTime then
+        return
+    end
+
+    local gap = now - last.at
+    if gap < CLOSEST_TICKS or gap > FURTHEST_TICKS then
+        return
+    end
+    Learned("tickPeriods")[spell] = gap < TWO_OR_THREE and 2 or 3
+    if isSpell then
+        local counts = Learned("spellTicks")
+        counts[spell] = (counts[spell] or 0) + 1
+    end
+end
+
+--- True if a blow lands on the beat of an effect put on at castTime: a
+--- whole number of its ticks after, give or take a little. Counted from
+--- the cast, so an effect that flies first (a Serpent Sting) is off its
+--- beat by the flight, and its ticks are set aside in a group: the player
+--- loses a few blows, but nobody else's is taken for theirs.
+local function OnTheBeat(spell, castTime, now)
+    local period = Learned("tickPeriods")[spell] or USUAL_TICK_SECONDS
+    local since = now - castTime
+    if since < period - BEAT_LEEWAY then
+        return false
+    end
+    local off = since % period
+    return off <= BEAT_LEEWAY or period - off <= BEAT_LEEWAY
+end
+
+--- In a group: the effect of the player's whose tick this blow is, if any.
+--- Only the latest cast of each ability is asked, since putting an effect
+--- on again starts its beat afresh.
+---@param fits fun(spell): boolean  whether an ability could have done it
+local function TickOnTheBeat(now, fits)
+    local asked = {}
+    for index = #casts, 1, -1 do
+        local cast = casts[index]
+        local spell = cast.cast
+        if not asked[spell] then
+            asked[spell] = true
+            local recent = now - cast.time <= TICKING_SECONDS
+            if recent and fits(spell) and OnTheBeat(spell, cast.time, now) then
+                return spell
+            end
+        end
+    end
+    return nil
+end
 
 --- Takes note of the abilities a finished fight showed doing damage.
 ---@param spells table  the fight's spell rows
@@ -195,13 +297,23 @@ end
 --- The ability whose effect is most likely still ticking, for a blow that
 --- no cast or swing explains. Only casts recent enough to be ticking still
 --- count: the list isn't trimmed until the player casts again.
-local function StillTicking(school, now)
+---@param strict boolean  in a group: only an ability known to tick and to
+---                       do this school, on its beat, and nothing learned
+local function StillTicking(school, now, strict)
     local damaging = ns.character.schools
+
+    if strict then
+        local counts = Learned("spellTicks")
+        return TickOnTheBeat(now, function(spell)
+            return (counts[spell] or 0) >= TICKS_AFTER and UsualSchool(spell) == school
+        end)
+    end
 
     for index = #casts, 1, -1 do
         local spell = casts[index].cast
         local recent = now - casts[index].time <= TICKING_SECONDS
         if recent and damaging[spell] and UsualSchool(spell) == school then
+            NoteTick(spell, casts[index].time, now, true)
             return spell
         end
     end
@@ -216,6 +328,7 @@ local function StillTicking(school, now)
         local recent = now - casts[index].time <= TICKING_SECONDS
         if recent and damaging[spell] and UsualSchool(spell) == nil then
             Learn(spell, school)
+            NoteTick(spell, casts[index].time, now, true)
             return spell
         end
     end
@@ -227,13 +340,19 @@ end
 --- the first choice. Failing that, the last physical ability cast that
 --- hasn't been seen to land a blow of its own yet, which is how a bleed
 --- gets found out the first time.
-local function StillBleeding(now)
-    local ticking = Ticking()
+---@param strict boolean  in a group: only one already seen ticking, on
+---                       its beat, and nothing learned
+local function StillBleeding(now, strict)
+    if strict then
+        return TickOnTheBeat(now, Ticks)
+    end
 
+    local ticking = Ticking()
     for index = #casts, 1, -1 do
         local spell = casts[index].cast
         if Ticks(spell) and now - casts[index].time <= TICKING_SECONDS then
             ticking[spell] = ticking[spell] + 1
+            NoteTick(spell, casts[index].time, now, false)
             return spell
         end
     end
@@ -246,6 +365,7 @@ local function StillBleeding(now)
         if recent and not cast.matched and physical and ns.character.schools[cast.cast] then
             ticking[cast.cast] = (ticking[cast.cast] or 0) + 1
             Learn(cast.cast, PHYSICAL)
+            NoteTick(cast.cast, cast.time, now, false)
             return cast.cast
         end
     end
@@ -268,6 +388,9 @@ end
 
 --- The ability a blow of this school most likely was.
 ---@param school number|nil  the blow's school of damage
+---@param strict boolean|nil  in a group, where a blow nothing the player
+---                           did explains is somebody else's: then nil is
+---                           returned for it, and nothing is learned
 ---@return number|string|nil spellID  nil when there's no telling; with a
 ---                            pet out, that may well have been the pet.
 ---                            Guess.TICK when it was plainly a tick of
@@ -275,13 +398,20 @@ end
 ---@return table|nil cast  the log's entry for the cast it's traced to; nil
 ---                        for a weapon swing or an effect still ticking
 ---@return boolean|nil tick  true when it was a tick of something over time
-function Guess.Match(school)
+function Guess.Match(school, strict)
     if not school or not ns.character then
         return nil
     end
 
     local now = GetTime()
     local known, unknown = WaitingCasts(school, now)
+
+    -- In a group, an ability whose school isn't known yet only claims a
+    -- blow that lands the moment it's used. One that came later may have
+    -- been anyone's, and would teach it the wrong school.
+    if strict and unknown and now - unknown.time > SAME_MOMENT then
+        unknown = nil
+    end
 
     local function Claim(cast)
         cast.matched = true
@@ -300,7 +430,7 @@ function Guess.Match(school)
         if unknown then
             return Claim(unknown)
         end
-        local ticking = StillTicking(school, now)
+        local ticking = StillTicking(school, now, strict)
         -- Only a tick if something was found still ticking. A spell
         -- nothing explains is just an untraced blow.
         return ticking, nil, ticking ~= nil
@@ -322,12 +452,28 @@ function Guess.Match(school)
         return Claim(unknown)
     end
     if not swingsAnnounced then
+        -- Alone, a blow on the player's enemy is theirs, swing or not. In
+        -- a group there's nothing to tell it from anyone else's.
+        if strict then
+            return nil
+        end
         return Guess.MELEE_SWING
     end
 
-    -- Another enemy caught by the strike that's just landed.
-    if now - lastClaim.time <= SAME_MOMENT then
+    -- Another enemy caught by the strike that's just landed. In a group,
+    -- only a strike with the weapon: a spell landing at the same moment as
+    -- a partner's swing says nothing about whose the swing was.
+    local strike = not strict or UsualSchool(lastClaim.spell) == PHYSICAL
+    if strike and now - lastClaim.time <= SAME_MOMENT then
         return lastClaim.spell
+    end
+
+    -- In a group, a bleed of the player's that's known to tick, or else
+    -- somebody else's blow. A pet's comes out as somebody else's too: in a
+    -- group there's no telling it from another player's.
+    if strict then
+        local bleed = StillBleeding(now, true)
+        return bleed, nil, bleed ~= nil
     end
 
     -- With a pet out, a blow nothing explains is far likelier to be the

@@ -58,11 +58,26 @@ function Experiments.Running()
     end
 end
 
+--- Every fight recorded for one side, group fights and all: for asking
+--- whether the side has any at all. A side fought wholly in a group isn't
+--- thrown away, it just has nothing to go by yet.
+local function Recorded(experiment, side)
+    local recording = experiment[side] and ns.Recorder.Numbered(experiment[side])
+    return recording and ns.Recorder.FightsOf(recording) or {}
+end
+
 --- The fights in one of an experiment's two sets.
 ---@param side string  "before" or "after"
 function Experiments.FightsOf(experiment, side)
-    local recording = experiment[side] and ns.Recorder.Numbered(experiment[side])
-    return recording and ns.Recorder.FightsOf(recording) or {}
+    -- A fight in a group says too little about the change being tried,
+    -- so it doesn't count towards either set.
+    local fights = {}
+    for _, fight in ipairs(Recorded(experiment, side)) do
+        if not fight.grouped then
+            table.insert(fights, fight)
+        end
+    end
+    return fights
 end
 
 local function Changed()
@@ -104,7 +119,7 @@ function Experiments.Continue(experiment)
 
     -- With the first set's fights deleted there's nothing to compare
     -- the second with.
-    if #Experiments.FightsOf(experiment, "before") == 0 then
+    if #Recorded(experiment, "before") == 0 then
         Experiments.Delete(experiment)
         return
     end
@@ -120,14 +135,14 @@ end
 local function Advance(experiment)
     if experiment.state == "before" then
         -- With nothing to compare against there's no experiment.
-        if #Experiments.FightsOf(experiment, "before") == 0 then
+        if #Recorded(experiment, "before") == 0 then
             Experiments.Delete(experiment)
             return
         end
         experiment.state = "change"
     elseif experiment.state == "after" then
         -- A second set that ended with no fights hasn't happened yet.
-        if #Experiments.FightsOf(experiment, "after") == 0 then
+        if #Recorded(experiment, "after") == 0 then
             experiment.after = nil
             experiment.state = "change"
         else

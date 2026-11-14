@@ -141,9 +141,8 @@ local function ShowLive()
     end
 
     -- Nothing we count ourselves can be had while the fight lasts, so the
-    -- bottom line only says what the figures are. A fight in a group is
-    -- shown as it goes but never saved, and it's as well to say so.
-    widget.note:SetText(IsInGroup() and "Not recorded in a group" or "This fight so far")
+    -- bottom line only says what the figures are.
+    widget.note:SetText("This fight so far")
     widget.interrupts:SetText("")
 end
 

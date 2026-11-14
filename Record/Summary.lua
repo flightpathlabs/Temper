@@ -149,7 +149,8 @@ local FEWEST_FOR_A_TREND = 6
 
 --- The rule in a sentence, for a tooltip beside any typical figure.
 Summary.TYPICAL_RULE = "Very short fights, fights won mostly by an item, fights against "
-    .. "critters or enemies far below your level, and any you left out aren't counted. "
+    .. "critters or enemies far below your level, fights in a group, and any you left "
+    .. "out aren't counted. "
     .. "From three fights up, the highest and lowest of the rest are set aside, so one "
     .. "fluke can't tip it."
 
@@ -177,6 +178,21 @@ end
 -- Experiments measure how far fights stray from the typical figure, over
 -- the same fights it went by.
 Summary.GoesTowardsTypical = GoesTowardsTypical
+
+--- True if a fight was against more than one enemy. Alone, by the game's
+--- list of enemies hurt. In a group that list is everyone's doing, so by
+--- the enemies the player's own blows landed on (see Hits.lua).
+local function SeveralEnemies(fight)
+    if not fight.grouped then
+        return fight.enemies ~= nil and #fight.enemies > 1
+    end
+
+    local struck = 0
+    for _, foe in ipairs(fight.foes or {}) do
+        struck = struck + (foe.count or 1)
+    end
+    return struck > 1
+end
 
 --- The average of a list of DPS figures once the extremes are set aside.
 ---@param rates table  one figure per fight; sorted here
@@ -414,7 +430,7 @@ function Summary.Of(fights)
             end
         end
 
-        if fight.enemies and #fight.enemies > 1 then
+        if SeveralEnemies(fight) then
             AddToSplit(summary.several, fight)
         else
             AddToSplit(summary.single, fight)

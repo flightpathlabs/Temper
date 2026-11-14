@@ -108,12 +108,12 @@ local RECENT_FIGHTS = 10
 local CHOSEN = { key = "chosen", label = "Chosen on the Fights tab" }
 
 local NO_FIGHTS = "No fights on record yet.\n\n"
-    .. "Fight something on your own and what you healed, and what hurt you, "
+    .. "Fight something and what you healed, and what hurt you, "
     .. "will appear here.\n\n"
     .. "Your fights are kept on this computer and never shared."
 
 local NONE_THIS_SESSION = "No fights this session yet.\n\n"
-    .. "Fight something on your own and it will appear here, "
+    .. "Fight something and it will appear here, "
     .. "or pick other fights from the menu above."
 
 -- Said of fights that carry no record of healing: every fight from before
@@ -151,8 +151,7 @@ local SPENT_SOME_FIGHTS = "Only %s where it landed."
 local WHO_NOTES = {
     you = "Your own heals that landed on you.",
     pet = "Your pet's heals that landed on you.",
-    other = "Their heals that landed on you. Temper only records fights outside a group, so "
-        .. "this was someone you weren't grouped with.",
+    other = "Their heals that landed on you: someone in your group, or a passer-by.",
     someone = "The game didn't give this healer's name.",
     rest = "Everyone the bars above leave out.",
 }

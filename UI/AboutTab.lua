@@ -75,7 +75,7 @@ end
 local PITCH = {
     "Understand your own damage: where it comes from, what's holding it back, and "
         .. "whether a change helped.",
-    "Temper records each fight you fight on your own, and keeps it on this computer. "
+    "Temper records each fight you fight, and keeps it on this computer. "
         .. "Nothing is shared or posted.",
     "Type /temper to open it, or click the fight panel.",
 }
@@ -103,7 +103,7 @@ local function Sections()
                 Lead(
                     "It judges no one.",
                     "It isn't a meter for ranking a group and it doesn't measure other "
-                        .. "players. In a group it steps aside: no numbers and no record."
+                        .. "players. In a group it still looks only at you."
                 ),
                 Lead(
                     "Nothing leaves your game.",
@@ -124,9 +124,9 @@ local function Sections()
                 Lead(
                     "Fight.",
                     (
-                        "There's nothing to set up. Fight something on your own, and the panel "
-                        .. "shows the fight as it goes and its exact figures once it's over. "
-                        .. "Your last %d solo fights are kept."
+                        "There's nothing to set up. Fight something, and the panel shows the "
+                        .. "fight as it goes and its exact figures once it's over. Your last %d "
+                        .. "fights are kept."
                     ):format(ns.MAX_FIGHTS)
                 ),
                 Lead(
@@ -188,14 +188,18 @@ local function Sections()
                         .. "it hands over the moment the fight is over.",
                 },
                 {
-                    "Why does nothing show in a group?",
-                    "In a group the game doesn't say whose blow was whose, so any figure "
-                        .. "would be a guess about other people. Temper steps aside instead: no "
-                        .. "numbers of its own and no record, and the game's own numbers come "
-                        .. "back. The panels still show the game's running figures while a "
-                        .. "fight lasts, but nothing is kept. The ability alert and the "
-                        .. "combo points still show, since they're only about your own next "
-                        .. "move.",
+                    "How does it work in a group?",
+                    "The game doesn't say whose blow was whose, so Temper works it out from "
+                        .. "what you did: a blow your swing or your cast explains is yours, and "
+                        .. "so is a tick of your bleed or other effect on its usual beat. The "
+                        .. "rest are other people's, drawn faint beside yours or not at all. "
+                        .. "It's right nearly every time, less often beside someone doing the "
+                        .. "same kind of damage as you. Your damage itself is exact: it comes "
+                        .. "from the game's own tally. Group fights are kept and marked "
+                        .. '"group" in the list, but left out of your bests, your typical '
+                        .. "figures and your experiments, which are about you on your own. If "
+                        .. "you'd rather have the game's own numbers in a group, there's a "
+                        .. "tick for that in the options.",
                 },
                 {
                     "Why are my numbers in the middle of the screen?",

@@ -189,9 +189,19 @@ local function AddNumberOptions(layout)
         "lane",
         "Show my hits by the enemy's nameplate",
         "A tidy column of numbers that follows each enemy you hit. It needs enemy "
-            .. "nameplates to be on: without one to follow, numbers appear mid-screen. "
-            .. "Only while you're on your own: in a group it steps aside and the game's "
-            .. "usual numbers come back."
+            .. "nameplates to be on: without one to follow, numbers appear mid-screen."
+    )
+
+    AddCheckbox(
+        category,
+        "groupNumbers",
+        "Show my hits in a group too",
+        "The game doesn't say whose a hit was, so in a group Temper works it out from "
+            .. "what you did: a hit your swing, your cast, or a tick of your bleed or other "
+            .. "effect on its usual beat explains is yours, "
+            .. "and the rest are other people's. It's right nearly every time, less often "
+            .. "beside someone doing the same kind of damage as you. Untick to have the "
+            .. "game's own numbers in a group instead."
     )
 
     AddCheckbox(
@@ -284,12 +294,12 @@ local function AddNumberOptions(layout)
         category,
         "others",
         "Other people's hits",
-        "The game reports every hit on an enemy without saying whose it was. A hit on an "
-            .. "enemy that isn't fighting you, when you haven't just swung or cast, is "
-            .. "somebody else's: a stranger's on an enemy you've only selected, say. Those "
-            .. "are never counted in your figures. Set apart, they're small, faint and in a "
-            .. "column beside yours. On an enemy you're fighting too, every hit is taken as "
-            .. "yours: the game gives no way to tell them apart.",
+        "The game reports every hit on an enemy without saying whose it was. On your "
+            .. "own, a hit on an enemy that isn't fighting you, when you haven't just swung "
+            .. "or cast, is somebody else's: a stranger's on an enemy you've only selected, "
+            .. "say. In a group, any hit that nothing you did explains is someone else's. "
+            .. "Those are never counted in your figures. Set apart, they're small, faint and "
+            .. "in a column beside yours.",
         { "Set apart", "Hidden", "Shown like mine" }
     )
 

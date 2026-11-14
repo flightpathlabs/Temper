@@ -59,10 +59,10 @@ local CRIT_COLORS = {
     { 1, 0.27, 0.2 },
 }
 
---- True while the lane should be drawing: switched on, and nobody else
---- around whose hits would be mistaken for the player's.
+--- True while the lane should be drawing: switched on, and in a group
+--- only if the player wants it there too.
 local function Showing()
-    return ns.settings.lane and not IsInGroup()
+    return ns.settings.lane and (ns.settings.groupNumbers or not IsInGroup())
 end
 
 --- What kind of damage a hit was: "magic", "ability", "auto" or "pet".
