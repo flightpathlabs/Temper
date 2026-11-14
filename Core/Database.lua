@@ -128,8 +128,10 @@ ns.DEFAULT_SETTINGS = {
     readyAlert = true,
 
     -- A second panel like it, for healing. It can be put away from the
-    -- fight panel's menu or the options.
+    -- fight panel's menu or the options, and folded to one line of its own
+    -- accord.
     healWidget = true,
+    healFolded = false,
 
     -- A small Start session button on the screen. Off unless asked for:
     -- the window and the panel's stopwatch both start one, and there's a

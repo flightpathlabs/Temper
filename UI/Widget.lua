@@ -56,11 +56,9 @@ local MAIN_HEIGHT = 64
 local FOLDED_HEIGHT = 30
 local TOP_LINE_MIDDLE = 15
 
--- The button that folds it, and the game's own plus and minus for folding
--- a section of the objective tracker.
-local FOLD_SIZE = 12
-local FOLD_ART = "ui-questtrackerbutton-secondary-collapse"
-local UNFOLD_ART = "ui-questtrackerbutton-secondary-expand"
+-- How big the buttons in the corner are: the one that folds it and the
+-- cog. The healing panel uses the same.
+local CORNER_BUTTON = 12
 
 -- The lines under the main figures: how tall each is, and the space
 -- above a block of them, which holds a ruled line.
@@ -665,6 +663,24 @@ function ns.PanelPlace(panel)
     return { point = point, relativePoint = relativePoint, x = x * scale, y = y * scale }
 end
 
+--- Holds a panel by its top left corner where it stands, if it isn't
+--- already, so that it grows and shrinks downwards.
+---@return table|nil place  where it now is, to be kept; nil if nothing
+---                         changed or it couldn't be measured yet
+function ns.HoldPanelByTop(panel)
+    if panel:GetPoint(1) == "TOPLEFT" then
+        return nil
+    end
+
+    local left, top = panel:GetLeft(), panel:GetTop()
+    if not left or not top then
+        return nil
+    end
+    panel:ClearAllPoints()
+    panel:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
+    return ns.PanelPlace(panel)
+end
+
 --- Adds the choice of size to a panel's menu. The one setting governs
 --- both panels, so they stay a pair.
 function ns.AddPanelSizes(root)
@@ -702,9 +718,7 @@ end
 --- up beside our mark, in smaller figures, and takes the title's place.
 local function ApplyFold()
     local folded = ns.settings.widgetFolded
-    local art = folded and UNFOLD_ART or FOLD_ART
-    widget.fold.face:SetAtlas(art)
-    widget.fold.glow:SetAtlas(art)
+    Kit.ShowFolded(widget.fold, folded)
 
     for _, piece in ipairs(widget.fullOnly) do
         piece:SetShown(not folded)
@@ -737,17 +751,10 @@ end
 --- grows and shrinks downwards and its top line stays put. The place is
 --- kept that way from then on, so this is done once.
 local function HoldByTop()
-    if widget:GetPoint(1) == "TOPLEFT" then
-        return
+    local place = ns.HoldPanelByTop(widget)
+    if place then
+        ns.db.widget = place
     end
-
-    local left, top = widget:GetLeft(), widget:GetTop()
-    if not left or not top then
-        return
-    end
-    widget:ClearAllPoints()
-    widget:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", left, top)
-    ns.db.widget = ns.PanelPlace(widget)
 end
 
 --- Redraws the whole panel, or hides it if it's switched off.
@@ -912,39 +919,6 @@ local function CreateStopwatch()
     return button
 end
 
---- The button in the corner that folds the panel to its top line and
---- opens it out again.
-local function CreateFoldButton()
-    local button = CreateFrame("Button", nil, widget)
-    button:SetSize(FOLD_SIZE, FOLD_SIZE)
-
-    button.face = button:CreateTexture(nil, "ARTWORK")
-    button.face:SetAllPoints()
-
-    button.glow = button:CreateTexture(nil, "HIGHLIGHT")
-    button.glow:SetBlendMode("ADD")
-    button.glow:SetAlpha(0.4)
-    button.glow:SetAllPoints()
-
-    Kit.Tooltip(button, "One line or in full", function()
-        if ns.settings.widgetFolded then
-            return { "Click to show the panel in full." }
-        end
-        return { "Click to fold the panel to one line: your DPS and the session's average." }
-    end)
-
-    button:SetScript("OnClick", function(self)
-        ns.settings.widgetFolded = not ns.settings.widgetFolded
-        ns.Publish("SETTINGS_CHANGED")
-
-        -- The tooltip says what a click does, which has just changed.
-        if GameTooltip:IsOwned(self) then
-            self:GetScript("OnEnter")(self)
-        end
-    end)
-    return button
-end
-
 --- What a buff icon's tooltip says: what it is, and whether it's on.
 local function ShowBuffTooltip(self)
     if not self.key or not ns.Readiness then
@@ -1024,11 +998,12 @@ local function Create()
 
     -- In the corner, the button that folds the panel, and beside it a
     -- small cog for the options, both kept faint so the panel stays quiet.
-    widget.fold = CreateFoldButton()
+    widget.fold =
+        Kit.FoldButton(widget, CORNER_BUTTON, "widgetFolded", "your DPS and the session's average")
     widget.fold:SetPoint("TOPRIGHT", -8, -8)
     widget.fold:SetAlpha(0.7)
 
-    local options = Kit.OptionsButton(widget, 12)
+    local options = Kit.OptionsButton(widget, CORNER_BUTTON)
     options:SetPoint("RIGHT", widget.fold, "LEFT", -4, 0)
     options:SetAlpha(0.7)
 

@@ -11,6 +11,10 @@ local _, ns = ...
 -- Widget.lua). Click it for the Healing and defence tab, right-click for
 -- a short menu, drag it anywhere.
 --
+-- Like its twin, it can be folded down to its top line: the HPS and the
+-- session's average, nothing else. It folds on its own, by the button in
+-- its corner, not with its twin.
+--
 -- During a fight the game lets an addon show its running healing but not
 -- read it, exactly as it does for damage. So the two live figures are
 -- passed straight from the game's tally to the text, each to a piece of
@@ -40,6 +44,14 @@ local UNDER_FIGHT_PANEL = 118
 
 -- The session's figures take at most this many lines.
 local SESSION_LINES = 2
+
+-- Folded, the panel is its top line and no more, as its twin is. The
+-- line's middle, which the HPS is lined up on when there's no icon.
+local FOLDED_HEIGHT = 30
+local TOP_LINE_MIDDLE = 15
+
+-- How big the buttons in the corner are, as on its twin.
+local CORNER_BUTTON = 12
 
 -- The grey of the labels and the time, as on the fight panel, and our
 -- mark in the corner.
@@ -188,6 +200,34 @@ end
 
 -- Under the main figures ------------------------------------------------------
 
+--- The session's healing, summed up as the Healing tab does it.
+---@return table fights  the session's fights
+---@return string name  as ns.SessionSoFar has it
+---@return table summary  from Healing.Of
+local function SessionHealing()
+    local fights, name = ns.SessionSoFar()
+    return fights, name, ns.Healing.Of(fights)
+end
+
+--- Folded: the session's average HPS at the right of the top line, and
+--- nothing below. A session with no healing in it shows nothing there.
+local function RefreshFolded()
+    widget.rule:Hide()
+    for _, line in ipairs(widget.lines) do
+        line.left:Hide()
+        line.right:Hide()
+    end
+    widget:SetHeight(FOLDED_HEIGHT)
+
+    -- "avg", not "Session", so a figure in the thousands still fits.
+    local _, _, summary = SessionHealing()
+    if summary.healing > 0 then
+        widget.session:SetText(Kit.Colored("avg", MUTED) .. " " .. ns.Rate(summary.hps))
+    else
+        widget.session:SetText("")
+    end
+end
+
 --- Fills the session's figures, when they're switched on, and sets the
 --- panel's height to fit them. The one setting governs this panel and the
 --- fight panel alike.
@@ -196,8 +236,7 @@ local function RefreshSession()
     local used = 0
 
     if ns.settings.widgetStats then
-        local fights, name = ns.SessionSoFar()
-        local summary = ns.Healing.Of(fights)
+        local fights, name, summary = SessionHealing()
 
         lines[1].left:SetText(Kit.Colored(name, Kit.GOLD))
         lines[1].right:SetText(#fights == 1 and "1 fight" or #fights .. " fights")
@@ -252,6 +291,46 @@ local function RefreshBranding()
     widget.title:SetPoint("RIGHT", widget.time, "LEFT", -6, 0)
 end
 
+--- Lays the top of the panel out folded or in full. Folded, the HPS moves
+--- up beside our mark, in smaller figures, and takes the title's place.
+local function ApplyFold()
+    local folded = ns.settings.healFolded
+    Kit.ShowFolded(widget.fold, folded)
+
+    for _, piece in ipairs(widget.fullOnly) do
+        piece:SetShown(not folded)
+    end
+    widget.session:SetShown(folded)
+
+    -- In a fight the HPS holds the game's running figure, which addons
+    -- can't read. Should the game refuse a new font for it then, the
+    -- figure keeps its old size until the fight is over.
+    pcall(
+        widget.hps.SetFontObject,
+        widget.hps,
+        folded and "GameFontHighlight" or "GameFontHighlightLarge"
+    )
+
+    widget.hps:ClearAllPoints()
+    if not folded then
+        widget.hps:SetPoint("TOPLEFT", 10, -26)
+    elseif ns.settings.widgetBrand then
+        widget.hps:SetPoint("LEFT", widget.mark, "RIGHT", 4, 0)
+    else
+        widget.hps:SetPoint("LEFT", widget, "TOPLEFT", 10, -TOP_LINE_MIDDLE)
+    end
+end
+
+--- Holds the panel by its top left corner, so it folds and grows downwards
+--- (see ns.HoldPanelByTop in Widget.lua). It starts out held that way, so
+--- this only matters once it's been dragged.
+local function HoldByTop()
+    local place = ns.HoldPanelByTop(widget)
+    if place then
+        ns.db.healWidget = place
+    end
+end
+
 --- Redraws the whole panel, or hides it if it's switched off.
 local function Refresh()
     if not widget then
@@ -268,9 +347,15 @@ local function Refresh()
         return
     end
 
+    HoldByTop()
     RefreshBranding()
+    ApplyFold()
     RefreshMain()
-    RefreshSession()
+    if ns.settings.healFolded then
+        RefreshFolded()
+    else
+        RefreshSession()
+    end
 end
 
 -- Menu and tooltip ------------------------------------------------------------
@@ -286,6 +371,12 @@ local function ShowMenu(self)
     MenuUtil.CreateContextMenu(self, function(_, root)
         root:CreateTitle(TITLE)
         root:CreateButton("Open Temper", OpenWindow)
+        root:CreateCheckbox("Just one line", function()
+            return ns.settings.healFolded
+        end, function()
+            ns.settings.healFolded = not ns.settings.healFolded
+            ns.Publish("SETTINGS_CHANGED")
+        end)
 
         root:CreateDivider()
         ns.AddPanelSizes(root)
@@ -347,6 +438,7 @@ local function Create()
     widget:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
         ns.db.healWidget = ns.PanelPlace(self)
+        HoldByTop()
     end)
 
     widget:RegisterForClicks("LeftButtonUp", "RightButtonUp")
@@ -369,10 +461,16 @@ local function Create()
     widget.mark:SetSize(14, 14)
     widget.mark:SetPoint("TOPLEFT", 9, -8)
 
-    -- The same faint cog as the fight panel has. It's a button of its
-    -- own, so a click on it doesn't count as a click on the panel.
-    local options = Kit.OptionsButton(widget, 12)
-    options:SetPoint("TOPRIGHT", -8, -8)
+    -- The same faint buttons in the corner as the fight panel has, the one
+    -- that folds it and the cog. Each is a button of its own, so a click
+    -- on it doesn't count as a click on the panel.
+    widget.fold =
+        Kit.FoldButton(widget, CORNER_BUTTON, "healFolded", "your HPS and the session's average")
+    widget.fold:SetPoint("TOPRIGHT", -8, -8)
+    widget.fold:SetAlpha(0.7)
+
+    local options = Kit.OptionsButton(widget, CORNER_BUTTON)
+    options:SetPoint("RIGHT", widget.fold, "LEFT", -4, 0)
     options:SetAlpha(0.7)
 
     widget.time = Kit.Text(widget, "GameFontHighlightSmall", "RIGHT")
@@ -411,6 +509,23 @@ local function Create()
     widget.note:SetPoint("TOPLEFT", 10, -45)
     widget.note:SetPoint("RIGHT", widget.interrupts, "LEFT", -6, 0)
     widget.note:SetTextColor(unpack(MUTED))
+
+    -- Folded, the session's average sits at the right of the top line, in
+    -- the time's place, and is cut short sooner than run into the HPS.
+    widget.session = Kit.Text(widget, "GameFontHighlightSmall", "RIGHT")
+    widget.session:SetPoint("RIGHT", options, "LEFT", -5, 0)
+    widget.session:SetPoint("LEFT", hpsLabel, "RIGHT", 6, 0)
+    widget.session:Hide()
+
+    -- What folding the panel puts away.
+    widget.fullOnly = {
+        widget.title,
+        widget.time,
+        widget.healed,
+        healedLabel,
+        widget.note,
+        widget.interrupts,
+    }
 
     -- The session's figures: a ruled line, then the lines themselves, all
     -- made once in their places and shown as needed.

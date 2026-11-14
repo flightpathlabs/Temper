@@ -423,6 +423,14 @@ local function AddScreenOptions(layout)
             .. "the fight you're in or the last one."
     )
 
+    AddCheckbox(
+        category,
+        "healFolded",
+        "Fold the healing panel to one line",
+        "Just your HPS and the session's average, with the cog beside them. The button "
+            .. "in the panel's corner does the same."
+    )
+
     AddDropdown(
         category,
         "widgetSize",

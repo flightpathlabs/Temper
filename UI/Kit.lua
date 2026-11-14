@@ -286,6 +286,55 @@ function Kit.Button(parent, text, width, onClick)
     return button
 end
 
+-- The game's own plus and minus for folding a section of the objective
+-- tracker, used for folding a panel down to one line.
+local FOLD_ART = "ui-questtrackerbutton-secondary-collapse"
+local UNFOLD_ART = "ui-questtrackerbutton-secondary-expand"
+
+--- A small button that folds a panel down to its top line and opens it
+--- out again, by flipping one of the saved settings.
+---@param size number  how many pixels across
+---@param key string  the setting that says whether the panel is folded
+---@param keeps string  what the folded panel still shows, for the tooltip
+function Kit.FoldButton(parent, size, key, keeps)
+    local button = CreateFrame("Button", nil, parent)
+    button:SetSize(size, size)
+
+    button.face = button:CreateTexture(nil, "ARTWORK")
+    button.face:SetAllPoints()
+
+    button.glow = button:CreateTexture(nil, "HIGHLIGHT")
+    button.glow:SetBlendMode("ADD")
+    button.glow:SetAlpha(0.4)
+    button.glow:SetAllPoints()
+
+    Kit.Tooltip(button, "One line or in full", function()
+        if ns.settings[key] then
+            return { "Click to show the panel in full." }
+        end
+        return { "Click to fold the panel to one line: " .. keeps .. "." }
+    end)
+
+    button:SetScript("OnClick", function(self)
+        ns.settings[key] = not ns.settings[key]
+        ns.Publish("SETTINGS_CHANGED")
+
+        -- The tooltip says what a click does, which has just changed.
+        if GameTooltip:IsOwned(self) then
+            self:GetScript("OnEnter")(self)
+        end
+    end)
+    return button
+end
+
+--- Shows a minus on a fold button while its panel is open, and a plus
+--- while it's folded.
+function Kit.ShowFolded(button, folded)
+    local art = folded and UNFOLD_ART or FOLD_ART
+    button.face:SetAtlas(art)
+    button.glow:SetAtlas(art)
+end
+
 --- A small cog that opens Temper's options, the one the game uses for
 --- settings on its own panels.
 ---@param size number  how many pixels across

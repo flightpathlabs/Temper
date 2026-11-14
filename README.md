@@ -130,8 +130,8 @@ fishing pole still in hand, a buff of your class's own not up, no poison
 or imbue on your weapon, ammunition running low, gear about to break, or a
 pet that's away, dead or unhappy.
 
-A second panel like it shows your healing. It can be put away from the
-fight panel's menu or the options. Both panels come in a normal and a
+A second panel like it shows your healing, and folds down to one line the
+same way. It can be put away from the fight panel's menu or the options. Both panels come in a normal and a
 large size.
 
 ### Alerts during a fight
