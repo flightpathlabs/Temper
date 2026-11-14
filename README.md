@@ -111,14 +111,16 @@ every change can be judged as it's made.
 
 ### The fight panel
 
+<img src="docs/images/panel.png" width="275" alt="The fight panel after a fight against Tideress: 23.0 DPS and 1,269 damage, the five fights before it, the session so far and a row of buff icons" align="right">
+
 A small panel shows your DPS, damage, hits, crits and misses as the fight
 goes, and the last fight's exact figures in between, with an arrow saying
 how it compares with your typical fight. Under that are your last few
 fights and your figures for the session so far. The stopwatch in its top
 right corner starts and ends a session, the cog beside it opens the
 options, and the small button at the very corner folds the panel down to
-one line: your DPS and the session's average, nothing else. Right-click it for a short menu of what it shows; drag it
-anywhere.
+one line: your DPS and the session's average, nothing else. Right-click
+it for a short menu of what it shows; drag it anywhere.
 
 Small icons along its bottom light up for what you have going for you:
 rested experience, food, an elixir or flask, a scroll, a stone or oil on
@@ -131,8 +133,8 @@ or imbue on your weapon, ammunition running low, gear about to break, or a
 pet that's away, dead or unhappy.
 
 A second panel like it shows your healing, and folds down to one line the
-same way. It can be put away from the fight panel's menu or the options. Both panels come in a normal and a
-large size.
+same way. It can be put away from the fight panel's menu or the options.
+Both panels come in a normal and a large size.
 
 ### Alerts during a fight
 
@@ -146,6 +148,8 @@ or the moment passes.
 small pips under your target's nameplate, lit as you build them.
 
 ### Fights
+
+![The Fights tab: the list of fights on the left, and one fight read in full on the right, with where its damage came from, what was used and when, healing and defence, and what to work on](docs/images/fights.png)
 
 Every fight is kept, the latest 200 for each character, with those fought
 in a group marked "group". The list on the left names each by what it was
@@ -170,6 +174,8 @@ more, such as leaving a fluke out of your averages. The page shows:
 - the biggest hit and biggest critical hit.
 
 ### Healing and defence
+
+![The Healing and defence tab over the last ten fights: healing by spell, what hurt you, how much was stopped and by what, and what to work on](docs/images/healing-and-defence.png)
 
 Each fight also keeps how much you healed and with what, who healed you
 (you, your pet, or a passer-by outside your group), the damage you took
@@ -201,6 +207,8 @@ and gives a verdict that says how far to trust it. The panel tells you
 when it's your move.
 
 ### Progress
+
+![The Progress tab: four bests, how many fights aren't counted, and a column of typical DPS for each day](docs/images/progress.png)
 
 Your bests, and a column for each day you've played, measured against
 nobody but yourself. Click a best to open the fight it came from.
