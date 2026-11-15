@@ -63,22 +63,30 @@ local TICKING_SECONDS = 30
 -- out to be something else.
 local SURE_AFTER = 3
 
--- An ability is taken to tick once it's been seen doing so this often.
--- Once could be a mistake, and would stick: from then on it isn't allowed
--- to claim a blow that comes a little after its cast.
+-- An ability is taken to tick once it's been seen doing so this often,
+-- and at least this often for each time it's been cast. Once could be a
+-- mistake, and would stick: from then on it isn't allowed to claim a blow
+-- that comes a little after its cast. A strike that only happened to be
+-- used in step with a bleed's beat now and then never gets near the
+-- share; a real bleed ticks after nearly every cast.
 local TICKS_AFTER = 2
+local TICKS_PER_CAST = 0.5
 
 -- The school of an ordinary blow, as the game reports it.
 local PHYSICAL = 1
 
--- How often an effect ticks until it's been seen to: most do every three
--- seconds. Two ticks of one effect closer than the first of these or
--- further apart than the second aren't neighbours, so say nothing of its
--- beat; between them, nearer two seconds than three means every two.
-local USUAL_TICK_SECONDS = 3
+-- An effect ticks every two seconds or every three; most do every three.
+-- Two ticks of one effect closer than the first of these or further apart
+-- than the second aren't neighbours, so say nothing of its beat; between
+-- them, nearer two seconds than three is a vote for every two.
 local CLOSEST_TICKS = 1.5
 local FURTHEST_TICKS = 3.5
 local TWO_OR_THREE = 2.5
+
+-- An effect's beat is settled once one of the two has this many votes and
+-- at least twice as many as the other. Until then both are tried, so one
+-- stray blow taken for a tick can't set it wrong for good.
+local VOTES_TO_SETTLE = 2
 
 -- In a group, how far off its beat a tick can land and still be taken for
 -- one of the player's.
@@ -124,19 +132,15 @@ local function Learn(spell, school)
     seen[school] = (seen[school] or 0) + 1
 end
 
---- The abilities seen ticking, by spell, as how many ticks were put down
---- to each. Kept with the character, since it doesn't change.
+--- The physical abilities seen ticking (bleeds), by spell, as how many
+--- times each has been: a blow put down to it a beat after another from the
+--- same cast. Kept with the character, since it doesn't change.
 local function Ticking()
     local character = ns.character
     if type(character.ticking) ~= "table" then
         character.ticking = {}
     end
     return character.ticking
-end
-
---- True if an ability has been seen ticking often enough to be sure.
-local function Ticks(spell)
-    return (Ticking()[spell] or 0) >= TICKS_AFTER
 end
 
 -- The last blow traced to a cast, so that the other enemies caught by
@@ -151,7 +155,10 @@ local lastTick = {}
 --- ticking, made the first time it's wanted:
 ---   spellTicks   how many times each spell has been seen to tick: a blow
 ---                put down to it a beat after another from the same cast
----   tickPeriods  how far apart each effect's ticks come: 2 or 3 seconds
+---   tickBeats    how often each effect's ticks have been seen two
+---                seconds apart and three: { [2] = votes, [3] = votes }
+---   castsSeen    how many times each ability has been cast, on the
+---                player's own, to set the times it ticked against
 local function Learned(key)
     local character = ns.character
     if type(character[key]) ~= "table" then
@@ -160,14 +167,33 @@ local function Learned(key)
     return character[key]
 end
 
+--- How many times, for each time it was cast, an ability has been seen
+--- ticking.
+---@param counts table  Ticking() for a bleed, or the spells' own table
+local function TicksPerCast(spell, counts)
+    return (counts[spell] or 0) / math.max(1, Learned("castsSeen")[spell] or 0)
+end
+
+--- True if an ability has been seen ticking often enough to be sure.
+local function Proven(spell, counts)
+    return (counts[spell] or 0) >= TICKS_AFTER and TicksPerCast(spell, counts) >= TICKS_PER_CAST
+end
+
+--- True if a physical ability has been seen ticking often enough to be
+--- sure: a bleed.
+local function Ticks(spell)
+    return Proven(spell, Ticking())
+end
+
 --- Notes a blow put down to an effect of the player's still ticking, on
---- their own, so that in a group its beat is known. Only two from the same
---- cast a beat apart prove it ticks. A spell that never does, a Frostbolt
---- landing late from long range, has a new cast before each of its blows.
+--- their own. Only two from the same cast a beat apart prove it ticks, and
+--- that's when it's counted and its beat is learned. A strike that never
+--- ticks, a Claw say, is used again before a second blow can be put down
+--- to the same cast of it; so is a Frostbolt landing late from long range.
 ---@param castTime number  when the cast it's put down to was
----@param isSpell boolean  a spell's tick, which is counted here; a bleed's
----                        is counted by Ticking()
-local function NoteTick(spell, castTime, now, isSpell)
+---@param counts table  where it's counted: Ticking() for a bleed, or the
+---                     spells' own table
+local function NoteTick(spell, castTime, now, counts)
     local last = lastTick[spell]
     lastTick[spell] = { at = now, from = castTime }
     if not last or last.from ~= castTime then
@@ -178,21 +204,33 @@ local function NoteTick(spell, castTime, now, isSpell)
     if gap < CLOSEST_TICKS or gap > FURTHEST_TICKS then
         return
     end
-    Learned("tickPeriods")[spell] = gap < TWO_OR_THREE and 2 or 3
-    if isSpell then
-        local counts = Learned("spellTicks")
-        counts[spell] = (counts[spell] or 0) + 1
-    end
+    local beats = Learned("tickBeats")
+    local votes = beats[spell] or {}
+    beats[spell] = votes
+    local period = gap < TWO_OR_THREE and 2 or 3
+    votes[period] = (votes[period] or 0) + 1
+    counts[spell] = (counts[spell] or 0) + 1
 end
 
---- True if a blow lands on the beat of an effect put on at castTime: a
---- whole number of its ticks after, give or take a little. Counted from
---- the cast, so an effect that flies first (a Serpent Sting) is off its
---- beat by the flight, and its ticks are set aside in a group: the player
---- loses a few blows, but nobody else's is taken for theirs.
-local function OnTheBeat(spell, castTime, now)
-    local period = Learned("tickPeriods")[spell] or USUAL_TICK_SECONDS
-    local since = now - castTime
+--- How far apart an effect's ticks come, once that's settled: 2 or 3, or
+--- nil while it isn't.
+local function BeatOf(spell)
+    local votes = Learned("tickBeats")[spell]
+    if not votes then
+        return nil
+    end
+    local two, three = votes[2] or 0, votes[3] or 0
+    if three >= VOTES_TO_SETTLE and three >= 2 * two then
+        return 3
+    elseif two >= VOTES_TO_SETTLE and two >= 2 * three then
+        return 2
+    end
+    return nil
+end
+
+--- True if `since` seconds is a whole number of periods, give or take a
+--- little.
+local function OnPeriod(since, period)
     if since < period - BEAT_LEEWAY then
         return false
     end
@@ -200,12 +238,35 @@ local function OnTheBeat(spell, castTime, now)
     return off <= BEAT_LEEWAY or period - off <= BEAT_LEEWAY
 end
 
---- In a group: the effect of the player's whose tick this blow is, if any.
---- Only the latest cast of each ability is asked, since putting an effect
---- on again starts its beat afresh.
+--- True if a blow lands on the beat of an effect put on at castTime: a
+--- whole number of its ticks after, give or take a little. An effect whose
+--- beat isn't known yet may tick every two seconds or every three. Counted
+--- from the cast, so an effect that flies first (a Serpent Sting) is off
+--- its beat by the flight, and its ticks are set aside in a group: the
+--- player loses a few blows, but nobody else's is taken for theirs.
+local function OnTheBeat(spell, castTime, now)
+    local since = now - castTime
+    local period = BeatOf(spell)
+    if period then
+        return OnPeriod(since, period)
+    end
+    return OnPeriod(since, 3) or OnPeriod(since, 2)
+end
+
+--- The effect of the player's whose tick this blow is, if any, and when the
+--- cast it's put down to was. Only the latest cast of each ability is
+--- asked, since putting an effect on again starts its beat afresh. Of
+--- several on their beat, the one seen ticking most for its casts; then
+--- one whose same cast has just had a tick put down to it, which keeps a
+--- bleed's run of ticks together while it's still being learned; and then
+--- the newest.
 ---@param fits fun(spell): boolean  whether an ability could have done it
-local function TickOnTheBeat(now, fits)
+---@param counts table  Ticking() for a bleed, or the spells' own table
+---@return number|nil spell
+---@return number|nil castTime
+local function TickOnTheBeat(now, fits, counts)
     local asked = {}
+    local best, bestTime, bestShare, bestRun
     for index = #casts, 1, -1 do
         local cast = casts[index]
         local spell = cast.cast
@@ -213,11 +274,19 @@ local function TickOnTheBeat(now, fits)
             asked[spell] = true
             local recent = now - cast.time <= TICKING_SECONDS
             if recent and fits(spell) and OnTheBeat(spell, cast.time, now) then
-                return spell
+                local share = TicksPerCast(spell, counts)
+                local last = lastTick[spell]
+                local run = last ~= nil and last.from == cast.time
+                local better = not best
+                    or share > bestShare
+                    or (share == bestShare and run and not bestRun)
+                if better then
+                    best, bestTime, bestShare, bestRun = spell, cast.time, share, run
+                end
             end
         end
     end
-    return nil
+    return best, bestTime
 end
 
 --- Takes note of the abilities a finished fight showed doing damage.
@@ -235,6 +304,13 @@ end
 ---@param cast table  the log's entry for it: { cast = spellID, time = ... }
 function Guess.NoteCast(cast)
     table.insert(casts, cast)
+
+    -- Counted on the player's own only, as ticks are learned only there.
+    if ns.character and not IsInGroup() then
+        local seen = Learned("castsSeen")
+        seen[cast.cast] = (seen[cast.cast] or 0) + 1
+    end
+
     while casts[1] and casts[1].time < cast.time - TICKING_SECONDS do
         table.remove(casts, 1)
     end
@@ -302,18 +378,24 @@ end
 local function StillTicking(school, now, strict)
     local damaging = ns.character.schools
 
+    local counts = Learned("spellTicks")
+    -- In a group, only on a settled beat: one still being learned is
+    -- tried on both, which would take in far more of other people's.
     if strict then
-        local counts = Learned("spellTicks")
-        return TickOnTheBeat(now, function(spell)
-            return (counts[spell] or 0) >= TICKS_AFTER and UsualSchool(spell) == school
-        end)
+        return (
+            TickOnTheBeat(now, function(spell)
+                return Proven(spell, counts)
+                    and UsualSchool(spell) == school
+                    and BeatOf(spell) ~= nil
+            end, counts)
+        )
     end
 
     for index = #casts, 1, -1 do
         local spell = casts[index].cast
         local recent = now - casts[index].time <= TICKING_SECONDS
         if recent and damaging[spell] and UsualSchool(spell) == school then
-            NoteTick(spell, casts[index].time, now, true)
+            NoteTick(spell, casts[index].time, now, counts)
             return spell
         end
     end
@@ -328,7 +410,7 @@ local function StillTicking(school, now, strict)
         local recent = now - casts[index].time <= TICKING_SECONDS
         if recent and damaging[spell] and UsualSchool(spell) == nil then
             Learn(spell, school)
-            NoteTick(spell, casts[index].time, now, true)
+            NoteTick(spell, casts[index].time, now, counts)
             return spell
         end
     end
@@ -336,40 +418,48 @@ local function StillTicking(school, now, strict)
 end
 
 --- The physical ability most likely still ticking, for a blow that came
---- with no swing and no cast to explain it. One already seen ticking is
---- the first choice. Failing that, the last physical ability cast that
---- hasn't been seen to land a blow of its own yet, which is how a bleed
---- gets found out the first time.
----@param strict boolean  in a group: only one already seen ticking, on
----                       its beat, and nothing learned
+--- with no swing and no cast to explain it, landing on that ability's beat.
+--- One already seen ticking is the first choice. Failing that, on the
+--- player's own, any physical ability on its beat, which is how a bleed
+--- gets found out: Rake as well as Rend, though Rake's cast lands a blow
+--- of its own first. Being on the beat once proves nothing, so it's only
+--- counted as ticking once two blows from the same cast of it are, and
+--- only taken to tick once that's happened after most of its casts.
+---@param strict boolean  in a group: only one already seen ticking, and
+---                       nothing learned
 local function StillBleeding(now, strict)
-    if strict then
-        return TickOnTheBeat(now, Ticks)
-    end
-
     local ticking = Ticking()
-    for index = #casts, 1, -1 do
-        local spell = casts[index].cast
-        if Ticks(spell) and now - casts[index].time <= TICKING_SECONDS then
-            ticking[spell] = ticking[spell] + 1
-            NoteTick(spell, casts[index].time, now, false)
-            return spell
+
+    -- In a group, only a bleed whose beat is settled, as for spells.
+    local known = Ticks
+    if strict then
+        known = function(candidate)
+            return Ticks(candidate) and BeatOf(candidate) ~= nil
         end
     end
 
-    for index = #casts, 1, -1 do
-        local cast = casts[index]
-        local usual = UsualSchool(cast.cast)
-        local physical = usual == nil or usual == PHYSICAL
-        local recent = now - cast.time <= TICKING_SECONDS
-        if recent and not cast.matched and physical and ns.character.schools[cast.cast] then
-            ticking[cast.cast] = (ticking[cast.cast] or 0) + 1
-            Learn(cast.cast, PHYSICAL)
-            NoteTick(cast.cast, cast.time, now, false)
-            return cast.cast
+    local spell, castTime = TickOnTheBeat(now, known, ticking)
+    if spell then
+        if not strict then
+            NoteTick(spell, castTime, now, ticking)
         end
+        return spell
     end
-    return nil
+    if strict then
+        return nil
+    end
+
+    spell, castTime = TickOnTheBeat(now, function(candidate)
+        local usual = UsualSchool(candidate)
+        return (usual == nil or usual == PHYSICAL) and ns.character.schools[candidate] ~= nil
+    end, ticking)
+    if spell then
+        if UsualSchool(spell) == nil then
+            Learn(spell, PHYSICAL)
+        end
+        NoteTick(spell, castTime, now, ticking)
+    end
+    return spell
 end
 
 --- True if the player has just done something that could have landed a

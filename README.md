@@ -281,11 +281,12 @@ appear in the middle of the screen.
 
 The game doesn't say whose blow was whose, so in a group Temper works it
 out from what you did. A blow that your swing, your cast, or a tick of
-your bleed or other effect on its usual beat explains is yours; the rest are other people's, drawn small and faint
-beside your column, or not at all if you'd rather. Tried in a party with a
-mage, it set every one of the mage's blows aside and kept nearly all of
-the player's own. It will be wrong more often beside someone doing the same
-kind of damage as you, two warriors say.
+your bleed or other effect on its usual beat explains is yours; the rest
+are other people's, drawn small and faint beside your column, or not at
+all if you'd rather. Tried in a party with a mage, it set every one of
+the mage's blows aside and kept nearly all of the player's own. It will be
+wrong more often beside someone doing the same kind of damage as you, two
+warriors say.
 
 Group fights are recorded and marked "group" in the list. Your damage in
 them is exact, from the game's own tally, and the counts of hits and crits

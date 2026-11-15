@@ -19,8 +19,16 @@ local addonName, ns = ...
 --                             fought in (see Combat\Gear.lua)
 --                 schools     which school of damage each ability has been
 --                             seen to do (see Combat\Guess.lua)
---                 ticking     how often each ability has been seen ticking
---                             after its cast, like a bleed (also Guess.lua)
+--                 ticking     how often each physical ability has been
+--                             seen ticking after its cast, like a bleed
+--                             (also Guess.lua)
+--                 spellTicks  the same for spells, like Corruption
+--                 tickBeats   how often each one's ticks have been seen
+--                             2 seconds apart and 3
+--                 castsSeen   how often each ability has been cast, to
+--                             set those against
+--                 tickingLearned  the way those four were learned, so
+--                             that what an older way got wrong is forgotten
 --                 threatRatio how this character's damage compares with
 --                             the threat it earns (see Combat\Sizes.lua)
 --                 nextNumber  the number the next recording will carry
@@ -276,6 +284,24 @@ ns.OnEvent("PLAYER_LOGIN", function()
     end
     character.nextNumber = character.nextNumber or 1
     character.nextExperiment = character.nextExperiment or 1
+
+    -- Which abilities tick used to be learned too readily: a Claw or a
+    -- Shred that happened to come just before a Rake tick was taken for
+    -- the bleed, and from then on every Rake tick was put down to it.
+    -- Ticking is now only learned from two blows of one cast a beat apart,
+    -- so what was learned the old way is forgotten and learned again.
+    -- `tickPeriods` is what `tickBeats` replaced. `harmless` is left over
+    -- from an older way of telling a stranger's blows apart, and nothing
+    -- reads it now.
+    if (character.tickingLearned or 0) < 2 then
+        character.ticking = nil
+        character.spellTicks = nil
+        character.tickPeriods = nil
+        character.tickBeats = nil
+        character.castsSeen = nil
+        character.harmless = nil
+        character.tickingLearned = 2
+    end
 
     FlattenFights(character)
     ns.db.schema = SCHEMA
