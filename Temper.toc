@@ -7,6 +7,8 @@
 ## IconTexture: Interface\AddOns\Temper\Media\icon
 ## AddonCompartmentFunc: Temper_OnAddonCompartmentClick
 ## X-License: MIT
+## X-Curse-Project-ID: 1813738
+## X-Wago-ID: 96EXvYNg
 
 # Load order matters: each group only uses what the groups above it define.
 
