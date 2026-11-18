@@ -1,6 +1,6 @@
 name: Release
 
-# Pushing a tag such as v0.3.0-beta packages the addon and publishes it:
+# Pushing a tag such as v0.1.0 packages the addon and publishes it:
 # as a release here, and on CurseForge and Wago once the project IDs are in
 # the TOC and the upload tokens are saved as repository secrets. A site
 # with no ID or no token is skipped.
